@@ -5,9 +5,8 @@ use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Outcome, Session};
 use chrono::Utc;
-use std::collections::HashSet;
 use std::path::PathBuf;
-use tunebox_import::{ImportOptions, ImportReport};
+use tunebox_import::{ImportOptions, ImportReport, KnownFiles};
 use tunebox_model::{PlaylistId, Rating, SmartRules, Track, TrackId, TrackMeta};
 
 impl Session {
@@ -23,7 +22,15 @@ impl Session {
         if self.prefs.copy_to_media_folder && !crate::files::may_write(&self.prefs, &self.prefs.media_folder) {
             return Err(EngineError::Protected(self.prefs.media_folder.clone()));
         }
-        let known: HashSet<PathBuf> = self.library.tracks().map(|t| t.location.clone()).collect();
+        let known = KnownFiles {
+            locations: self.library.tracks().map(|t| t.location.clone()).collect(),
+            extra_fields_unread: self
+                .library
+                .tracks()
+                .filter(|t| !t.extra_fields_read)
+                .map(|t| t.location.clone())
+                .collect(),
+        };
         let options = ImportOptions {
             media_folder: self.prefs.media_folder.clone(),
             copy_to_media_folder: self.prefs.copy_to_media_folder,
@@ -44,7 +51,15 @@ impl Session {
         for track in report.tracks {
             self.library.add_track(track);
         }
-        if added > 0 {
+        let mut refreshed = 0;
+        for (location, extra) in report.extra_fields {
+            if let Some(id) = self.library.track_at(&location)
+                && self.library.fill_unread_extra(id, extra).is_ok()
+            {
+                refreshed += 1;
+            }
+        }
+        if added + refreshed > 0 {
             self.library_changed();
         }
         let mut text = match added {
@@ -55,6 +70,11 @@ impl Session {
         if report.already_in_library > 0 {
             text.push_str(&format!(" {} were already in the library.", report.already_in_library));
         }
+        match refreshed {
+            0 => {}
+            1 => text.push_str(" Read the additional details of 1 song from its file."),
+            n => text.push_str(&format!(" Read the additional details of {n} songs from their files.")),
+        }
         self.notices.push(Notice::info(text));
         if let Some((path, reason)) = report.failures.first() {
             let others = report.failures.len() - 1;
@@ -64,7 +84,8 @@ impl Session {
     }
 
     /// Adds every song in the library folders that is not in the library yet ("Scan Library
-    /// Folders"): the way to pick up music added to those folders outside TuneBox.
+    /// Folders"): the way to pick up music added to those folders outside TuneBox. Songs it
+    /// finds that were added before TuneBox read additional tag fields have them read now.
     pub fn scan_library_folders(&mut self) -> Result<JobId, EngineError> {
         let folders: Vec<PathBuf> = self.prefs.library_folders.iter().map(|f| f.path.clone()).collect();
         self.import(folders)

@@ -49,7 +49,9 @@ as many as you like, and each is **read only** (the default for a new folder) or
 - Songs from folders that are not listed (added with *Add to Library* from anywhere) are
   writable, as they always were.
 - *Scan All* (or File ▸ Scan Library Folders) adds songs that appeared in the folders since the
-  last scan. Songs already in the library are left alone.
+  last scan. Songs already in the library are left alone, with one exception that only reads:
+  songs added before TuneBox read the additional tag fields (credits, label, sort names…) have
+  those read from their files once. Anything you edited in TuneBox is kept.
 
 From the command line:
 

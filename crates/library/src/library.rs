@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use tunebox_model::{
-    FileInfo, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, Track, TrackId, TrackMeta,
+    FileInfo, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, TagField, Track, TrackId, TrackMeta,
 };
 
 /// A file to add: everything about a track except what the library assigns.
@@ -124,6 +124,8 @@ impl Library {
             stats: PlayStats::default(),
             date_added: new.date_added,
             checked: true,
+            // New tracks come from reading the file (or writing it, for CD imports).
+            extra_fields_read: true,
         };
         self.tracks.insert(id, track);
         id
@@ -150,6 +152,19 @@ impl Library {
 
     pub fn set_meta(&mut self, id: TrackId, meta: TrackMeta) -> Result<(), LibraryError> {
         self.track_mut(id)?.meta = meta;
+        Ok(())
+    }
+
+    /// Fills in the additional fields read from the track's file (see
+    /// `TrackMeta::fill_unread_extra`) and marks them read.
+    pub fn fill_unread_extra(
+        &mut self,
+        id: TrackId,
+        from_file: BTreeMap<TagField, String>,
+    ) -> Result<(), LibraryError> {
+        let track = self.track_mut(id)?;
+        track.meta.fill_unread_extra(from_file);
+        track.extra_fields_read = true;
         Ok(())
     }
 

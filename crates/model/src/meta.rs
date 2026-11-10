@@ -100,6 +100,16 @@ impl TrackMeta {
         "compilation",
     ];
 
+    /// Takes the additional fields `from_file` that this has no entry for, as when a song added
+    /// before TuneBox read them is found again. A field with an entry, even an empty one, was
+    /// read before or edited by the listener (perhaps in TuneBox only, for a read-only folder),
+    /// and is kept.
+    pub fn fill_unread_extra(&mut self, from_file: BTreeMap<TagField, String>) {
+        for (field, value) in from_file {
+            self.extra.entry(field).or_insert(value);
+        }
+    }
+
     /// An additional field's value ("" when not set).
     pub fn extra(&self, field: TagField) -> &str {
         self.extra.get(&field).map_or("", String::as_str)
@@ -215,6 +225,23 @@ mod tests {
             assert_eq!(meta.get(key).as_deref(), Some(value), "{key}");
         }
         assert_eq!(meta.get("colour"), None);
+    }
+
+    #[test]
+    fn unread_fields_are_filled_from_the_file_and_edits_are_kept() {
+        let mut meta = TrackMeta::default();
+        meta.extra.insert(TagField::Mood, "Edited in TuneBox".into());
+        meta.extra.insert(TagField::Label, String::new());
+        let from_file: BTreeMap<_, _> = [
+            (TagField::Mood, "From the file".to_owned()),
+            (TagField::Label, "Old Label".to_owned()),
+            (TagField::Conductor, "C. Baton".to_owned()),
+        ]
+        .into();
+        meta.fill_unread_extra(from_file);
+        assert_eq!(meta.extra(TagField::Mood), "Edited in TuneBox");
+        assert_eq!(meta.extra(TagField::Label), "", "cleared on purpose, stays cleared");
+        assert_eq!(meta.extra(TagField::Conductor), "C. Baton");
     }
 
     #[test]

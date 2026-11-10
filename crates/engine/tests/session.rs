@@ -293,3 +293,55 @@ fn additional_fields_are_imported_edited_and_kept() {
         assert_eq!(back.extra(TagField::ReleaseDate), "");
     }
 }
+
+#[test]
+fn a_scan_reads_the_additional_fields_of_songs_added_before_they_were_read() {
+    let mut f = fixture(1.0);
+    let music = f.dir.path().join("Music");
+    let path = music.join("nocturne.flac");
+    write_song(&path, "Nocturne", "Quiet Harbour", "Lanterns", 1);
+    let mut tagged = tunebox_tags::read(&path).unwrap().meta;
+    tagged.extra.insert(TagField::Conductor, "C. Baton".into());
+    tagged.extra.insert(TagField::Label, "Harbour Records".into());
+    tunebox_tags::write(&path, &tagged).unwrap();
+    f.session.import(vec![music.clone()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 1);
+    f.session.shutdown().unwrap();
+
+    // Make the library file look as an older TuneBox left it: no additional fields, no marker.
+    let library_file = f.dir.path().join("TuneBox/Library.json");
+    let mut json: serde_json::Value = serde_json::from_slice(&std::fs::read(&library_file).unwrap()).unwrap();
+    for track in json["tracks"].as_array_mut().unwrap() {
+        let track = track.as_object_mut().unwrap();
+        track.remove("extra_fields_read");
+        track["meta"].as_object_mut().unwrap().remove("extra");
+    }
+    std::fs::write(&library_file, serde_json::to_vec(&json).unwrap()).unwrap();
+
+    let mut session = fixture_at(&f.dir);
+    let id = session.query(&TrackQuery::new(Source::Music))[0];
+    assert_eq!(session.track(id).unwrap().meta.extra(TagField::Conductor), "", "not read yet");
+    // An edit made before the scan, here kept in TuneBox only, must survive it.
+    let mut prefs = session.preferences().clone();
+    prefs.add_library_folder(music.clone(), true);
+    session.set_preferences(prefs);
+    let mut meta = session.track(id).unwrap().meta.clone();
+    meta.set("label", "").unwrap();
+    session.edit_track(id, meta).unwrap();
+    session.take_notices();
+
+    let scan = |session: &mut Session| {
+        session.scan_library_folders().unwrap();
+        tick_until(session, |s| s.jobs().is_empty());
+        session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ")
+    };
+    let first = scan(&mut session);
+    let track = session.track(id).unwrap();
+    assert_eq!(track.meta.extra(TagField::Conductor), "C. Baton");
+    assert_eq!(track.meta.extra(TagField::Label), "", "the listener's edit is kept");
+    assert!(track.extra_fields_read);
+    assert!(first.contains("1 song"), "{first}");
+    // Read once: the next scan leaves it alone.
+    let second = scan(&mut session);
+    assert!(!second.contains("details"), "{second}");
+}

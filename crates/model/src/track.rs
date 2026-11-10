@@ -43,6 +43,11 @@ pub struct Track {
     /// The checkbox in the track list: unchecked tracks are skipped by playback and sync.
     #[serde(default = "checked_default")]
     pub checked: bool,
+    /// Whether the additional tag fields (`TrackMeta::extra`) have been read from the file.
+    /// False for songs added before TuneBox read them; the next scan or import that finds the
+    /// file reads them (see `TrackMeta::fill_unread_extra`).
+    #[serde(default)]
+    pub extra_fields_read: bool,
 }
 
 fn checked_default() -> bool {
@@ -111,6 +116,7 @@ pub(crate) mod fixtures {
             stats: PlayStats::default(),
             date_added: Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).single().unwrap_or_default(),
             checked: true,
+            extra_fields_read: true,
         }
     }
 }
@@ -134,6 +140,14 @@ mod tests {
         assert_eq!(json["file"]["duration"], 200_000);
         let back: Track = serde_json::from_value(json).unwrap();
         assert_eq!(back, t);
+    }
+
+    #[test]
+    fn songs_saved_before_extra_fields_were_read_are_marked_unread() {
+        let mut json = serde_json::to_value(track(1, "Song", "A", "B")).unwrap();
+        json.as_object_mut().unwrap().remove("extra_fields_read");
+        let old: Track = serde_json::from_value(json).unwrap();
+        assert!(!old.extra_fields_read);
     }
 
     #[test]
