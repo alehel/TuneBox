@@ -23,6 +23,7 @@ pub enum JobKind {
     Rip,
     Sync,
     Refresh,
+    Locate,
 }
 
 impl JobKind {
@@ -34,6 +35,7 @@ impl JobKind {
             JobKind::Rip => "Importing the CD",
             JobKind::Sync => "A sync",
             JobKind::Refresh => "Refreshing from files",
+            JobKind::Locate => "Looking for missing songs",
         }
     }
 }

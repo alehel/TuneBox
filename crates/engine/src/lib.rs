@@ -28,6 +28,7 @@ mod file_check;
 pub mod files;
 pub mod jobs;
 mod library_ops;
+mod locate;
 mod notices;
 mod places;
 mod playback;

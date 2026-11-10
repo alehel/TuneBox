@@ -83,6 +83,9 @@ enum Command {
     },
     /// List songs whose files are missing, or on a drive or share that is not connected.
     Missing,
+    /// Link a missing song to its file where it is now. The search must match exactly one
+    /// missing song (see `missing`). Other missing songs that moved the same way are linked too.
+    Locate { search: String, file: PathBuf },
     /// Show every detail of the songs matching a search.
     Info { search: String },
     /// Change details of the songs matching a search, e.g.
@@ -252,6 +255,7 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             println!("Rated {} songs.", ids.len());
         }
         Command::Edit { search, assignments } => details::edit(session, &search, &assignments)?,
+        Command::Locate { search, file } => locate(session, &search, file)?,
         Command::Refresh { search, replace_library_edits } => {
             details::refresh(session, search.as_deref(), replace_library_edits)?;
             wait_for_jobs(session);
@@ -306,6 +310,25 @@ fn search_ids(view: LibraryView<'_>, source: Source, search: Option<&str>) -> Ve
     query.search = search.unwrap_or_default().to_owned();
     query.scope = SearchScope::All;
     view.query(&query)
+}
+
+/// Links the one missing song matching `search` to `file`, then waits for the search for others.
+fn locate(session: &mut Session, search: &str, file: PathBuf) -> Result<(), String> {
+    // A fresh look, waited for: the songs found missing are the ones missing now.
+    session.set_network_mounts(tunebox_platform::network_mounts());
+    session.check_files_now();
+    let matches: Vec<TrackId> = search_ids(session.view(), Source::Music, Some(search))
+        .into_iter()
+        .filter(|id| *session.file_status(*id) == FileStatus::Missing)
+        .collect();
+    let id = match matches[..] {
+        [id] => id,
+        [] => return Err(format!("no missing song matches “{search}” (see `tunebox-cli missing`)")),
+        _ => return Err(format!("{} missing songs match “{search}”; narrow the search to one", matches.len())),
+    };
+    session.locate(id, file).map_err(|e| e.to_string())?;
+    wait_for_jobs(session);
+    Ok(())
 }
 
 /// Songs whose files are missing, then those on each drive or share that is not connected.
@@ -553,6 +576,7 @@ mod tests {
         for changes in [
             &["rate", "x", "3"][..],
             &["edit", "x", "--set", "mood=Calm"],
+            &["locate", "x", "/x.flac"],
             &["info-fields", "--pin", "mood"],
             &["folders", "scan"],
             &["folders", "watch"],

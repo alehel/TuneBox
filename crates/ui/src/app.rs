@@ -4,7 +4,9 @@ use crate::LaunchOptions;
 use crate::actions::Action;
 use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
-use crate::dialogs::{ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
+use crate::dialogs::{
+    ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog,
+};
 use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
 use crate::panels::{
@@ -17,8 +19,9 @@ use crate::{shortcuts, theme};
 use egui::{Frame, Rect, pos2};
 use std::time::{Duration, Instant};
 use tunebox_engine::commands::{CommandId, Context};
+use tunebox_engine::model::AudioFormat;
 use tunebox_engine::model::{PlaylistKind, TrackId};
-use tunebox_engine::{EngineError, LibraryOnlyEdits, Notice, Player, Session, Volume};
+use tunebox_engine::{EngineError, FileStatus, LibraryOnlyEdits, Notice, Player, Session, Volume};
 
 /// How often mounted volumes are checked for players.
 const DEVICE_SCAN: Duration = Duration::from_secs(3);
@@ -149,9 +152,33 @@ impl TuneBoxApp {
         &self.ctx
     }
 
+    /// Asks where a missing song's file is now, starting near where it was, and links the song.
+    fn locate(&mut self, id: TrackId) {
+        let Some(track) = self.session.track(id) else { return };
+        let mut picker = rfd::FileDialog::new()
+            .set_title(format!("Locate “{}”", track.title()))
+            .add_filter("Audio", &AudioFormat::EXTENSIONS);
+        // Only for a missing song is its place known to answer; a disconnected share is not
+        // touched, since looking there could hang.
+        if *self.session.file_status(id) == FileStatus::Missing
+            && let Some(folder) = track.location.ancestors().skip(1).find(|a| a.is_dir())
+        {
+            picker = picker.set_directory(folder);
+        }
+        if let Some(file) = picker.pick_file() {
+            let result = self.session.locate(id, file);
+            self.report(result);
+        }
+    }
+
     fn command_context(&self) -> Context {
+        let selected = self.view.selected_tracks();
         Context {
             selected_tracks: self.view.selection.len(),
+            selected_missing: selected
+                .iter()
+                .filter(|id| *self.session.file_status(**id) == FileStatus::Missing)
+                .count(),
             device_selected: matches!(&self.view.source, SourceItem::Device(root) if self.session.device(root).is_some_and(|d| d.device.is_some())),
             cd_selected: self.view.source == SourceItem::Cd,
         }
@@ -169,7 +196,19 @@ impl TuneBoxApp {
         match action {
             Action::Run(id) => self.run(id),
             Action::SelectSource(source) => self.view.select_source(source),
-            Action::PlayTracks { tracks, start } => self.session.play_tracks(&tracks, start),
+            Action::PlayTracks { tracks, start } => {
+                // A missing song cannot play, but it can be found: offer that instead.
+                let chosen =
+                    tracks.get(start).copied().filter(|id| *self.session.file_status(*id) == FileStatus::Missing);
+                match chosen.and_then(|id| self.session.track(id)) {
+                    Some(track) => {
+                        let dialog = ConfirmLocate { track: track.id, title: track.title().to_owned() };
+                        self.dialog = Some(Dialog::ConfirmLocate(dialog));
+                    }
+                    None => self.session.play_tracks(&tracks, start),
+                }
+            }
+            Action::Locate(id) => self.locate(id),
             Action::SetRating(ids, rating) => self.session.set_rating(&ids, rating),
             Action::SetChecked(ids, checked) => self.session.set_checked(&ids, checked),
             Action::SortBy(column) => self.view.sort_by(column),
@@ -247,6 +286,11 @@ impl TuneBoxApp {
             CommandId::ScanLibraryFolders => {
                 let result = self.session.scan_library_folders();
                 self.report(result);
+            }
+            CommandId::Locate => {
+                if let [id] = self.view.selected_tracks()[..] {
+                    self.locate(id);
+                }
             }
             CommandId::RefreshFromFiles => {
                 let tracks = self.view.selected_tracks();

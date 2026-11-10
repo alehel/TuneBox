@@ -188,6 +188,12 @@ impl Library {
         Ok(())
     }
 
+    /// Records the facts of the track's file (format, length, size), as when it was found again.
+    pub fn set_file(&mut self, id: TrackId, file: FileInfo) -> Result<(), LibraryError> {
+        self.track_mut(id)?.file = file;
+        Ok(())
+    }
+
     /// Records the file's new size, after TuneBox rewrote its tags.
     pub fn set_file_size(&mut self, id: TrackId, size_bytes: u64) -> Result<(), LibraryError> {
         self.track_mut(id)?.file.size_bytes = size_bytes;

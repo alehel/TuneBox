@@ -564,3 +564,49 @@ fn songs_on_a_share_that_is_not_mounted_are_unavailable_not_missing() {
     assert_eq!(notice, "“nas” is connected again.");
     assert_eq!(*f.session.file_status(three), FileStatus::Missing, "still missing: it really is gone");
 }
+
+#[test]
+fn locating_one_moved_song_finds_the_others_that_moved_alike() {
+    let mut f = fixture(1.0);
+    let album = f.dir.path().join("Music/Lanterns");
+    for (n, title) in [(1, "First Light"), (2, "Second Light"), (3, "Third Light")] {
+        write_song(&album.join(format!("{n:02}.flac")), title, "Quiet Harbour", "Lanterns", n);
+    }
+    f.session.import(vec![album.clone()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+    let id = |s: &Session, n: u32| s.library().track_at(&album.join(format!("{n:02}.flac"))).unwrap();
+    let (first, second, third) = (id(&f.session, 1), id(&f.session, 2), id(&f.session, 3));
+    f.session.set_rating(&[first], Rating::from_stars(5));
+
+    // The folder is renamed outside TuneBox, and a different song takes the third one's name.
+    let renamed = f.dir.path().join("Music/Lanterns (1997)");
+    std::fs::rename(&album, &renamed).unwrap();
+    write_song(&renamed.join("03.flac"), "Something Else Entirely, Much Longer", "Other", "Other", 9);
+    std::fs::write(renamed.join("notes.txt"), "not music").unwrap();
+    f.session.check_files_now();
+    assert_eq!(*f.session.file_status(first), FileStatus::Missing);
+    f.session.take_notices();
+
+    // Not a song, or another song's file: refused, nothing changes.
+    assert!(f.session.locate(first, renamed.join("notes.txt")).is_err());
+    assert_eq!(f.session.track(first).unwrap().location, album.join("01.flac"));
+
+    f.session.locate(first, renamed.join("01.flac")).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    f.session.tick();
+    let notices = f.session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ");
+    assert!(notices.contains("“First Light” is linked to its file again."), "{notices}");
+    assert!(notices.contains("Found 1 other missing song in the same place"), "{notices}");
+
+    let track = f.session.track(first).unwrap();
+    assert_eq!(track.location, renamed.join("01.flac"));
+    assert_eq!(track.stats.rating, Rating::from_stars(5), "everything TuneBox knew is kept");
+    assert_eq!(*f.session.file_status(first), FileStatus::Present);
+    assert_eq!(f.session.track(second).unwrap().location, renamed.join("02.flac"), "moved the same way");
+    // Its namesake is a different file (another size): left missing, not mislinked.
+    assert_eq!(f.session.track(third).unwrap().location, album.join("03.flac"));
+    assert_eq!(*f.session.file_status(third), FileStatus::Missing);
+    // And a file that already belongs to a song cannot be given to another.
+    let error = f.session.locate(third, renamed.join("02.flac")).unwrap_err().to_string();
+    assert!(error.contains("already belongs to “Second Light”"), "{error}");
+}

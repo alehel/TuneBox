@@ -305,6 +305,10 @@ fn context_menu(response: &egui::Response, cx: &mut PanelContext, id: TrackId) {
             cx.act(Action::ShowInFolder(id));
             ui.close();
         }
+        if *cx.session.file_status(id) == FileStatus::Missing && ui.button("Locate…").clicked() {
+            cx.act(Action::Locate(id));
+            ui.close();
+        }
         if ui
             .button("Refresh from Files")
             .on_hover_text("Read the details again, after another program changed them")

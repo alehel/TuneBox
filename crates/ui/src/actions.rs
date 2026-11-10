@@ -49,6 +49,8 @@ pub enum Action {
         delete_files: bool,
     },
     RefreshFromFiles(Vec<TrackId>, LibraryOnlyEdits),
+    /// Ask where a missing song's file is now, and link the song to it.
+    Locate(TrackId),
     SetPreferences(Box<Preferences>),
     /// Import these files and folders.
     AddToLibrary(Vec<PathBuf>),

@@ -17,6 +17,7 @@ pub enum CommandId {
     AddToLibrary,
     ScanLibraryFolders,
     RefreshFromFiles,
+    Locate,
     ImportCd,
     GetTrackNames,
     SyncDevice,
@@ -160,6 +161,8 @@ pub enum Needs {
     Ejectable,
     /// Library folders are listed in Preferences.
     LibraryFolders,
+    /// Exactly one track is selected, and its file is missing.
+    MissingSelection,
 }
 
 /// One row of the registry.
@@ -203,6 +206,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     )),
     spec(CommandId::ScanLibraryFolders, "Scan Library Folders", Menu::File, None, Needs::LibraryFolders),
     spec(CommandId::RefreshFromFiles, "Refresh from Files", Menu::File, None, Needs::Selection),
+    spec(CommandId::Locate, "Locate…", Menu::File, None, Needs::MissingSelection),
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
@@ -267,6 +271,8 @@ pub fn spec_of(id: CommandId) -> Option<&'static CommandSpec> {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Context {
     pub selected_tracks: usize,
+    /// How many of the selected tracks have missing files.
+    pub selected_missing: usize,
     pub device_selected: bool,
     pub cd_selected: bool,
 }
@@ -283,6 +289,7 @@ impl Session {
             Needs::Device => context.device_selected,
             Needs::Ejectable => context.device_selected || context.cd_selected,
             Needs::LibraryFolders => !self.prefs.library_folders.is_empty(),
+            Needs::MissingSelection => context.selected_tracks == 1 && context.selected_missing == 1,
         };
         let busy = match id {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),

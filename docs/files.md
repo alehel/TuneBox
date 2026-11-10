@@ -83,6 +83,13 @@ TuneBox looks for every song's file in the background and marks the ones it cann
 
 Neither ever removes a song from the library. Hover over a marked song to see why it is marked.
 
+**Locate…** links a missing song to its file where it is now: from the song's menu, File ▸
+Locate…, Get Info, or by playing it. Only where the file is and its facts (length, size)
+change; ratings, plays, playlists and edits stay, and nothing is written to any file. TuneBox
+then works out how the path moved (`/old/Music/…` → `/new/Music/…`) and links the other
+missing songs that moved the same way, each only if a file of the same size and format is at
+its new place, so a different song with the same name is never taken for it.
+
 **Network drives are remembered.** When a network share (NFS, SMB, AFP, WebDAV, SSHFS…) holds
 library songs, the library file records it as a network place. Later, a share that is not
 mounted reads as *not connected* without TuneBox touching it, even when its mount point is left
@@ -101,4 +108,5 @@ mounts change, and you are told when one disconnects or comes back.
 cannot be read is never deleted from the player and never re-copied. Refresh from Files leaves
 those songs alone too.
 
-`tunebox-cli missing` lists missing songs, and songs on each place that is not connected.
+`tunebox-cli missing` lists missing songs, and songs on each place that is not connected;
+`tunebox-cli locate <search> <file>` links one.

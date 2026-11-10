@@ -52,6 +52,7 @@ pub(crate) enum Outcome {
     },
     Ripped(RipReport),
     Refreshed(crate::refresh::RefreshReport, Origin),
+    LocatedOthers(Vec<(tunebox_model::TrackId, PathBuf)>),
     Synced {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
@@ -213,6 +214,7 @@ impl Session {
             Outcome::NamesFound { disc_id, result } => self.finish_lookup(&disc_id, result),
             Outcome::Ripped(report) => self.finish_rip(report),
             Outcome::Refreshed(report, origin) => self.finish_refresh(report, origin),
+            Outcome::LocatedOthers(found) => self.finish_locating_others(found),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }
     }

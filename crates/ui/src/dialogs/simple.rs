@@ -65,6 +65,31 @@ impl ConfirmRemove {
     }
 }
 
+/// Offered when a song whose file is missing is played: say where it is now.
+#[derive(Clone, Debug)]
+pub struct ConfirmLocate {
+    pub track: TrackId,
+    pub title: String,
+}
+
+impl ConfirmLocate {
+    pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
+        let title = &self.title;
+        let result = window(ctx, "Song File Missing", 420.0, "Locate…", |ui| {
+            ui.label(RichText::new(format!("The file of “{title}” cannot be found.")).strong());
+            ui.label("It may have been moved, renamed or deleted. If you know where it is now, locate it: the song keeps its ratings, plays and playlists. TuneBox also looks for other missing songs that moved the same way.");
+        });
+        match result {
+            Some(true) => {
+                actions.push(Action::Locate(self.track));
+                false
+            }
+            Some(false) => false,
+            None => true,
+        }
+    }
+}
+
 /// Asked before refreshing songs whose edits are kept in TuneBox only, which the refresh would
 /// replace with what their files say.
 #[derive(Clone, Debug)]

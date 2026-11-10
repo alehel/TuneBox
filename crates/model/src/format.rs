@@ -30,6 +30,10 @@ impl AudioFormat {
 
     /// Guesses the format from a file extension (case-insensitive). `m4a` is reported as AAC;
     /// the tag reader refines it to ALAC when the stream says so.
+    /// Every file extension TuneBox reads, for file pickers.
+    pub const EXTENSIONS: [&'static str; 14] =
+        ["mp3", "m4a", "m4b", "mp4", "aac", "flac", "wav", "wave", "aif", "aiff", "aifc", "ogg", "oga", "opus"];
+
     pub fn from_extension(ext: &str) -> Option<AudioFormat> {
         let format = match ext.to_ascii_lowercase().as_str() {
             "mp3" => AudioFormat::Mp3,
@@ -80,6 +84,16 @@ impl AudioFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_picker_extensions_are_exactly_the_readable_ones() {
+        for ext in AudioFormat::EXTENSIONS {
+            assert!(AudioFormat::from_extension(ext).is_some(), "{ext}");
+        }
+        for format in AudioFormat::ALL {
+            assert!(AudioFormat::EXTENSIONS.contains(&format.extension()), "{format:?}");
+        }
+    }
 
     #[test]
     fn extensions_round_trip_for_formats_with_their_own_extension() {

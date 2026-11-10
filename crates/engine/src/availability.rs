@@ -102,6 +102,15 @@ impl Session {
         place_of(&track.location, &self.prefs.library_folders, &network)
     }
 
+    /// Looks for every song's file now and waits for the answers (within the same deadlines),
+    /// for the command line, which cannot wait for the background checks to come in.
+    pub fn check_files_now(&mut self) {
+        let mounts = self.availability.mounts.clone().unwrap_or_default();
+        let found = self.view().find_unplayable(&mounts);
+        self.availability.statuses.clear();
+        self.apply_file_statuses(found);
+    }
+
     /// Looks for every song's file again.
     pub(crate) fn check_all_files(&mut self) {
         let ids: Vec<TrackId> = self.library.tracks().map(|t| t.id).collect();

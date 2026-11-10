@@ -18,6 +18,8 @@ pub enum EngineError {
     NoDisc,
     #[error("{0} is already in progress")]
     Busy(&'static str),
+    #[error("{0}")]
+    Locate(String),
     #[error(
         "{} is in a read-only library folder, which TuneBox does not change. Choose a media folder in a writable folder in Preferences.",
         .0.display()

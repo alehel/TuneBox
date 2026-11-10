@@ -2,7 +2,9 @@
 //! captures the window and saves it as a PNG, then quits. The README's pictures come from here.
 
 use crate::app::TuneBoxApp;
-use crate::dialogs::{ConfirmRefresh, Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, SmartPlaylistDialog};
+use crate::dialogs::{
+    ConfirmLocate, ConfirmRefresh, Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, SmartPlaylistDialog,
+};
 use crate::state::{SourceItem, ViewMode};
 use egui::ColorImage;
 use std::path::PathBuf;
@@ -19,10 +21,11 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 20] = [
+const SCENES: [Scene; 21] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-unplayable", setup: unplayable },
+    Scene { name: "tunebox-locate", setup: locate },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
     Scene { name: "tunebox-smart-editor", setup: smart_editor },
     Scene { name: "tunebox-get-info", setup: get_info },
@@ -282,4 +285,16 @@ fn unplayable(app: &mut TuneBoxApp) {
     app.view.select_source(SourceItem::Music);
     app.view.view_mode = ViewMode::List;
     app.view.browse.genre = Some("Jazz".into());
+}
+
+/// Double-clicking the missing bonus track offers to locate it.
+fn locate(app: &mut TuneBoxApp) {
+    unplayable(app);
+    if let Some((rows, index)) = find_track(app, "Riptide (Alternate Take)")
+        && let Some(id) = rows.get(index)
+    {
+        app.view.selection.set([*id]);
+        let title = "Riptide (Alternate Take)".to_owned();
+        app.dialog = Some(Dialog::ConfirmLocate(ConfirmLocate { track: *id, title }));
+    }
 }
