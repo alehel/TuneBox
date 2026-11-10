@@ -207,13 +207,19 @@ Two pure-Rust WebAssembly runtimes were considered.
 | | wasmi 2 (interpreter) | Wasmtime 50 (compiler, Cranelift) |
 |---|---|---|
 | Licence | MIT or Apache-2.0: passes `deny.toml` | Apache-2.0 WITH LLVM-exception: passes `deny.toml` |
-| Size of the dependency | Small: wasmi, its IR and core crates, wasmparser, a few helpers | Large: Cranelift, its register allocator, the runtime, object-file and debug-info crates |
-| Build time and binary size | Measured: see below | Measured: see below |
+| Crates pulled in | 10 | 101 |
+| Clean release build of a program that loads a module | 49 s | 223 s |
+| Its size, stripped (a program without either: 0.3 MB) | 1.6 MB | 10.4 MB |
 | Bounding work | Fuel: deterministic | Fuel (deterministic) or epoch interruption (timer-driven) |
 | Bounding memory | `StoreLimits` | `StoreLimits` |
 | Determinism | Same fuel, same result on every computer | The same with fuel |
 | What it does with untrusted code | Interprets it; never generates machine code | Compiles it to machine code at run time (needs writable-then-executable memory; on macOS a hardened app needs the JIT entitlement) |
 | Speed | An interpreter: several times slower than compiled code | Near native |
+
+The build and size figures come from three tiny programs that read a file and instantiate it
+as a module (one with neither runtime, one with each), built with TuneBox's release profile,
+from clean, on the same Linux computer (Wasmtime with only `std`, `cranelift` and `runtime`;
+wasmi as TuneBox uses it). They include fetching any crates not yet cached.
 
 A visualizer frame is a few thousand WebAssembly instructions of arithmetic producing at most a
 few thousand shapes; the example plug-in takes about 0.3 ms a frame interpreted. The speed of a
