@@ -29,6 +29,9 @@ struct LibraryFile {
     next_id: u64,
     tracks: Vec<Track>,
     playlists: Vec<Playlist>,
+    /// Added after version 1 shipped; older files have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    network_places: Vec<std::path::PathBuf>,
 }
 
 /// Reads the library at `path`. A missing file is a new, empty library with the default
@@ -51,7 +54,7 @@ pub fn from_json(bytes: &[u8]) -> Result<Library, StoreError> {
     if file.version > VERSION {
         return Err(StoreError::TooNew(file.version));
     }
-    Ok(Library::from_parts(file.tracks, file.playlists, file.next_id))
+    Ok(Library::from_parts(file.tracks, file.playlists, file.next_id).with_network_places(file.network_places))
 }
 
 /// The library as file bytes.
@@ -62,6 +65,7 @@ pub fn to_json(library: &Library) -> Result<Vec<u8>, StoreError> {
         next_id: library.next_id(),
         tracks: library.tracks().cloned().collect(),
         playlists: library.playlists().to_vec(),
+        network_places: library.network_places().to_vec(),
     };
     serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Damaged(e.to_string()))
 }
@@ -89,9 +93,12 @@ mod tests {
         let id = lib.add_track(new_track("/a.mp3", "One", "A", "X"));
         let list = lib.create_playlist("Mix").unwrap();
         lib.add_to_playlist(list, &[id]).unwrap();
+        assert!(lib.remember_network_place("/mnt/nas".into()));
+        assert!(!lib.remember_network_place("/mnt/nas".into()), "remembered once");
         save(&lib, &path).unwrap();
 
         let back = load(&path).unwrap();
+        assert_eq!(back.network_places(), [std::path::PathBuf::from("/mnt/nas")]);
         assert_eq!(back.len(), 1);
         assert_eq!(back.playlists(), lib.playlists());
         assert_eq!(back.playlist_tracks(list, Utc::now()).unwrap(), [id]);

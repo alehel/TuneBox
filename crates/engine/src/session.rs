@@ -76,6 +76,8 @@ pub struct Session {
     pub(crate) protected_edit_noted: bool,
     /// Paths the folder watcher reported, waiting for the running import or refresh to end.
     pub(crate) folder_changes: std::collections::BTreeSet<PathBuf>,
+    /// Which songs' files can be found.
+    pub(crate) availability: crate::availability::Availability,
     /// This process's hold on the library, for as long as the session lives.
     _lock: LibraryLock,
 }
@@ -106,7 +108,7 @@ impl Session {
             Err(e) => return Err(e.into()),
         };
         let playback = PlaybackState::new(player, &prefs);
-        Ok(Session {
+        let mut session = Session {
             paths,
             library,
             prefs,
@@ -119,8 +121,11 @@ impl Session {
             revision: 0,
             protected_edit_noted: false,
             folder_changes: std::collections::BTreeSet::new(),
+            availability: crate::availability::Availability::start(),
             _lock: lock,
-        })
+        };
+        session.check_all_files();
+        Ok(session)
     }
 
     pub fn library(&self) -> &Library {
@@ -134,8 +139,13 @@ impl Session {
     /// Replaces the preferences and saves them.
     pub fn set_preferences(&mut self, prefs: Preferences) {
         self.playback.apply_preferences(&prefs);
+        let folders_changed = prefs.library_folders != self.prefs.library_folders;
         self.prefs = prefs;
         self.save_preferences();
+        if folders_changed {
+            // Library folders are places: which songs are missing and which unavailable may differ.
+            self.check_all_files();
+        }
     }
 
     pub(crate) fn save_preferences(&mut self) {
@@ -183,6 +193,7 @@ impl Session {
             }
         }
         self.act_on_folder_changes();
+        self.follow_file_checks();
         self.follow_player();
         if self.unsaved_since.is_some_and(|since| since.elapsed() >= AUTOSAVE_DELAY)
             && let Err(e) = self.save()

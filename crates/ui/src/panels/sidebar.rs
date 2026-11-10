@@ -172,7 +172,7 @@ fn artwork_pane(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
     let side = (rect.width() - 28.0).min(rect.height() - 40.0).max(0.0);
     let square = Rect::from_min_size(pos2(rect.center().x - side / 2.0, rect.top() + 30.0), vec2(side, side));
     theme::soft_shadow(painter, square, 6.0, 10);
-    match track.and_then(|id| cx.session.track(id)).and_then(|t| cx.artwork.get(t)) {
+    match track.and_then(|id| cx.session.track(id)).and_then(|t| cx.artwork.cover(cx.session, t)) {
         Some(texture) => {
             egui::Image::from_texture(egui::load::SizedTexture::from_handle(&texture))
                 .corner_radius(6)

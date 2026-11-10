@@ -25,6 +25,10 @@ pub struct Library {
     next_id: u64,
     /// Which track each file belongs to, so a file is never added twice.
     by_location: HashMap<PathBuf, TrackId>,
+    /// Where network shares holding library songs are mounted (`/mnt/nas`, `/Volumes/Music`,
+    /// `\\server\share`). Remembered so that when one is not mounted its songs read as "not
+    /// connected", not as missing; its mount point may even be left behind as an empty folder.
+    network_places: Vec<PathBuf>,
 }
 
 impl Library {
@@ -67,6 +71,28 @@ impl Library {
             library.playlists.push(playlist);
         }
         library
+    }
+
+    /// The library with its remembered network places (when loading the library file).
+    pub fn with_network_places(mut self, places: Vec<PathBuf>) -> Self {
+        for place in places {
+            self.remember_network_place(place);
+        }
+        self
+    }
+
+    pub fn network_places(&self) -> &[PathBuf] {
+        &self.network_places
+    }
+
+    /// Remembers that `place` is a network share. Returns whether it was new.
+    pub fn remember_network_place(&mut self, place: PathBuf) -> bool {
+        if self.network_places.contains(&place) {
+            return false;
+        }
+        self.network_places.push(place);
+        self.network_places.sort();
+        true
     }
 
     /// The id counter, for the library file.

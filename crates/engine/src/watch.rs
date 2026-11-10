@@ -32,6 +32,9 @@ struct Plan {
     import: Vec<PathBuf>,
     /// Known songs whose files changed.
     refresh: Vec<TrackId>,
+    /// Known songs whose files went: deleted, moved, or their share dropped. Looked for again
+    /// to tell which; never removed.
+    recheck: Vec<TrackId>,
 }
 
 impl Session {
@@ -49,6 +52,7 @@ impl Session {
         }
         let changed = std::mem::take(&mut self.folder_changes);
         let plan = plan(&changed, &self.prefs.library_folders, &self.library, path_kind);
+        self.check_tracks(&plan.recheck);
         if !plan.import.is_empty()
             && let Err(e) = self.start_import(plan.import, Origin::Watcher)
         {
@@ -92,8 +96,9 @@ fn plan(
         }
         match (library.track_at(path), kind(path)) {
             (Some(id), Some(PathKind::File)) => plan.refresh.push(id),
-            // Gone: the song stays in the library with its history.
-            (_, None) => {}
+            // Gone: the song stays in the library with its history, marked once looked for.
+            (Some(id), None) => plan.recheck.push(id),
+            (None, None) => {}
             (None, Some(PathKind::Folder)) => plan.import.push(path.clone()),
             (None, Some(PathKind::File)) if tunebox_import::is_audio_file(path) => plan.import.push(path.clone()),
             _ => {}
@@ -139,7 +144,7 @@ mod tests {
     fn new_songs_are_added_changed_ones_read_and_the_rest_ignored() {
         let mut library = Library::default();
         let changed_song = known(&mut library, "/music/a.flac");
-        known(&mut library, "/music/deleted.flac");
+        let deleted = known(&mut library, "/music/deleted.flac");
         let folders = [LibraryFolder { path: PathBuf::from("/music"), read_only: true }];
         let changed: BTreeSet<PathBuf> = [
             "/music/a.flac",
@@ -163,6 +168,7 @@ mod tests {
         };
         let plan = plan(&changed, &folders, &library, kind);
         assert_eq!(plan.refresh, [changed_song]);
+        assert_eq!(plan.recheck, [deleted]);
         assert_eq!(plan.import, [PathBuf::from("/music/New Album"), PathBuf::from("/music/new.mp3")]);
     }
 }

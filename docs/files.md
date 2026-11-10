@@ -71,3 +71,32 @@ through. Symbolic links are resolved, so a link into a read-only folder is read 
 tests `a_read_only_library_folder_is_never_changed` and
 `a_writable_imports_folder_inside_a_read_only_collection` (`crates/engine/tests/session.rs`)
 edit, delete, import and rip, and check read-only folders byte for byte.
+
+## Missing files and network drives
+
+TuneBox looks for every song's file in the background and marks the ones it cannot play:
+
+| Mark | Means | What TuneBox does |
+|---|---|---|
+| Amber **!** | **Missing**: the drive or folder is there, the file is not (moved, renamed or deleted) | Skips it when playing a list; says why if you play it. If the file turns up elsewhere in a library folder it is relinked, ratings and plays kept |
+| Drive struck through | **Not connected**: the drive or network share it is on cannot be reached | The same, and nothing about it is treated as gone: it plays again once the place is back |
+
+Neither ever removes a song from the library. Hover over a marked song to see why it is marked.
+
+**Network drives are remembered.** When a network share (NFS, SMB, AFP, WebDAV, SSHFS…) holds
+library songs, the library file records it as a network place. Later, a share that is not
+mounted reads as *not connected* without TuneBox touching it, even when its mount point is left
+behind as an empty folder (as on Linux), which would otherwise look like a folder of deleted
+songs. Windows network paths (`\\server\share`) are always treated as network places; mapped
+drive letters are treated like other drives.
+
+**A share that stops answering never freezes TuneBox.** Every look at a drive or share runs on a
+background thread with a deadline of a few seconds; a place that does not answer in time is
+treated as not connected until it does. Places are asked again every 30 seconds and whenever
+mounts change, and you are told when one disconnects or comes back.
+
+**Syncing with a share offline** keeps the player's copies of its songs as they are: a song that
+cannot be read is never deleted from the player and never re-copied. Refresh from Files leaves
+those songs alone too.
+
+`tunebox-cli missing` lists missing songs, and songs on each place that is not connected.

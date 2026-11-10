@@ -19,9 +19,10 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 19] = [
+const SCENES: [Scene; 20] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
+    Scene { name: "tunebox-unplayable", setup: unplayable },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
     Scene { name: "tunebox-smart-editor", setup: smart_editor },
     Scene { name: "tunebox-get-info", setup: get_info },
@@ -63,12 +64,15 @@ impl ScreenshotRunner {
         ctx.request_repaint();
         if self.frames == 0 {
             app.dialog = None;
+            app.view.browse = Default::default();
             app.view.show_visualizer = false;
             app.visualizer.controls_pinned = false;
             (scene.setup)(app);
         }
         self.frames += 1;
         if !self.requested && self.frames >= SETTLE_FRAMES && app.artwork.is_idle() {
+            // Notices come and go; the pictures show the views themselves.
+            app.clear_toasts();
             let slot = Arc::clone(&self.shot);
             let repaint = ctx.clone();
             ctx.request_screenshot(move |image| {
@@ -271,4 +275,11 @@ fn refresh_from_files(app: &mut TuneBoxApp) {
     get_info_several(app);
     let tracks = app.view.selected_tracks();
     app.dialog = Some(Dialog::ConfirmRefresh(ConfirmRefresh { tracks, with_edits: 2, replace_edits: false }));
+}
+
+/// The Jazz songs: one whose file is missing, and an album on a share that is not connected.
+fn unplayable(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    app.view.view_mode = ViewMode::List;
+    app.view.browse.genre = Some("Jazz".into());
 }

@@ -60,7 +60,8 @@ fn tile(ui: &mut Ui, cx: &mut PanelContext, album: &Album, slot: Rect) {
     let response = ui.interact(whole, ui.scope_id().with(("album", &album.key)), Sense::click());
     let hovered = response.hovered();
     let selected = album.tracks.iter().all(|id| cx.view.selection.contains(*id));
-    let texture = album.tracks.first().and_then(|id| cx.session.track(*id)).and_then(|t| cx.artwork.get(t));
+    let texture =
+        album.tracks.first().and_then(|id| cx.session.track(*id)).and_then(|t| cx.artwork.cover(cx.session, t));
     let art = if hovered { slot.translate(vec2(0.0, -3.0)) } else { slot };
 
     theme::soft_shadow(ui.painter(), art, RADIUS, if hovered { 18 } else { 10 });

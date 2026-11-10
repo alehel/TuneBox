@@ -15,15 +15,17 @@
 mod details;
 
 use clap::{Parser, Subcommand};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
+use tunebox_engine::Place;
 use tunebox_engine::commands::COMMANDS;
 use tunebox_engine::model::search::SearchScope;
 use tunebox_engine::model::{Column, Rating, TrackId, format_clock};
 use tunebox_engine::{
-    LibrarySnapshot, LibraryView, NoticeLevel, Player, Session, Source, SyncMode, TrackQuery, VirtualDrive,
+    FileStatus, LibrarySnapshot, LibraryView, NoticeLevel, Player, Session, Source, SyncMode, TrackQuery, VirtualDrive,
 };
 
 #[derive(Parser)]
@@ -79,6 +81,8 @@ enum Command {
         #[arg(long)]
         search: Option<String>,
     },
+    /// List songs whose files are missing, or on a drive or share that is not connected.
+    Missing,
     /// Show every detail of the songs matching a search.
     Info { search: String },
     /// Change details of the songs matching a search, e.g.
@@ -166,9 +170,12 @@ impl Command {
     /// so they work while the app or another tunebox-cli has the library open.
     fn reads_only(&self) -> bool {
         match self {
-            Command::Stats | Command::List { .. } | Command::Playlists | Command::Info { .. } | Command::Commands => {
-                true
-            }
+            Command::Stats
+            | Command::List { .. }
+            | Command::Playlists
+            | Command::Info { .. }
+            | Command::Missing
+            | Command::Commands => true,
             Command::InfoFields { pin, unpin } => pin.is_empty() && unpin.is_empty(),
             Command::Folders { action } => action.is_none(),
             _ => false,
@@ -212,6 +219,7 @@ fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
             }
         }
         Command::Info { search } => details::show(view, &search)?,
+        Command::Missing => print_unplayable(view),
         Command::InfoFields { .. } => details::print_info_fields(view.preferences()),
         Command::Folders { .. } => print_folders(view.preferences()),
         Command::Commands => {
@@ -278,6 +286,7 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         | Command::List { .. }
         | Command::Playlists
         | Command::Info { .. }
+        | Command::Missing
         | Command::Commands) => show(session.view(), command)?,
     }
     Ok(())
@@ -297,6 +306,38 @@ fn search_ids(view: LibraryView<'_>, source: Source, search: Option<&str>) -> Ve
     query.search = search.unwrap_or_default().to_owned();
     query.scope = SearchScope::All;
     view.query(&query)
+}
+
+/// Songs whose files are missing, then those on each drive or share that is not connected.
+fn print_unplayable(view: LibraryView<'_>) {
+    let found = view.find_unplayable(&tunebox_platform::network_mounts());
+    let missing: Vec<TrackId> = found.iter().filter(|(_, s)| *s == FileStatus::Missing).map(|(id, _)| *id).collect();
+    let mut away: BTreeMap<Place, Vec<TrackId>> = BTreeMap::new();
+    for (id, status) in &found {
+        if let FileStatus::Unavailable(place) = status {
+            away.entry(place.clone()).or_default().push(*id);
+        }
+    }
+    if found.is_empty() {
+        println!("Every song's file is where the library says.");
+    }
+    if !missing.is_empty() {
+        println!("Missing ({}): moved, renamed or deleted", missing.len());
+        for id in &missing {
+            if let Some(track) = view.track(*id) {
+                println!("  {:<36.36} {}", track.title(), track.location.display());
+            }
+        }
+    }
+    for (place, ids) in away {
+        let state = if place.network { "not connected" } else { "cannot be found" };
+        println!("On “{}” ({}), {state} ({} songs)", place.name(), place.root.display(), ids.len());
+        for id in ids {
+            if let Some(track) = view.track(id) {
+                println!("  {:<36.36} {}", track.title(), track.meta.artist);
+            }
+        }
+    }
 }
 
 fn print_tracks(view: LibraryView<'_>, ids: &[TrackId]) {
@@ -503,6 +544,7 @@ mod tests {
             &["playlists"],
             &["info", "x"],
             &["info-fields"],
+            &["missing"],
             &["folders"],
             &["commands"],
         ] {

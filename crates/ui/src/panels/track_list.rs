@@ -7,6 +7,7 @@ use crate::panels::{PanelContext, widgets};
 use crate::state::SourceItem;
 use crate::theme;
 use egui::{Align2, Color32, FontId, Modifiers, Rect, Sense, Stroke, Ui, pos2, vec2};
+use tunebox_engine::FileStatus;
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::{Column, PlaylistKind, Rating, SortOrder, TrackId};
 
@@ -150,9 +151,11 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
         };
         ui.painter().rect_filled(rect, 0.0, background);
     }
+    let status = cx.session.file_status(id);
+    let can_play = *status == FileStatus::Present;
     let text_color = if selected {
         Color32::WHITE
-    } else if track.checked {
+    } else if track.checked && can_play {
         theme::TEXT
     } else {
         theme::TEXT_MUTED
@@ -163,12 +166,14 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
         let ids = if selected { cx.view.selected_tracks() } else { vec![id] };
         cx.act(Action::SetChecked(ids, checked));
     }
+    let icon = Rect::from_center_size(
+        pos2(rect.left() + CHECK_WIDTH + PLAYING_WIDTH / 2.0, rect.center().y),
+        vec2(11.0, 11.0),
+    );
     if cx.session.now_playing().is_some_and(|n| n.track == id) {
-        let icon = Rect::from_center_size(
-            pos2(rect.left() + CHECK_WIDTH + PLAYING_WIDTH / 2.0, rect.center().y),
-            vec2(11.0, 11.0),
-        );
         glyphs::paint(ui.painter(), icon, Glyph::NowPlaying, if selected { Color32::WHITE } else { theme::ACCENT });
+    } else if let Some((glyph, color)) = file_mark(status) {
+        glyphs::paint(ui.painter(), icon, glyph, if selected { Color32::WHITE } else { color });
     }
 
     for cell in layout {
@@ -201,8 +206,22 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
         }
     }
 
+    // Why the song is marked, when the pointer rests on it.
+    let response = match (can_play, cx.session.file_problem(id)) {
+        (false, Some(problem)) if response.hovered() => response.on_hover_text(problem),
+        _ => response,
+    };
     handle_clicks(ui, cx, &response, rows, index, id);
     context_menu(&response, cx, id);
+}
+
+/// The mark beside a song whose file cannot be played now.
+fn file_mark(status: &FileStatus) -> Option<(Glyph, Color32)> {
+    match status {
+        FileStatus::Present => None,
+        FileStatus::Missing => Some((Glyph::Missing, theme::CAUTION)),
+        FileStatus::Unavailable(_) => Some((Glyph::NotConnected, theme::TEXT_MUTED)),
+    }
 }
 
 fn handle_clicks(

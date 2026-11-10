@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    LibraryOnlyEdits, LibrarySnapshot, NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings,
-    TrackQuery, VirtualDrive, Volume,
+    FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Player, Session, SessionPaths, Source, SyncMode,
+    SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -505,4 +505,62 @@ fn a_snapshot_reads_a_library_another_tunebox_has_open_and_never_writes() {
     let Err(error) = LibrarySnapshot::open(&paths_in(&dir)) else { panic!("opened a damaged library") };
     assert!(error.to_string().contains("damaged"), "{error}");
     assert_eq!(std::fs::read(&library_file).unwrap(), b"{ not json");
+}
+
+#[test]
+fn songs_on_a_share_that_is_not_mounted_are_unavailable_not_missing() {
+    let mut f = fixture(1.0);
+    let nas = f.dir.path().join("nas");
+    let local = f.dir.path().join("local");
+    write_song(&nas.join("one.flac"), "Harbour One", "Quiet Harbour", "Shared", 1);
+    write_song(&nas.join("two.flac"), "Harbour Two", "Quiet Harbour", "Shared", 2);
+    write_song(&local.join("three.flac"), "Harbour Three", "Quiet Harbour", "Local", 1);
+    f.session.import(vec![nas.clone(), local.clone()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+    let id_at = |s: &Session, path: &Path| s.library().track_at(path).unwrap();
+    let (one, two, three) = (
+        id_at(&f.session, &nas.join("one.flac")),
+        id_at(&f.session, &nas.join("two.flac")),
+        id_at(&f.session, &local.join("three.flac")),
+    );
+
+    // The share is mounted: TuneBox remembers it as a network place, in the library file.
+    f.session.set_network_mounts(vec![nas.clone()]);
+    assert_eq!(f.session.library().network_places(), std::slice::from_ref(&nas));
+
+    // A local song deleted is missing.
+    std::fs::remove_file(local.join("three.flac")).unwrap();
+    f.session.folders_changed(vec![local.join("three.flac")]);
+    f.session.folders_changed(Vec::new());
+    tick_until(&mut f.session, |s| *s.file_status(three) == FileStatus::Missing);
+    f.session.take_notices();
+
+    // The share is unmounted. Its mount point stays behind as a folder (here, still full), yet
+    // its songs are unavailable, not missing, and nothing under it is touched.
+    f.session.set_network_mounts(Vec::new());
+    assert!(matches!(f.session.file_status(one), FileStatus::Unavailable(place) if place.network && place.root == nas));
+    assert!(matches!(f.session.file_status(two), FileStatus::Unavailable(_)));
+    let notice = f.session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ");
+    assert_eq!(notice, "“nas” is not connected. Its 2 songs show as unavailable until it is back.");
+
+    // Playing one says why it cannot; playing the list skips what cannot play.
+    f.session.play_tracks(&[one], 0);
+    assert!(f.session.now_playing().is_none());
+    let notice = f.session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ");
+    assert!(notice.contains("cannot be played. It is on “nas”, which is not connected"), "{notice}");
+
+    // A copy of a song from the share is not taken for the song having moved: the share is
+    // only away. (Relinking it would strand the original.)
+    std::fs::copy(nas.join("two.flac"), local.join("two copy.flac")).unwrap();
+    f.session.import(vec![local.join("two copy.flac")]).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty() && s.library().len() == 4);
+    assert_eq!(f.session.track(two).unwrap().location, nas.join("two.flac"));
+
+    // Mounted again: connected, and its songs are there.
+    f.session.take_notices();
+    f.session.set_network_mounts(vec![nas.clone()]);
+    tick_until(&mut f.session, |s| *s.file_status(one) == FileStatus::Present);
+    let notice = f.session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ");
+    assert_eq!(notice, "“nas” is connected again.");
+    assert_eq!(*f.session.file_status(three), FileStatus::Missing, "still missing: it really is gone");
 }

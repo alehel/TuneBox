@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use tunebox_engine::model::Track;
+use tunebox_engine::{FileStatus, Session};
 
 /// Artwork is stored at this size; tiles and panes scale it down.
 const THUMBNAIL: u32 = 300;
@@ -43,7 +44,20 @@ impl ArtworkCache {
     }
 
     /// The artwork of `track`'s album, loading it in the background the first time.
-    pub fn get(&mut self, track: &Track) -> Option<TextureHandle> {
+    /// The cover of `track`'s album. It is read from a song of the album whose file is there:
+    /// covers are kept one per album, so reading it from a missing or unreachable song would
+    /// leave the whole album without one.
+    pub fn cover(&mut self, session: &Session, track: &Track) -> Option<TextureHandle> {
+        let present = |t: &Track| *session.file_status(t.id) == FileStatus::Present;
+        if present(track) {
+            return self.get(track);
+        }
+        let key = album_key(track);
+        let source = session.library().tracks().find(|t| present(t) && album_key(t) == key)?;
+        self.get(source)
+    }
+
+    fn get(&mut self, track: &Track) -> Option<TextureHandle> {
         let key = album_key(track);
         if let Some(texture) = self.textures.get(&key) {
             return texture.clone();

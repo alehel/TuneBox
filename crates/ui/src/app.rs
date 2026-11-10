@@ -62,6 +62,7 @@ pub struct TuneBoxApp {
     toasts: Toasts,
     screenshots: Option<ScreenshotRunner>,
     library_watch: LibraryWatch,
+    network_mounts: tunebox_platform::NetworkMounts,
     last_device_scan: Option<Instant>,
     #[cfg(feature = "drives")]
     last_disc_scan: Option<Instant>,
@@ -88,6 +89,7 @@ impl TuneBoxApp {
             toasts: Toasts::default(),
             screenshots,
             library_watch: LibraryWatch::default(),
+            network_mounts: tunebox_platform::NetworkMounts::start(),
             last_device_scan: None,
             #[cfg(feature = "drives")]
             last_disc_scan: None,
@@ -96,6 +98,10 @@ impl TuneBoxApp {
 
     /// Engine bookkeeping that happens every frame.
     fn housekeeping(&mut self) {
+        // Looked up on a thread of its own, so a share that stopped answering never stalls this.
+        if let Some(mounts) = self.network_mounts.changed() {
+            self.session.set_network_mounts(mounts);
+        }
         for notice in self.library_watch.update(&mut self.session, &self.ctx) {
             self.toasts.push(notice);
         }
@@ -132,6 +138,11 @@ impl TuneBoxApp {
         if gone {
             self.view.select_source(SourceItem::Music);
         }
+    }
+
+    /// Takes down the notices on screen (for screenshots).
+    pub(crate) fn clear_toasts(&mut self) {
+        self.toasts = Toasts::default();
     }
 
     pub(crate) fn ctx(&self) -> &egui::Context {

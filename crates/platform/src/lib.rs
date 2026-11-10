@@ -13,8 +13,10 @@
     clippy::unreachable
 )]
 
+mod mounts;
 mod watch;
 
+pub use mounts::{NetworkMounts, network_mounts, network_mounts_in};
 pub use watch::{FolderWatcher, QUIET};
 
 use std::path::{Path, PathBuf};

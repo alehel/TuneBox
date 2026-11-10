@@ -29,7 +29,7 @@ pub fn show(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
     let Some(track) = cx.session.track(now.track) else { return };
 
     let art = Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(rect.height() - 12.0, rect.height() - 12.0));
-    match cx.artwork.get(track) {
+    match cx.artwork.cover(cx.session, track) {
         Some(texture) => {
             egui::Image::from_texture(egui::load::SizedTexture::from_handle(&texture))
                 .corner_radius(5)

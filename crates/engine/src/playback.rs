@@ -1,5 +1,6 @@
 //! Playing music: the queue, the transport buttons, and play and skip counts.
 
+use crate::file_check::FileStatus;
 use crate::notices::Notice;
 use crate::prefs::Preferences;
 use crate::session::Session;
@@ -57,13 +58,24 @@ fn shuffle_seed() -> u64 {
 
 impl Session {
     /// Plays `list` from `list[start]` (double-clicking a track). Unchecked tracks are skipped,
-    /// except the one started explicitly.
+    /// except the one started explicitly, and so are songs whose file is missing or on a drive
+    /// or share that is not connected: each would only fail. Choosing one of those says why it
+    /// cannot play.
     pub fn play_tracks(&mut self, list: &[TrackId], start: usize) {
         let Some(&chosen) = list.get(start) else { return };
+        if let Some(problem) = self.file_problem(chosen) {
+            let title = self.library.track(chosen).map(|t| t.title().to_owned()).unwrap_or_default();
+            self.notices.push(Notice::warning(format!("“{title}” cannot be played. {problem}")));
+            return;
+        }
         let playable: Vec<TrackId> = list
             .iter()
             .copied()
-            .filter(|id| *id == chosen || self.library.track(*id).is_some_and(|t| t.checked))
+            .filter(|id| {
+                *id == chosen
+                    || (self.library.track(*id).is_some_and(|t| t.checked)
+                        && *self.file_status(*id) == FileStatus::Present)
+            })
             .collect();
         let start = playable.iter().position(|id| *id == chosen).unwrap_or(0);
         let state = &mut self.playback;
@@ -195,6 +207,10 @@ impl Session {
                     self.advance_after_finish();
                 }
                 PlayerEvent::Failed { path, message } => {
+                    // Perhaps the file went, perhaps its share dropped: find out which.
+                    if let Some(current) = self.playback.current() {
+                        self.check_tracks(&[current]);
+                    }
                     let name = path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
                     self.notices.push(Notice::error(match name {
                         Some(name) => format!("Could not play “{name}”: {message}"),

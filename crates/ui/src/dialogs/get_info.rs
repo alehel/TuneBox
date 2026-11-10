@@ -188,7 +188,7 @@ impl GetInfoDialog {
         let result = window(ctx, &title, WIDTH, "OK", |ui| {
             layout::tab_bar(ui, tab, &TABS);
             layout::scrolling_body(ui, |ui| match tab {
-                Tab::Summary => summary(ui, &tracks, artwork, actions),
+                Tab::Summary => summary(ui, session, &tracks, artwork, actions),
                 Tab::Details => details(ui, draft, tracks.len(), protected, &extra, all_fields),
             });
         });
@@ -224,11 +224,11 @@ fn blocked_fields(tracks: &[&Track]) -> BTreeMap<TagField, String> {
 
 // ----- Summary -----
 
-fn summary(ui: &mut Ui, tracks: &[&Track], artwork: &mut ArtworkCache, actions: &mut Vec<Action>) {
+fn summary(ui: &mut Ui, session: &Session, tracks: &[&Track], artwork: &mut ArtworkCache, actions: &mut Vec<Action>) {
     let Some(first) = tracks.first().copied() else { return };
-    card(ui, "", "", |ui| header(ui, tracks, first, artwork, actions));
+    card(ui, "", "", |ui| header(ui, session, tracks, first, artwork, actions));
     if let [track] = tracks {
-        card(ui, "File", "", |ui| file_facts(ui, track, actions));
+        card(ui, "File", "", |ui| file_facts(ui, track, session.file_problem(track.id), actions));
     } else {
         let bytes: u64 = tracks.iter().map(|t| t.file.size_bytes).sum();
         let duration = tracks.iter().map(|t| t.file.duration).sum();
@@ -241,11 +241,18 @@ fn summary(ui: &mut Ui, tracks: &[&Track], artwork: &mut ArtworkCache, actions: 
 }
 
 /// Artwork beside the title, artist and album, the rating, and the play history as pills.
-fn header(ui: &mut Ui, tracks: &[&Track], first: &Track, artwork: &mut ArtworkCache, actions: &mut Vec<Action>) {
+fn header(
+    ui: &mut Ui,
+    session: &Session,
+    tracks: &[&Track],
+    first: &Track,
+    artwork: &mut ArtworkCache,
+    actions: &mut Vec<Action>,
+) {
     ui.horizontal_top(|ui| {
         let (art, _) = ui.allocate_exact_size(vec2(140.0, 140.0), Sense::hover());
         theme::soft_shadow(ui.painter(), art, 6.0, 10);
-        let texture = artwork.get(first);
+        let texture = artwork.cover(session, first);
         artwork::paint(ui, art, texture.as_ref());
         ui.add_space(16.0);
         ui.vertical(|ui| {
@@ -320,7 +327,10 @@ fn pill(ui: &mut Ui, text: &str) {
 }
 
 /// Format, size, quality and where the file is.
-fn file_facts(ui: &mut Ui, track: &Track, actions: &mut Vec<Action>) {
+fn file_facts(ui: &mut Ui, track: &Track, problem: Option<String>, actions: &mut Vec<Action>) {
+    if let Some(problem) = problem {
+        banner(ui, Tone::Warning, Glyph::Missing, &problem);
+    }
     fact_row(ui, "Kind", &Column::Kind.text(track));
     fact_row(ui, "Length", &format_clock(track.file.duration));
     fact_row(ui, "Size", &format_bytes(track.file.size_bytes));

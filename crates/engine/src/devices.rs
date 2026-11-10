@@ -105,13 +105,21 @@ impl Session {
         let free_bytes = entry.volume.free_bytes;
         let settings = device.manifest.settings.clone();
         let (tracks, playlists) = self.sync_selection(&settings);
+        // Songs known to be missing or out of reach are not even looked at: a share that is not
+        // connected could stall the sync.
+        let readable: Vec<bool> =
+            tracks.iter().map(|t| *self.file_status(t.id) == crate::file_check::FileStatus::Present).collect();
         let root = root.to_path_buf();
         let title = format!("Syncing “{}”", device.manifest.name);
         Ok(self.jobs.spawn(JobKind::Sync, title, move |ctx| {
             ctx.progress(0.0, "Preparing to sync…");
             let items: Vec<SyncItem> = tracks
                 .iter()
-                .map(|t| SyncItem::from_track(t, &settings.music_folder, modified_secs(&t.location)))
+                .zip(readable)
+                .map(|(t, readable)| {
+                    let modified = if readable { modified_secs(&t.location) } else { None };
+                    SyncItem::from_track(t, &settings.music_folder, modified)
+                })
                 .collect();
             let plan = tunebox_sync::plan(&items, playlists, &device.manifest);
             let result = if plan.fits(free_bytes) {
@@ -171,6 +179,15 @@ impl Session {
                 } else {
                     format!("“{name}” is up to date. {} songs copied, {} removed.", report.copied, report.deleted)
                 };
+                let text = match report.unavailable {
+                    0 => text,
+                    1 => format!(
+                        "{text} 1 song could not be read (missing, or its drive or share is not connected); its copy on the player was kept."
+                    ),
+                    n => format!(
+                        "{text} {n} songs could not be read (missing, or their drive or share is not connected); their copies on the player were kept."
+                    ),
+                };
                 self.notices.push(Notice::info(text));
                 if let Some(first) = report.failures.first() {
                     let more = report.failures.len() - 1;
@@ -183,12 +200,9 @@ impl Session {
     }
 }
 
-/// A file's modification time in whole seconds, or 0 when unknown (then any change in size
-/// still triggers a re-copy).
-fn modified_secs(path: &Path) -> u64 {
-    std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_secs())
+/// A file's modification time in whole seconds; `None` when the file cannot be read. A file
+/// whose system keeps no times reads as 0 (then any change in size still triggers a re-copy).
+fn modified_secs(path: &Path) -> Option<u64> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(metadata.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs()))
 }

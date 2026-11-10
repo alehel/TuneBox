@@ -19,14 +19,17 @@
     clippy::unreachable
 )]
 
+mod availability;
 mod cd;
 pub mod commands;
 mod devices;
 mod error;
+mod file_check;
 pub mod files;
 pub mod jobs;
 mod library_ops;
 mod notices;
+mod places;
 mod playback;
 mod prefs;
 mod refresh;
@@ -39,8 +42,10 @@ mod watch;
 pub use cd::CdState;
 pub use devices::DeviceEntry;
 pub use error::EngineError;
+pub use file_check::FileStatus;
 pub use jobs::{JobId, JobKind, JobStatus};
 pub use notices::{Notice, NoticeLevel};
+pub use places::Place;
 pub use playback::NowPlaying;
 pub use prefs::{LibraryFolder, Preferences};
 pub use refresh::LibraryOnlyEdits;

@@ -5,7 +5,6 @@
 
 use crate::{Library, NewTrack};
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::Duration;
 use tunebox_model::{AudioFormat, Track, TrackId};
 
@@ -41,14 +40,15 @@ impl MovedSongs {
     }
 
     /// The song `new` was moved from: one with the same fingerprint and the same title, artist
-    /// and album, whose own file `is_gone`. Only those few candidates are checked on disk.
-    pub fn find(&self, library: &Library, new: &NewTrack, is_gone: impl Fn(&Path) -> bool) -> Option<TrackId> {
+    /// and album, whose own file `is_gone`. Only those few candidates are asked about. The
+    /// caller decides what gone means; a song on a share that is not connected is not gone.
+    pub fn find(&self, library: &Library, new: &NewTrack, is_gone: impl Fn(&Track) -> bool) -> Option<TrackId> {
         let candidates = self.by_fingerprint.get(&Fingerprint::of(&new.file))?;
         candidates
             .iter()
             .filter_map(|id| library.track(*id))
             .filter(|old| old.location != new.location && same_song(old, new))
-            .find(|old| is_gone(&old.location))
+            .find(|old| is_gone(old))
             .map(|old| old.id)
     }
 }
@@ -86,11 +86,11 @@ mod tests {
         let old = library.add_track(song("/old/a.flac", "First Light", 1_000));
         library.add_track(song("/old/b.flac", "Second Light", 2_000));
         let moved = MovedSongs::index(&library);
-        let gone = |path: &Path| path.starts_with("/old");
+        let gone = |old: &Track| old.location.starts_with("/old");
 
         assert_eq!(moved.find(&library, &song("/new/a.flac", "First Light", 1_000), gone), Some(old));
         assert_eq!(
-            moved.find(&library, &song("/new/a.flac", "First Light", 1_000), |_| false),
+            moved.find(&library, &song("/new/a.flac", "First Light", 1_000), |_: &Track| false),
             None,
             "still there: a copy"
         );

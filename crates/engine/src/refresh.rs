@@ -6,6 +6,7 @@
 //! undo those edits, so the caller says whether to keep them ([`LibraryOnlyEdits`]).
 
 use crate::EngineError;
+use crate::file_check::FileStatus;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Origin, Outcome, Session};
@@ -40,6 +41,8 @@ pub(crate) struct RefreshReport {
     files: Vec<ReadAgain>,
     /// Songs left out because their library-only edits were kept.
     kept: usize,
+    /// Songs left out because their drive or share is not connected.
+    unavailable: usize,
 }
 
 impl Session {
@@ -63,7 +66,11 @@ impl Session {
         if self.jobs.is_running(JobKind::Refresh) {
             return Err(EngineError::Busy(JobKind::Refresh.noun()));
         }
-        let tracks: Vec<_> = ids.iter().filter_map(|id| self.library.track(*id)).collect();
+        let all: Vec<_> = ids.iter().filter_map(|id| self.library.track(*id)).collect();
+        // Reading from a share that is not connected could stall the refresh; those wait.
+        let (tracks, offline): (Vec<_>, Vec<_>) =
+            all.into_iter().partition(|t| !matches!(self.file_status(t.id), FileStatus::Unavailable(_)));
+        let unavailable = offline.len();
         let songs: Vec<(TrackId, PathBuf, TrackMeta)> = tracks
             .iter()
             .filter(|t| edits == LibraryOnlyEdits::Replace || !t.library_only_edits)
@@ -86,13 +93,14 @@ impl Session {
                 let result = tunebox_tags::read(&location).map_err(|e| e.to_string());
                 files.push(ReadAgain { id, location, before, result });
             }
-            Outcome::Refreshed(RefreshReport { files, kept }, origin)
+            Outcome::Refreshed(RefreshReport { files, kept, unavailable }, origin)
         }))
     }
 
     pub(crate) fn finish_refresh(&mut self, report: RefreshReport, origin: Origin) {
         let (mut refreshed, mut changed) = (0, 0);
         let mut failures: Vec<(PathBuf, String)> = Vec::new();
+        let mut unreadable = Vec::new();
         for file in report.files {
             let Some(track) = self.library.track(file.id) else { continue };
             if track.location != file.location || track.meta != file.before {
@@ -107,14 +115,28 @@ impl Session {
                         changed += 1;
                     }
                     if self.library.refresh_from_file(file.id, tags.meta, tags.file).is_ok() {
+                        // Just read, so plainly there.
+                        self.availability.forget(file.id);
                         refreshed += 1;
                     }
                 }
-                Err(reason) => failures.push((file.location, reason)),
+                Err(reason) => {
+                    unreadable.push(file.id);
+                    failures.push((file.location, reason));
+                }
             }
         }
         if refreshed > 0 {
             self.library_changed();
+        }
+        // Perhaps gone, perhaps on a share that just dropped: find out which.
+        self.check_tracks(&unreadable);
+        if report.unavailable > 0 && origin == Origin::Listener {
+            let text = match report.unavailable {
+                1 => "1 song was left as it is: the drive or share it is on is not connected.".to_owned(),
+                n => format!("{n} songs were left as they are: the drive or share they are on is not connected."),
+            };
+            self.notices.push(Notice::info(text));
         }
         match origin {
             Origin::Listener => self.notices.push(Notice::info(summary(refreshed, changed, report.kept))),

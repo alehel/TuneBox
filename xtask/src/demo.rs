@@ -10,7 +10,7 @@ use std::time::UNIX_EPOCH;
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_library::{Library, NewTrack};
 use tunebox_model::smart::{Limit, LimitUnit, NumberField, NumberOp, Rule, SelectedBy, TextField, TextOp};
-use tunebox_model::{NumberOf, Rating, SmartRules, TagField, TrackId, TrackMeta, organize};
+use tunebox_model::{AudioFormat, FileInfo, NumberOf, Rating, SmartRules, TagField, TrackId, TrackMeta, organize};
 use tunebox_sync::{Device, PlaylistFile, SyncItem, SyncMode};
 
 struct Album {
@@ -199,12 +199,52 @@ pub fn build(dir: &Path) -> Result<(), String> {
             ids.push(library.add_track(NewTrack { location: path, meta, file, date_added: added }));
         }
     }
+    ids.extend(add_unplayable(&mut library, dir, &media, now));
     add_history(&mut library, &ids, now)?;
     add_playlists(&mut library, &ids)?;
     tunebox_library::store::save(&library, &library_dir.join("TuneBox Library.json")).map_err(|e| e.to_string())?;
     sync_player(&library, &dir.join("player"))?;
     eprintln!("demo: {} tracks in {}", library.len(), dir.display());
     Ok(())
+}
+
+/// Songs that cannot be played, as real libraries have: a bonus track whose file is gone, and
+/// an album on a network share ("Lighthouse NAS") that the library remembers but that is never
+/// mounted in the demo, so it always reads as not connected. No files are written for them.
+fn add_unplayable(library: &mut Library, dir: &Path, media: &Path, now: chrono::DateTime<Utc>) -> Vec<TrackId> {
+    let file = |seconds: u64| FileInfo {
+        format: AudioFormat::Flac,
+        duration: std::time::Duration::from_secs(seconds),
+        size_bytes: seconds * 100_000,
+        bit_rate_kbps: Some(800),
+        sample_rate: Some(44_100),
+        channels: Some(2),
+    };
+    let song = |title: &str, artist: &str, album: &str, number: u32, total: u32| TrackMeta {
+        title: title.into(),
+        artist: artist.into(),
+        album_artist: artist.into(),
+        album: album.into(),
+        genre: "Jazz".into(),
+        year: Some(2004),
+        track: NumberOf::new(number, total),
+        ..TrackMeta::default()
+    };
+    let mut ids = Vec::new();
+    let missing = song("Riptide (Alternate Take)", "Saltwater Quartet", "Low Tide Sessions", 6, 6);
+    let location = media.join(organize::relative_path(&missing, &missing.title, "flac"));
+    ids.push(library.add_track(NewTrack { location, meta: missing, file: file(301), date_added: now }));
+
+    let share = dir.join("Lighthouse NAS");
+    library.remember_network_place(share.clone());
+    for (number, (title, seconds)) in
+        [("Ferry Lights", 254), ("Night Crossing", 312), ("Harbour Bells", 276)].into_iter().enumerate()
+    {
+        let meta = song(title, "Wharf Street Players", "Harbour Archive", number as u32 + 1, 3);
+        let location = share.join("Music").join(organize::relative_path(&meta, title, "flac"));
+        ids.push(library.add_track(NewTrack { location, meta, file: file(seconds), date_added: now }));
+    }
+    ids
 }
 
 /// Invented record labels, one per album in turn.
@@ -337,7 +377,7 @@ fn sync_player(library: &Library, root: &Path) -> Result<(), String> {
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|m| m.duration_since(UNIX_EPOCH).ok());
-            SyncItem::from_track(t, "Music", modified.map_or(0, |d| d.as_secs()))
+            SyncItem::from_track(t, "Music", modified.map(|d| d.as_secs()))
         })
         .collect();
     let plan = tunebox_sync::plan(&items, playlists, &device.manifest);

@@ -33,6 +33,10 @@ pub enum Glyph {
     Lock,
     Pencil,
     Info,
+    /// A song whose file is gone: the classic exclamation mark.
+    Missing,
+    /// A song on a drive or share that is not connected: a drive, struck through.
+    NotConnected,
 }
 
 /// Paints `glyph` into `rect`.
@@ -148,6 +152,22 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
             painter.circle_filled(r.at(0.5, 0.5), r.size * 0.46, color);
             painter.circle_filled(r.at(0.5, 0.3), r.size * 0.07, Color32::WHITE);
             painter.rect_filled(Rect::from_min_max(r.at(0.43, 0.42), r.at(0.57, 0.76)), r.size * 0.04, Color32::WHITE);
+        }
+        Glyph::Missing => {
+            painter.circle_filled(r.at(0.5, 0.5), r.size * 0.46, color);
+            painter.rect_filled(Rect::from_min_max(r.at(0.42, 0.2), r.at(0.58, 0.6)), r.size * 0.05, Color32::WHITE);
+            painter.circle_filled(r.at(0.5, 0.74), r.size * 0.08, Color32::WHITE);
+        }
+        Glyph::NotConnected => {
+            let stroke = Stroke::new(r.size * 0.1, color);
+            painter.rect_stroke(
+                Rect::from_min_max(r.at(0.12, 0.3), r.at(0.88, 0.72)),
+                r.size * 0.1,
+                stroke,
+                egui::StrokeKind::Middle,
+            );
+            painter.circle_filled(r.at(0.7, 0.51), r.size * 0.06, color);
+            painter.line_segment([r.at(0.12, 0.1), r.at(0.88, 0.92)], stroke);
         }
         Glyph::Lock => {
             painter.circle_stroke(r.at(0.5, 0.38), r.size * 0.2, Stroke::new(r.size * 0.12, color));

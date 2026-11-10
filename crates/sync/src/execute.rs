@@ -22,6 +22,8 @@ pub struct SyncReport {
     pub playlists_written: usize,
     pub failures: Vec<String>,
     pub cancelled: bool,
+    /// Wanted songs whose files could not be read (see `SyncPlan::unavailable`).
+    pub unavailable: usize,
 }
 
 /// How many copies happen between manifest saves, so an unplugged player loses little.
@@ -35,7 +37,7 @@ pub fn execute(
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(SyncProgress),
 ) -> Result<SyncReport, DeviceError> {
-    let mut report = SyncReport::default();
+    let mut report = SyncReport { unavailable: plan.unavailable, ..SyncReport::default() };
     let total = plan.deletes.len() + plan.copies.len();
     let mut done = 0;
 
@@ -173,6 +175,7 @@ mod tests {
             device_path: format!("Music/Artist/{name}.flac"),
             size: 100 + id,
             modified: 5,
+            available: true,
             label: format!("Artist - {name}"),
             duration: Duration::from_secs(61),
         }

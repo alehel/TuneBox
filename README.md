@@ -37,7 +37,9 @@
   are written as M3U8, and only files TuneBox put there are ever removed.
 - **Library folders stay in step.** Songs copied into a library folder appear in the library,
   tags changed by another program are read again, and a renamed folder keeps its songs'
-  ratings and play counts. Watching only reads.
+  ratings and play counts. Watching only reads. Songs whose files are gone are marked, and
+  songs on a NAS or drive that is not connected are marked differently and wait for it to come
+  back; a share that stops answering never freezes the app.
 - **Your files are safe.** Nothing is written to your music folder unless you edit a song's
   details or ask for a file to be deleted, and you can list any number of library folders, each strictly read-only or writable (for
   example a read-only collection with a writable imports folder inside it).
@@ -95,6 +97,7 @@ tunebox-cli new-playlist "Evening" --search jazz
 tunebox-cli edit "Paper Boats" --set label="Lanternlight Records" --set release-date=1997-01-01
 tunebox-cli info-fields --pin label --pin release-date          # always shown in Get Info
 tunebox-cli refresh --search "Paper Boats"                      # re-read tags another app changed
+tunebox-cli missing                                             # songs whose files are gone or offline
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
 tunebox-cli folders add ~/Music/Collection                    # read only: never written to
@@ -124,7 +127,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 163
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 173
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

@@ -16,6 +16,9 @@ pub struct SyncItem {
     pub size: u64,
     /// Modification time of the source file, in seconds since the Unix epoch.
     pub modified: u64,
+    /// Whether the source file can be read now. One that cannot (missing, or on a share that
+    /// is not connected) is never copied, and its copy on the device is kept, not deleted.
+    pub available: bool,
     /// For playlist files: "Artist - Title" and the length.
     pub label: String,
     pub duration: Duration,
@@ -23,8 +26,9 @@ pub struct SyncItem {
 
 impl SyncItem {
     /// Describes `track` for syncing into `music_folder`; `modified` is its file's
-    /// modification time (the caller reads it, keeping this function pure).
-    pub fn from_track(track: &Track, music_folder: &str, modified: u64) -> Self {
+    /// modification time, or `None` when the file cannot be read (the caller looks, keeping
+    /// this function pure).
+    pub fn from_track(track: &Track, music_folder: &str, modified: Option<u64>) -> Self {
         let extension = track.location.extension().and_then(|e| e.to_str()).unwrap_or(track.file.format.extension());
         let relative = organize::relative_path(&track.meta, track.title(), &extension.to_lowercase());
         let mut device_path = music_folder.trim_matches('/').to_owned();
@@ -42,7 +46,8 @@ impl SyncItem {
             source: track.location.clone(),
             device_path,
             size: track.file.size_bytes,
-            modified,
+            modified: modified.unwrap_or_default(),
+            available: modified.is_some(),
             label,
             duration: track.file.duration,
         }
@@ -76,6 +81,9 @@ pub struct SyncPlan {
     pub deletes: Vec<DeleteOp>,
     /// Tracks already on the device and up to date.
     pub unchanged: usize,
+    /// Wanted tracks whose files could not be read: kept as they are on the device if they
+    /// were there, left out if not.
+    pub unavailable: usize,
     pub playlists: Vec<PlaylistFile>,
     /// Everything that will be on the device afterwards, for writing playlists.
     pub final_paths: BTreeMap<TrackId, SyncItem>,
@@ -104,9 +112,20 @@ pub fn plan(wanted: &[SyncItem], playlists: Vec<PlaylistFile>, manifest: &Device
     let mut result = SyncPlan { playlists, ..SyncPlan::default() };
     let mut seen = HashSet::new();
     for item in wanted {
-        if !seen.insert(item.id) {
+        if seen.contains(&item.id) {
             continue;
         }
+        if !item.available {
+            result.unavailable += 1;
+            if let Some(synced) = manifest.files.get(&item.id) {
+                // Kept where it is: a share being offline is no reason to take a song away.
+                seen.insert(item.id);
+                result.final_paths.insert(item.id, SyncItem { device_path: synced.path.clone(), ..item.clone() });
+                result.unchanged += 1;
+            }
+            continue;
+        }
+        seen.insert(item.id);
         result.final_paths.insert(item.id, item.clone());
         match manifest.files.get(&item.id) {
             Some(synced)
@@ -152,6 +171,7 @@ mod tests {
             device_path: path.into(),
             size,
             modified: 100,
+            available: true,
             label: String::new(),
             duration: Duration::from_secs(1),
         }
@@ -186,6 +206,18 @@ mod tests {
         let p = plan(&[item(1, "Music/a.flac", 11), item(2, "Music/new name.flac", 20)], Vec::new(), &m);
         assert_eq!(p.copies.len(), 2);
         assert_eq!(p.deletes, [DeleteOp { id: TrackId(2), device_path: "Music/old name.flac".into() }]);
+    }
+
+    #[test]
+    fn a_song_that_cannot_be_read_keeps_its_copy_and_is_never_deleted() {
+        let m = manifest(&[(1, "Music/a.flac", 10)]);
+        let offline = |id, path: &str| SyncItem { available: false, modified: 0, ..item(id, path, 10) };
+        // Even with its tags changed (a new device path) and its time unknown.
+        let plan = plan(&[offline(1, "Music/renamed.flac"), offline(2, "Music/b.flac")], Vec::new(), &m);
+        assert!(plan.copies.is_empty() && plan.deletes.is_empty(), "{plan:?}");
+        assert_eq!((plan.unchanged, plan.unavailable), (1, 2));
+        assert_eq!(plan.final_paths[&TrackId(1)].device_path, "Music/a.flac", "playlists point at the kept copy");
+        assert!(!plan.final_paths.contains_key(&TrackId(2)));
     }
 
     #[test]

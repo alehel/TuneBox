@@ -11,6 +11,8 @@ use egui::{
 pub const WINDOW_BG: Color32 = Color32::from_rgb(0xEE, 0xEF, 0xF1);
 pub const TEXT: Color32 = Color32::from_rgb(0x1D, 0x1F, 0x22);
 pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x78, 0x7C, 0x82);
+/// The missing-file mark: a warm amber that stands out in the list without shouting.
+pub const CAUTION: Color32 = Color32::from_rgb(0xD9, 0x7B, 0x1E);
 /// Text that warns: a value that will not be saved, a folder that cannot be used.
 pub const WARNING: Color32 = Color32::from_rgb(0xA3, 0x2A, 0x22);
 pub const BORDER: Color32 = Color32::from_rgb(0xC3, 0xC6, 0xCB);

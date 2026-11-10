@@ -56,8 +56,11 @@ impl Session {
         let moved_songs = MovedSongs::index(&self.library);
         let (mut added, mut moved) = (0, 0);
         for track in report.tracks {
-            match moved_songs.find(&self.library, &track, |old| !old.exists()) {
-                Some(id) if self.library.relocate(id, track.location.clone()).is_ok() => moved += 1,
+            match moved_songs.find(&self.library, &track, |old| self.file_is_gone(old)) {
+                Some(id) if self.library.relocate(id, track.location.clone()).is_ok() => {
+                    self.availability.forget(id);
+                    moved += 1;
+                }
                 _ => {
                     self.library.add_track(track);
                     added += 1;
