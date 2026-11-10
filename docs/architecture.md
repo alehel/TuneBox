@@ -5,8 +5,8 @@ in [AGENTS.md](../AGENTS.md).
 
 ## Shape
 
-One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`, tooling in
-`xtask/`. Rust only, no `unsafe`, no panics outside tests.
+One Cargo workspace: library crates in `crates/`, two binaries in `apps/`, example visualizer
+plug-ins in `plugins/`, tooling in `xtask/`. Rust only, no `unsafe`, no panics outside tests.
 
 ```text
             apps/tunebox ─────────┐            apps/tunebox-cli
@@ -16,15 +16,16 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
                  │                │                   │
    L6            └──────▶ tunebox-engine ◀────────────┘
                                   │
-   L2   import ◀── rip      playback       sync
+   L2   import ◀── rip      playback       sync      plugins ──▶ wasmi
           │         │          │             │
    L1   library    tags      audio ──▶ craft-audio     mtp ──▶ nusb (USB)
           │         │          │
-   L0     └──── tunebox-model ─┘
+   L0     └──── tunebox-model ─┘                   visualizer-sdk
 ```
 
 | Crate | What it does |
 |---|---|
+| `tunebox-visualizer-sdk` | The visualizer plug-in ABI (exports, frame layout, drawing commands, limits) and the SDK plug-ins are written with; compiled to WebAssembly by plug-ins, read by `tunebox-plugins` ([visualizer-plugins.md](visualizer-plugins.md)) |
 | `tunebox-model` | Tracks, metadata, ratings, playlists, smart playlist rules and evaluation, track-list columns and sorting, search, organised file names. Pure and deterministic |
 | `tunebox-library` | The collection: unique ids, one track per file, playlists that only reference real tracks; the column browser; summaries; the versioned JSON library file |
 | `tunebox-tags` | Reads and writes metadata and cover art (lofty) in MP3, MP4/M4A, FLAC, Ogg, Opus, WAV, AIFF |
@@ -34,9 +35,10 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
 | `tunebox-rip` | CD drives (cd-da-reader, or a virtual drive), tables of contents, MusicBrainz disc ids and lookup, ripping |
 | `tunebox-mtp` | The MTP protocol from the public specification: containers, datasets, a blocking session over a `Transport`; USB through nusb (Linux, macOS); a simulated device for tests ([mtp.md](mtp.md)) |
 | `tunebox-sync` | Recognises players (mounted, or over MTP), plans a sync as a diff against the device manifest, executes it through a `Storage` (folder or MTP), writes M3U8 |
+| `tunebox-plugins` | Visualizer plug-ins: loads `.wasm` files into a wasmi sandbox (no imports, fuel per frame, memory cap), encodes frames, decodes and checks drawings. No egui |
 | `tunebox-engine` | The `Session` façade, background jobs, preferences, notices, the command registry |
 | `tunebox-platform` | App folders, mounted volumes (sysinfo), MTP players found on a thread of their own, reveal in file manager, eject |
-| `tunebox-visualizer` | The `Visualizer` trait, the meter that turns the audio tap into smoothed bands, and the built-in looks ([visualizers.md](visualizers.md)) |
+| `tunebox-visualizer` | The `Visualizer` trait, the meter that turns the audio tap into smoothed bands, the built-in looks ([visualizers.md](visualizers.md)), and painting plug-in looks, turning off any that fails |
 | `tunebox-ui` | The egui desktop interface |
 
 ## The session and its threads

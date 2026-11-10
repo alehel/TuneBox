@@ -1,11 +1,20 @@
 # Writing a visualizer
 
-A visualizer ("look") is a type that implements one trait, `tunebox_visualizer::Visualizer`:
+There are two ways to add a look:
+
+- **A plug-in** loaded at run time: a WebAssembly module in TuneBox's `Visualizers` folder,
+  written with `tunebox-visualizer-sdk`. No rebuild of TuneBox, and it runs in a sandbox. See
+  [visualizer-plugins.md](visualizer-plugins.md).
+- **Compiled in**: a Rust type in this repository or in a crate that starts TuneBox, painting
+  with egui directly. This page describes that, and the `Frame` both kinds receive.
+
+A compiled-in visualizer ("look") is a type that implements one trait,
+`tunebox_visualizer::Visualizer`:
 
 ```rust
 pub trait Visualizer {
-    fn id(&self) -> &'static str;   // stable, saved in preferences: "lava-lamp"
-    fn name(&self) -> &'static str; // shown in the picker: "Lava Lamp"
+    fn id(&self) -> &str;   // stable, saved in preferences: "lava-lamp"
+    fn name(&self) -> &str; // shown in the picker: "Lava Lamp"
     fn paint(&mut self, painter: &Painter, rect: Rect, frame: &Frame);
 }
 ```
@@ -45,7 +54,7 @@ That's all. The picker, preferences and screenshots pick it up from the registry
 `every_builtin_paints_without_panicking` paints it once with real-looking data and once with
 empty data.
 
-## A look from another crate (plug-in)
+## A look from another crate (compiled in)
 
 A crate outside this repository can add looks without changing TuneBox: depend on
 `tunebox-ui`, implement `Visualizer`, and start the app with them:
@@ -59,13 +68,14 @@ fn main() -> Result<(), String> {
 A complete, working example is `apps/tunebox/examples/lava_lamp.rs`
 (`cargo run --example lava_lamp -p tunebox`). A look whose `id` matches a built-in replaces it.
 
-### Why plug-ins are compiled in, not loaded at run time
+### Compiled in or a run-time plug-in?
 
-Loading a native library at run time needs `unsafe` code, which TuneBox forbids (a bad plug-in
-could crash the app or worse), and Rust has no stable ABI to load one safely. The safe way to
-offer run-time plug-ins is a sandbox: looks compiled to WebAssembly, run by an embedded
-runtime, receiving a `Frame` and returning shapes. The `Visualizer` trait is shaped so such an
-adapter can implement it; it is on the roadmap.
+A compiled-in look is native code with the whole of egui to draw with, and it runs with all of
+TuneBox's rights: it is for looks that ship with TuneBox or with a build of it. A run-time
+plug-in needs no rebuild and cannot harm TuneBox (no `unsafe` loading of native libraries,
+which TuneBox forbids), but draws through a small set of shapes. Plug-in looks appear in the
+picker after the compiled-in ones, with ids starting `plugin:`, so a plug-in can never replace
+a built-in look.
 
 ## Rules for looks
 

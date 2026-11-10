@@ -4,10 +4,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
+use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, RenameBase,
+    Access, FileStatus, JobKind, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, RenameBase,
     RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode, SyncSettings,
     TrackQuery, VirtualDrive, Volume,
 };
@@ -23,6 +24,7 @@ fn paths_in(dir: &tempfile::TempDir) -> SessionPaths {
         library_file: dir.path().join("TuneBox/Library.json"),
         preferences_file: dir.path().join("TuneBox/Preferences.json"),
         default_media_folder: dir.path().join("TuneBox/Media"),
+        visualizer_plugins_folder: dir.path().join("TuneBox/Visualizers"),
     }
 }
 
@@ -1153,4 +1155,41 @@ fn quitting_during_a_rename_saves_where_the_files_went() {
         let location = &view.track(id).unwrap().location;
         assert!(location.exists(), "the library lost track of {}", location.display());
     }
+}
+
+#[test]
+fn visualizer_plugins_load_in_the_background_and_bad_files_are_reported_once() {
+    let mut f = fixture(1.0);
+    let folder = f.session.visualizer_plugins_folder().to_path_buf();
+    std::fs::create_dir_all(&folder).unwrap();
+    let plugin = wat::parse_str(
+        r#"(module
+            (memory (export "memory") 1)
+            (data (i32.const 100) "\c8\00\00\00\04\00\00\00\2c\01\00\00\04\00\00\00")
+            (data (i32.const 200) "dots")
+            (data (i32.const 300) "Dots")
+            (func (export "tunebox_abi_version") (result i32) i32.const 1)
+            (func (export "tunebox_info") (result i32) i32.const 100)
+            (func (export "tunebox_frame_buffer") (result i32) i32.const 1024)
+            (func (export "tunebox_draw") (param f32 f32) (result i32) i32.const 8192))"#,
+    )
+    .unwrap();
+    std::fs::write(folder.join("dots.wasm"), plugin).unwrap();
+    std::fs::write(folder.join("broken.wasm"), b"\0asm garbage").unwrap();
+
+    assert!(f.session.take_visualizer_plugins().is_none());
+    f.session.reload_visualizer_plugins(true);
+    assert!(!f.session.is_enabled(CommandId::ReloadVisualizerPlugins, Default::default()));
+    tick_until(&mut f.session, |s| !s.is_busy(JobKind::VisualizerPlugins));
+    let names: Vec<String> =
+        f.session.take_visualizer_plugins().unwrap().iter().map(|p| p.info().name.clone()).collect();
+    assert_eq!(names, ["Dots"]);
+    let notices: Vec<String> = f.session.take_notices().into_iter().map(|n| n.text).collect();
+    assert_eq!(notices.len(), 2, "{notices:?}");
+    assert!(notices[0].starts_with("“broken.wasm” in the Visualizers folder was not loaded: it is not a WebAssembly"));
+    assert_eq!(notices[1], "1 visualizer plug-in was loaded.");
+    // Handed over once; ticking again reports nothing more.
+    f.session.tick();
+    assert!(f.session.take_visualizer_plugins().is_none());
+    assert!(f.session.take_notices().is_empty());
 }

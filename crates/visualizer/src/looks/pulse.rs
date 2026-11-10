@@ -15,11 +15,11 @@ pub struct Pulse {
 const RAYS: usize = 128;
 
 impl Visualizer for Pulse {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "pulse"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Pulse"
     }
 

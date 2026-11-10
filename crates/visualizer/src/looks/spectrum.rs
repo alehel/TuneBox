@@ -8,11 +8,11 @@ use egui::{Color32, Painter, Rect, Stroke, pos2, vec2};
 pub struct Spectrum;
 
 impl Visualizer for Spectrum {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "spectrum"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Spectrum"
     }
 

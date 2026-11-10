@@ -26,6 +26,7 @@ pub enum JobKind {
     Locate,
     Artwork,
     Rename,
+    VisualizerPlugins,
 }
 
 impl JobKind {
@@ -40,6 +41,7 @@ impl JobKind {
             JobKind::Locate => "Looking for missing songs",
             JobKind::Artwork => "Changing covers",
             JobKind::Rename => "Renaming files",
+            JobKind::VisualizerPlugins => "Loading visualizer plug-ins",
         }
     }
 }

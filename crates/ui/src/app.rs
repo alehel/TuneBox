@@ -85,6 +85,7 @@ impl TuneBoxApp {
         let demo = options.demo.as_deref().map(|dir| Demo::start(dir, &mut session));
         let screenshots = options.screenshots.clone().map(ScreenshotRunner::new);
         let mtp_players = demo.is_none().then(tunebox_platform::MtpPlayers::start);
+        session.reload_visualizer_plugins(false);
         Self {
             session,
             view: ViewState::new(),
@@ -116,6 +117,9 @@ impl TuneBoxApp {
         self.session.tick();
         for notice in self.session.take_notices() {
             self.toasts.push(notice);
+        }
+        if let Some(plugins) = self.session.take_visualizer_plugins() {
+            self.visualizer.set_plugins(plugins);
         }
         for album in self.session.take_artwork_changes() {
             self.artwork.forget(&album);
@@ -281,6 +285,7 @@ impl TuneBoxApp {
             Action::OpenDialog(dialog) => self.dialog = Some(*dialog),
             Action::CancelJob(id) => self.session.cancel_job(id),
             Action::ShowInFolder(id) => self.show_in_folder(id),
+            Action::Notify(notice) => self.toasts.push(notice),
             Action::EditTracks(edits) => {
                 for (id, meta) in edits {
                     let result = self.session.edit_track(id, meta);
@@ -384,6 +389,8 @@ impl TuneBoxApp {
                 self.view.show_visualizer = false;
             }
             CommandId::Visualizer => self.view.show_visualizer = !self.view.show_visualizer,
+            CommandId::ReloadVisualizerPlugins => self.session.reload_visualizer_plugins(true),
+            CommandId::ShowVisualizerPluginsFolder => self.show_visualizer_plugins_folder(),
             CommandId::PlayPause => self.play_pause(),
             CommandId::NextTrack => self.session.next_track(),
             CommandId::PreviousTrack => self.session.previous_track(),
@@ -510,6 +517,15 @@ impl TuneBoxApp {
             && let Err(e) = tunebox_platform::reveal(&track.location)
         {
             self.toasts.push(Notice::error(format!("Could not show the file: {e}")));
+        }
+    }
+
+    fn show_visualizer_plugins_folder(&mut self) {
+        let folder = self.session.visualizer_plugins_folder().to_path_buf();
+        let shown = self.session.create_visualizer_plugins_folder().map_err(|e| e.to_string());
+        if let Err(e) = shown.and_then(|()| tunebox_platform::reveal(&folder)) {
+            self.toasts
+                .push(Notice::error(format!("Could not show the Visualizers folder ({}): {e}", folder.display())));
         }
     }
 

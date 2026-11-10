@@ -41,6 +41,7 @@ mod session;
 mod snapshot;
 mod sources;
 mod view;
+mod visualizer_plugins;
 mod watch;
 
 pub use cd::CdState;
@@ -65,6 +66,7 @@ pub use tunebox_audio::LosslessFormat;
 pub use tunebox_library::{BrowseFilter, Browser, Library, Summary};
 pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
+pub use tunebox_plugins as plugins;
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, VirtualDrive};
 pub use tunebox_sync::mtp::{MtpLink, mtp_links, probe as probe_mtp_link};
 pub use tunebox_sync::{Access, Candidate, Device, MtpAddress, SyncMode, SyncSettings, Volume};

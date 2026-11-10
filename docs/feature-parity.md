@@ -53,7 +53,8 @@ radio and sharing are out of scope.
 | Status display (LCD) | Shipped | Title, artist/album, elapsed and remaining time, click to seek; shows import and sync progress |
 | Formats | Shipped | MP3, AAC, ALAC, FLAC, WAV, AIFF, Ogg Vorbis (through craft-audio and symphonia) |
 | Visualizer | Shipped | Five looks, track-info card, ⌘T / Ctrl+T; new looks are one file or a compile-time plug-in |
-| Full-screen visualizer, run-time (WebAssembly) visualizer plug-ins | Planned | |
+| Visualizer plug-ins loaded at run time | Shipped | WebAssembly modules in the Visualizers folder, run sandboxed (wasmi: no imports, fuel and memory limits, every drawing checked); a failing plug-in is turned off with a notice. SDK and example plug-in; `tunebox-cli visualizer-plugins` checks them ([visualizer-plugins.md](visualizer-plugins.md)) |
+| Full-screen visualizer | Planned | |
 | Gapless playback | Shipped | The next song is opened ahead and follows in the same output stream, switching at the exact frame it is heard. A change of sample rate or channel count restarts the output, a short gap |
 | Crossfade, Sound Check, equaliser | Planned | |
 | Up Next / play queue editing, iTunes DJ | Planned | |

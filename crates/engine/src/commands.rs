@@ -36,6 +36,8 @@ pub enum CommandId {
     AsList,
     AsAlbums,
     Visualizer,
+    ReloadVisualizerPlugins,
+    ShowVisualizerPluginsFolder,
     // Controls
     PlayPause,
     NextTrack,
@@ -248,6 +250,8 @@ pub const COMMANDS: &[CommandSpec] = &[
         Some(Shortcut::cmd(Key::Letter('t'))),
         Needs::Nothing,
     )),
+    spec(CommandId::ReloadVisualizerPlugins, "Reload Visualizer Plug-ins", Menu::View, None, Needs::Nothing),
+    spec(CommandId::ShowVisualizerPluginsFolder, "Show Visualizer Plug-ins Folder", Menu::View, None, Needs::Nothing),
     after_separator(spec(
         CommandId::ShowBrowser,
         "Column Browser",
@@ -305,6 +309,7 @@ impl Session {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
+            CommandId::ReloadVisualizerPlugins => self.jobs.is_running(JobKind::VisualizerPlugins),
             CommandId::RefreshFromFiles => {
                 self.jobs.is_running(JobKind::Refresh) || self.jobs.is_running(JobKind::Rename)
             }

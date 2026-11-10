@@ -11,11 +11,11 @@ const RIBBONS: usize = 4;
 const STEPS: usize = 140;
 
 impl Visualizer for Aurora {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "aurora"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Aurora"
     }
 

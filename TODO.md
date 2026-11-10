@@ -45,7 +45,7 @@ The biggest risk: these parts are built but have never run where it counts.
 - [ ] Media keys and the system's Now Playing (MPRIS on Linux, Now Playing on macOS, media
       controls on Windows).
 - [ ] Full-screen visualizer.
-- [ ] Visualizer plug-ins loaded at run time (WebAssembly); today a new look is compiled in.
+- [x] Visualizer plug-ins loaded at run time (WebAssembly).
 
 ## Library and editing
 

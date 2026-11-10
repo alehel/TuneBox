@@ -61,11 +61,11 @@ impl Hyperspace {
 }
 
 impl Visualizer for Hyperspace {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "hyperspace"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Hyperspace"
     }
 

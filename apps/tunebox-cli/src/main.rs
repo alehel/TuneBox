@@ -13,6 +13,7 @@
 )]
 
 mod details;
+mod plugins;
 mod rename;
 
 use clap::{Parser, Subcommand};
@@ -192,6 +193,16 @@ enum Command {
     },
     /// List the app's commands and shortcuts.
     Commands,
+    /// Load the visualizer plug-ins and run each on made-up music: what they draw, how long they
+    /// take, and any TuneBox would refuse or turn off.
+    VisualizerPlugins {
+        /// A folder of .wasm files instead of TuneBox's Visualizers folder.
+        #[arg(long)]
+        folder: Option<PathBuf>,
+        /// Frames to draw with each plug-in.
+        #[arg(long, default_value_t = 300)]
+        frames: u32,
+    },
 }
 
 fn main() -> ExitCode {
@@ -229,6 +240,10 @@ impl Command {
 
 fn run(cli: Cli) -> Result<(), String> {
     let paths = cli.library_dir.as_deref().map_or_else(tunebox_platform::default_paths, tunebox_platform::app_paths);
+    // Plug-ins have nothing to do with the library, so this opens neither it nor a snapshot.
+    if let Command::VisualizerPlugins { folder, frames } = &cli.command {
+        return plugins::check(folder.as_deref().unwrap_or(&paths.visualizer_plugins_folder), *frames);
+    }
     if cli.command.reads_only() {
         let snapshot = LibrarySnapshot::open(&paths).map_err(|e| e.to_string())?;
         return show(snapshot.view(), cli.command);
@@ -342,6 +357,9 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         }
         Command::Sync { root, playlists } => sync(session, &root, &playlists)?,
         Command::Folders { action } => folders(session, action)?,
+        Command::VisualizerPlugins { folder, frames } => {
+            plugins::check(folder.as_deref().unwrap_or(session.visualizer_plugins_folder()), frames)?
+        }
         command @ (Command::Stats
         | Command::List { .. }
         | Command::Playlists

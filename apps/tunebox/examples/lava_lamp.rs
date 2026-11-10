@@ -14,11 +14,11 @@ use tunebox_ui::tunebox_visualizer::{Frame, Visualizer};
 struct LavaLamp;
 
 impl Visualizer for LavaLamp {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "lava-lamp"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Lava Lamp"
     }
 

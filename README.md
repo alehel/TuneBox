@@ -31,7 +31,8 @@
   imported or synced.
 - **Visualizer.** Five looks (Spectrum, Aurora, Pulse, Oscilloscope, Hyperspace), driven by what
   the sound card is playing, with an optional track-info card. Writing a new look is one file
-  ([docs/visualizers.md](docs/visualizers.md)).
+  ([docs/visualizers.md](docs/visualizers.md)), or a WebAssembly plug-in TuneBox loads at run
+  time and runs in a sandbox ([docs/visualizer-plugins.md](docs/visualizer-plugins.md)).
 - **CDs.** See the disc, fetch its track names from MusicBrainz (only when you ask), edit them
   and import to FLAC, WAV or AIFF.
 - **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…), and on Linux
@@ -125,6 +126,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | Crate | What it does |
 |---|---|
 | `tunebox-model` | Tracks, playlists, smart playlist rules, columns, sorting, search. Pure |
+| `tunebox-visualizer-sdk` | The visualizer plug-in ABI, and the SDK plug-ins are written with |
 | `tunebox-library` | The collection, the column browser, the versioned library file (atomic saves) |
 | `tunebox-tags` | Tags and artwork in every supported format (lofty), written atomically |
 | `tunebox-audio` | Streaming decode and lossless encoding through [craft-audio](https://github.com/storytold/craft-libs) (symphonia) |
@@ -133,12 +135,13 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-rip` | CD drives (cd-da-reader), disc ids, MusicBrainz, ripping |
 | `tunebox-mtp` | The MTP protocol (written from the public specification) over pure-Rust USB (nusb) |
 | `tunebox-sync` | Recognising players, planning and carrying out syncs, on folders or over MTP |
+| `tunebox-plugins` | Visualizer plug-ins: WebAssembly in a sandbox (wasmi), their drawings checked |
 | `tunebox-engine` | The `Session` façade, background jobs, preferences, command registry |
 | `tunebox-platform` | Folders, mounted volumes, reveal and eject |
-| `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
+| `tunebox-visualizer` | The `Visualizer` trait, the audio meter, the built-in looks, painting plug-ins |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 265
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 293
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).
