@@ -49,6 +49,28 @@ impl Dialog {
     }
 }
 
+/// Shows `contents` as a modal dialog: centred, over a dimmed window that ignores clicks.
+pub(crate) fn modal(ctx: &egui::Context, id: &str, contents: impl FnOnce(&mut egui::Ui)) {
+    let frame = egui::Frame::window(&ctx.global_style()).inner_margin(egui::Margin::same(16));
+    egui::Modal::new(egui::Id::unique(("tunebox-dialog", id)))
+        .frame(frame)
+        .backdrop_color(egui::Color32::from_black_alpha(70))
+        .show(ctx, contents);
+}
+
+/// A dialog's title: centred, with a hairline below. (egui's own title bar is hidden: it does
+/// not span a fixed-width window.)
+pub(crate) fn title_heading(ui: &mut egui::Ui, title: &str) {
+    ui.vertical_centered(|ui| {
+        ui.add_space(2.0);
+        ui.label(egui::RichText::new(title).size(15.0).color(crate::theme::TEXT));
+    });
+    ui.add_space(4.0);
+    let rect = ui.available_rect_before_wrap();
+    ui.painter().hline(rect.x_range(), rect.top(), egui::Stroke::new(1.0, crate::theme::GRID_LINE));
+    ui.add_space(10.0);
+}
+
 /// A centred, fixed window with OK/Cancel along the bottom. `contents` draws the body;
 /// returns `Some(true)` for OK, `Some(false)` for Cancel or Escape.
 pub(crate) fn window(
@@ -59,24 +81,26 @@ pub(crate) fn window(
     contents: impl FnOnce(&mut egui::Ui),
 ) -> Option<bool> {
     let mut result = None;
-    egui::Window::new(title)
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-        .fixed_size(egui::vec2(width, 0.0))
-        .show(ctx, |ui| {
-            ui.set_max_width(width);
-            contents(ui);
-            ui.add_space(10.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(egui::Button::new(ok_label).min_size(egui::vec2(80.0, 24.0))).clicked() {
+    modal(ctx, title, |ui| {
+        ui.set_width(width);
+        title_heading(ui, title);
+        contents(ui);
+        ui.add_space(12.0);
+        // A row of bounded height: a right-to-left layout would otherwise claim all the
+        // height it is offered.
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), 28.0),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                if crate::panels::widgets::primary_button(ui, ok_label, true, egui::vec2(88.0, 28.0)).clicked() {
                     result = Some(true);
                 }
-                if ui.add(egui::Button::new("Cancel").min_size(egui::vec2(80.0, 24.0))).clicked() {
+                if ui.add(egui::Button::new("Cancel").min_size(egui::vec2(88.0, 28.0))).clicked() {
                     result = Some(false);
                 }
-            });
-        });
+            },
+        );
+    });
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         result = Some(false);
     }

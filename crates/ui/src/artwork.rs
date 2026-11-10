@@ -89,9 +89,10 @@ fn load(path: &std::path::Path) -> Option<ColorImage> {
 
 /// The picture shown for albums without artwork: a soft grey square with a note.
 pub fn paint_placeholder(painter: &egui::Painter, rect: egui::Rect) {
-    crate::theme::vertical_gradient(
+    crate::theme::rounded_gradient(
         painter,
         rect,
+        6.0,
         egui::Color32::from_rgb(0xEC, 0xEC, 0xEC),
         egui::Color32::from_rgb(0xC9, 0xC9, 0xC9),
     );
@@ -99,13 +100,12 @@ pub fn paint_placeholder(painter: &egui::Painter, rect: egui::Rect) {
     crate::glyphs::paint(painter, glyph, crate::glyphs::Glyph::Note, egui::Color32::from_rgb(0xA5, 0xA5, 0xA5));
 }
 
-/// Paints `texture` filling `rect`, or the placeholder.
-pub fn paint(painter: &egui::Painter, rect: egui::Rect, texture: Option<&TextureHandle>) {
+/// Paints `texture` filling `rect` with softly rounded corners, or the placeholder.
+pub fn paint(ui: &egui::Ui, rect: egui::Rect, texture: Option<&TextureHandle>) {
     match texture {
-        Some(texture) => {
-            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            painter.image(texture.id(), rect, uv, egui::Color32::WHITE);
-        }
-        None => paint_placeholder(painter, rect),
+        Some(texture) => egui::Image::from_texture(egui::load::SizedTexture::from_handle(texture))
+            .corner_radius(6)
+            .paint_at(ui, rect),
+        None => paint_placeholder(ui.painter(), rect),
     }
 }

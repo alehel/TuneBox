@@ -4,7 +4,7 @@ use crate::panels::PanelContext;
 use crate::theme;
 use egui::{Color32, Rect, Sense, Ui, pos2, vec2};
 
-pub const HEIGHT: f32 = 150.0;
+pub const HEIGHT: f32 = 164.0;
 
 /// Which browser column.
 #[derive(Clone, Copy)]
@@ -22,25 +22,25 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
         let column = Rect::from_min_size(pos2(rect.left() + width * i as f32, rect.top()), vec2(width, rect.height()));
         ui.scope_builder(egui::UiBuilder::new().max_rect(column).id_salt(title), |ui| column_ui(ui, cx, kind, title));
         if i > 0 {
-            ui.painter().vline(column.left(), column.y_range(), egui::Stroke::new(1.0, theme::BORDER));
+            ui.painter().vline(column.left(), column.y_range(), egui::Stroke::new(1.0, theme::GRID_LINE));
         }
     }
-    ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, theme::BORDER_DARK));
+    ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, theme::BORDER));
 }
 
 fn column_ui(ui: &mut Ui, cx: &mut PanelContext, kind: Kind, title: &str) {
     let rect = ui.max_rect();
     ui.painter().rect_filled(rect, 0.0, theme::LIST_BG);
-    let header = Rect::from_min_size(rect.min, vec2(rect.width(), 18.0));
+    let header = Rect::from_min_size(rect.min, vec2(rect.width(), 24.0));
     theme::vertical_gradient(ui.painter(), header, theme::HEADER_TOP, theme::HEADER_BOTTOM);
     ui.painter().hline(header.x_range(), header.bottom() - 0.5, egui::Stroke::new(1.0, theme::BORDER));
     theme::text_in_row(
         ui.painter(),
-        pos2(header.left() + 8.0, header.center().y),
+        pos2(header.left() + 10.0, header.center().y),
         title,
-        theme::SMALL,
-        theme::TEXT,
-        header.width() - 12.0,
+        theme::SMALL + 0.5,
+        theme::TEXT_MUTED,
+        header.width() - 16.0,
     );
 
     let values = match kind {
@@ -56,21 +56,23 @@ fn column_ui(ui: &mut Ui, cx: &mut PanelContext, kind: Kind, title: &str) {
     let all_label = format!("All ({} {})", values.len(), title);
     let body = Rect::from_min_max(pos2(rect.left(), header.bottom()), rect.max);
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, 17.0, values.len() + 1, |ui, range| {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, 20.0, values.len() + 1, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for row in range {
                 let value = if row == 0 { None } else { values.get(row - 1).cloned() };
                 let label = value.clone().unwrap_or_else(|| all_label.clone());
                 let is_selected = value == selected;
-                let (row_rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 17.0), Sense::click());
+                let (row_rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::click());
                 if is_selected {
-                    ui.painter().rect_filled(row_rect, 0.0, theme::ROW_SELECTED);
+                    theme::vertical_gradient(ui.painter(), row_rect, theme::ROW_SELECTED_TOP, theme::ROW_SELECTED);
+                } else if response.hovered() {
+                    ui.painter().rect_filled(row_rect, 0.0, theme::ROW_HOVER);
                 }
                 let color = if is_selected { Color32::WHITE } else { theme::TEXT };
                 let font = if row == 0 { theme::SMALL } else { theme::BODY - 0.5 };
                 theme::text_in_row(
                     ui.painter(),
-                    pos2(row_rect.left() + 8.0, row_rect.center().y),
+                    pos2(row_rect.left() + 10.0, row_rect.center().y),
                     &label,
                     font,
                     color,

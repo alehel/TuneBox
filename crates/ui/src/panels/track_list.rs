@@ -10,9 +10,9 @@ use egui::{Align2, Color32, FontId, Modifiers, Rect, Sense, Stroke, Ui, pos2, ve
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::{Column, PlaylistKind, Rating, SortOrder, TrackId};
 
-const HEADER_HEIGHT: f32 = 20.0;
-const CHECK_WIDTH: f32 = 22.0;
-const PLAYING_WIDTH: f32 = 18.0;
+const HEADER_HEIGHT: f32 = 24.0;
+const CHECK_WIDTH: f32 = 26.0;
+const PLAYING_WIDTH: f32 = 20.0;
 
 /// A column's place in the row.
 struct Layout {
@@ -98,39 +98,38 @@ fn header_row(ui: &mut Ui, rect: Rect, layout: &[Layout], cx: &mut PanelContext)
     painter.hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, theme::BORDER));
     for cell in layout {
         let cell_rect = Rect::from_min_size(pos2(cell.left, rect.top()), vec2(cell.width, rect.height()));
+        let response = ui.interact(cell_rect, ui.scope_id().with(("header", cell.column.title())), Sense::click());
         let sorted = cx.view.sort.filter(|(c, _)| *c == cell.column).map(|(_, o)| o);
         if sorted.is_some() {
             theme::vertical_gradient(ui.painter(), cell_rect, theme::HEADER_SORTED_TOP, theme::HEADER_SORTED_BOTTOM);
+        } else if response.hovered() {
+            ui.painter().rect_filled(cell_rect, 0.0, Color32::from_black_alpha(8));
         }
         let painter = ui.painter();
         painter.vline(
             cell_rect.right() - 0.5,
-            cell_rect.shrink2(vec2(0.0, 3.0)).y_range(),
-            Stroke::new(1.0, theme::BORDER),
+            cell_rect.shrink2(vec2(0.0, 5.0)).y_range(),
+            Stroke::new(1.0, theme::GRID_LINE),
         );
-        theme::text_in_row(
-            painter,
-            pos2(cell_rect.left() + 6.0, cell_rect.center().y),
-            cell.column.title(),
-            theme::SMALL,
-            theme::TEXT,
-            cell.width - 20.0,
-        );
+        let color = if sorted.is_some() { theme::ACCENT } else { theme::TEXT_MUTED };
+        let title_left = pos2(cell_rect.left() + 8.0, cell_rect.center().y);
+        let room = if sorted.is_some() { 28.0 } else { 12.0 };
+        theme::text_in_row(painter, title_left, cell.column.title(), theme::SMALL + 0.5, color, cell.width - room);
         if let Some(order) = sorted {
-            let arrow = if order == SortOrder::Ascending { "▲" } else { "▼" };
-            painter.text(
-                pos2(cell_rect.right() - 9.0, cell_rect.center().y),
-                Align2::CENTER_CENTER,
-                arrow,
-                FontId::proportional(8.0),
-                theme::TEXT_MUTED,
-            );
+            sort_arrow(painter, pos2(cell_rect.right() - 11.0, cell_rect.center().y), order);
         }
-        let response = ui.interact(cell_rect, ui.scope_id().with(("header", cell.column.title())), Sense::click());
         if response.clicked() {
             cx.act(Action::SortBy(cell.column));
         }
     }
+}
+
+/// A small chevron pointing up (ascending) or down.
+fn sort_arrow(painter: &egui::Painter, center: egui::Pos2, order: SortOrder) {
+    let flip = if order == SortOrder::Ascending { -1.0 } else { 1.0 };
+    let points =
+        vec![center + vec2(-3.5, -1.8 * flip), center + vec2(0.0, 1.8 * flip), center + vec2(3.5, -1.8 * flip)];
+    painter.add(egui::Shape::line(points, Stroke::new(1.5, theme::ACCENT)));
 }
 
 fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layout: &[Layout]) {
@@ -139,14 +138,18 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
         ui.allocate_exact_size(vec2(ui.available_width(), theme::ROW_HEIGHT), Sense::click_and_drag());
     let Some(track) = cx.session.track(id) else { return };
     let selected = cx.view.selection.contains(id);
-    let background = if selected {
-        theme::ROW_SELECTED
-    } else if index % 2 == 1 {
-        theme::ROW_ALT
+    if selected {
+        theme::vertical_gradient(ui.painter(), rect, theme::ROW_SELECTED_TOP, theme::ROW_SELECTED);
     } else {
-        theme::LIST_BG
-    };
-    ui.painter().rect_filled(rect, 0.0, background);
+        let background = if response.hovered() {
+            theme::ROW_HOVER
+        } else if index % 2 == 1 {
+            theme::ROW_ALT
+        } else {
+            theme::LIST_BG
+        };
+        ui.painter().rect_filled(rect, 0.0, background);
+    }
     let text_color = if selected {
         Color32::WHITE
     } else if track.checked {
@@ -171,7 +174,7 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
     for cell in layout {
         let cell_rect = Rect::from_min_size(pos2(cell.left, rect.top()), vec2(cell.width, rect.height()));
         if cell.column == Column::Rating {
-            let stars = Rect::from_min_size(cell_rect.min + vec2(6.0, 0.0), vec2(56.0, rect.height()));
+            let stars = Rect::from_min_size(cell_rect.min + vec2(8.0, 0.0), vec2(56.0, rect.height()));
             let interactive = selected || response.hovered();
             if let Some(rating) = widgets::rating(ui, stars, track.stats.rating, interactive, selected) {
                 let ids = if selected { cx.view.selected_tracks() } else { vec![id] };
@@ -182,12 +185,14 @@ fn row(ui: &mut Ui, cx: &mut PanelContext, rows: &[TrackId], index: usize, layou
         let text = cell.column.text(track);
         let painter = ui.painter();
         if cell.column.is_numeric() {
-            let galley_pos = pos2(cell_rect.right() - 8.0, cell_rect.center().y);
-            painter.text(galley_pos, Align2::RIGHT_CENTER, text, FontId::proportional(theme::BODY - 0.5), text_color);
+            // Numbers are secondary: quieter than names.
+            let color = if selected || !track.checked { text_color } else { theme::TEXT_MUTED };
+            let galley_pos = pos2(cell_rect.right() - 10.0, cell_rect.center().y);
+            painter.text(galley_pos, Align2::RIGHT_CENTER, text, FontId::proportional(theme::BODY - 0.5), color);
         } else {
             theme::text_in_row(
                 painter,
-                pos2(cell_rect.left() + 6.0, cell_rect.center().y),
+                pos2(cell_rect.left() + 8.0, cell_rect.center().y),
                 &text,
                 theme::BODY - 0.5,
                 text_color,

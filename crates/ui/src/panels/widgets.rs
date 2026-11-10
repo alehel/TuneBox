@@ -5,35 +5,48 @@ use crate::theme;
 use egui::{Color32, Rect, Response, Sense, Stroke, Ui, vec2};
 use tunebox_engine::model::Rating;
 
-/// A borderless toolbar button showing an embossed glyph.
-pub fn glyph_button(ui: &mut Ui, rect: Rect, glyph: Glyph, enabled: bool, tooltip: &str) -> Response {
-    let sense = if enabled { Sense::click() } else { Sense::hover() };
-    let response = ui.interact(rect, ui.scope_id().with(("glyph", rect.min.x as i32, rect.min.y as i32)), sense);
-    let color = if !enabled {
-        theme::GLYPH_DISABLED
-    } else if response.is_pointer_button_down_on() {
-        theme::GLYPH_PRESSED
-    } else {
-        theme::GLYPH
-    };
-    glyphs::paint_embossed(ui.painter(), rect, glyph, color);
-    response.on_hover_text(tooltip)
-}
-
-/// A small bordered toggle with a glyph, as in the status bar. `on` draws it pressed in.
+/// A small rounded toggle with a glyph, as in the status bar. `on` shows it lit: darker, with
+/// the glyph in the accent colour.
 pub fn toggle_button(ui: &mut Ui, glyph: Glyph, on: bool, tooltip: &str) -> Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(30.0, 20.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(32.0, 22.0), Sense::click());
     let painter = ui.painter();
     let (top, bottom) = if on || response.is_pointer_button_down_on() {
-        (Color32::from_rgb(0x9C, 0x9C, 0x9C), Color32::from_rgb(0xBE, 0xBE, 0xBE))
+        (Color32::from_rgb(0xD3, 0xD6, 0xDB), Color32::from_rgb(0xE6, 0xE8, 0xEB))
     } else {
-        (Color32::from_rgb(0xFA, 0xFA, 0xFA), Color32::from_rgb(0xD2, 0xD2, 0xD2))
+        (Color32::WHITE, Color32::from_rgb(0xE6, 0xE8, 0xEB))
     };
-    theme::vertical_gradient(painter, rect.shrink(1.0), top, bottom);
-    theme::outline(painter, rect, 3.0, theme::BORDER);
+    crate::theme::soft_shadow(painter, rect, 6.0, 2);
+    crate::theme::rounded_gradient(painter, rect, 6.0, top, bottom);
+    let border = if response.hovered() { Color32::from_gray(0x8C) } else { Color32::from_rgb(0xB4, 0xB8, 0xBE) };
+    painter.rect_stroke(rect, 6.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
     let color = if on { theme::ACCENT } else { theme::GLYPH };
     glyphs::paint(painter, glyphs::centered(rect, 13.0), glyph, color);
     response.on_hover_text(tooltip)
+}
+
+/// The main action of a page or dialog: a blue, glossy button with white text.
+pub fn primary_button(ui: &mut Ui, label: &str, enabled: bool, size: egui::Vec2) -> Response {
+    let (rect, response) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    paint_primary(ui, rect, label, enabled, &response);
+    response
+}
+
+/// Paints a primary button into `rect` (for buttons placed with `ui.interact`).
+pub fn paint_primary(ui: &Ui, rect: Rect, label: &str, enabled: bool, response: &Response) {
+    let painter = ui.painter();
+    let radius = 7.0;
+    let (top, bottom) = match (enabled, response.is_pointer_button_down_on()) {
+        (false, _) => (Color32::from_rgb(0xA9, 0xC4, 0xEC), Color32::from_rgb(0x93, 0xB4, 0xE6)),
+        (true, true) => (Color32::from_rgb(0x2A, 0x66, 0xC4), Color32::from_rgb(0x3A, 0x7A, 0xD8)),
+        (true, false) if response.hovered() => {
+            (Color32::from_rgb(0x6D, 0xA8, 0xF6), Color32::from_rgb(0x34, 0x77, 0xDE))
+        }
+        (true, false) => (theme::SELECTION_TOP, theme::SELECTION_BOTTOM),
+    };
+    theme::soft_shadow(painter, rect, radius, 4);
+    theme::rounded_gradient(painter, rect, radius, top, bottom);
+    painter.rect_stroke(rect, radius, Stroke::new(1.0, Color32::from_rgb(0x24, 0x5E, 0xB8)), egui::StrokeKind::Inside);
+    painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(13.0), Color32::WHITE);
 }
 
 /// Five stars; clicking a star sets the rating, clicking the current one clears it.
@@ -88,8 +101,9 @@ pub fn row_checkbox(ui: &mut Ui, rect: Rect, checked: bool) -> Option<bool> {
     let box_rect = Rect::from_center_size(rect.center(), vec2(11.0, 11.0));
     let response = ui.interact(box_rect, ui.scope_id().with(("check", rect.min.y as i32)), Sense::click());
     let painter = ui.painter();
-    painter.rect_filled(box_rect, 2.0, Color32::WHITE);
-    painter.rect_stroke(box_rect, 2.0, Stroke::new(1.0, Color32::from_gray(0x8A)), egui::StrokeKind::Inside);
+    let border = if response.hovered() { Color32::from_gray(0x70) } else { Color32::from_gray(0xA8) };
+    crate::theme::rounded_gradient(painter, box_rect, 3.0, Color32::WHITE, Color32::from_gray(0xEE));
+    painter.rect_stroke(box_rect, 3.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
     if checked {
         let stroke = Stroke::new(1.8, theme::TEXT);
         let a = box_rect.left_top() + vec2(2.5, 5.5);

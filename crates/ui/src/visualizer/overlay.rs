@@ -52,7 +52,7 @@ fn track_info(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
     painter.rect_stroke(card, 10.0, Stroke::new(1.0, Color32::from_white_alpha(30)), egui::StrokeKind::Inside);
     let art = Rect::from_min_size(card.min + vec2(14.0, 14.0), vec2(100.0, 100.0));
     let texture = cx.artwork.get(track);
-    artwork::paint(ui.painter(), art, texture.as_ref());
+    artwork::paint(ui, art, texture.as_ref());
 
     let left = art.right() + 16.0;
     let width = card.right() - left - 14.0;

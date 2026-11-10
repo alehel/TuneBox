@@ -113,14 +113,14 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 131
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 133
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).
 
 TuneBox follows the principles of the Craft apps ([PdfCraft](https://github.com/storytold/pdfcraft)
 and its siblings): a layered pure-Rust workspace, an engine façade, everything reachable
-headlessly, crash-free by policy, and clean-room behaviour. Its look is its own, drawn in code.
+headlessly, crash-free by policy, and clean-room behaviour. Its look is its own, drawn in code: modern-retro, with the classic jukebox's anatomy (brushed toolbar, status display, blue source list, striped list) and today's manners (rounded selections, soft shadows, covers with reflections, dimmed dialogs).
 
 ## Licence
 

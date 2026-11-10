@@ -1,7 +1,6 @@
 //! The audio CD page: the disc's tracks, their names, and importing them.
 
 use crate::actions::Action;
-use crate::glyphs::{self, Glyph};
 use crate::panels::{PanelContext, widgets};
 use crate::theme;
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
@@ -30,16 +29,11 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     theme::vertical_gradient(
         ui.painter(),
         header,
-        Color32::from_rgb(0xF6, 0xF6, 0xF6),
-        Color32::from_rgb(0xDE, 0xDE, 0xDE),
+        Color32::from_rgb(0xFA, 0xFA, 0xFB),
+        Color32::from_rgb(0xEC, 0xEE, 0xF1),
     );
     ui.painter().hline(header.x_range(), header.bottom() - 0.5, Stroke::new(1.0, theme::BORDER));
-    glyphs::paint(
-        ui.painter(),
-        Rect::from_min_size(header.min + vec2(20.0, 17.0), vec2(84.0, 84.0)),
-        Glyph::Disc,
-        Color32::from_rgb(0x9A, 0xA4, 0xB2),
-    );
+    paint_disc(ui.painter(), Rect::from_min_size(header.min + vec2(22.0, 14.0), vec2(90.0, 90.0)));
     let mut changed = false;
     let fields =
         Rect::from_min_max(header.min + vec2(124.0, 14.0), pos2(header.right() - 210.0, header.bottom() - 10.0));
@@ -67,9 +61,8 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     );
     ui.scope_builder(egui::UiBuilder::new().max_rect(buttons).layout(egui::Layout::top_down(egui::Align::Max)), |ui| {
         let busy = cx.session.is_busy(JobKind::Rip);
-        let import = egui::Button::new(RichText::new(if busy { "Importing…" } else { "Import CD" }).strong())
-            .min_size(vec2(150.0, 28.0));
-        if ui.add_enabled(!busy, import).clicked() {
+        let label = if busy { "Importing…" } else { "Import CD" };
+        if widgets::primary_button(ui, label, !busy, vec2(150.0, 30.0)).clicked() {
             cx.act(Action::Run(CommandId::ImportCd));
         }
         let looking = cx.session.is_busy(JobKind::LookupNames);
@@ -85,13 +78,20 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     ui.painter().rect_filled(table, 0.0, theme::LIST_BG);
     let columns = [("", 26.0), ("#", 34.0), ("Name", 0.5), ("Time", 60.0), ("Artist", 0.5), ("", 40.0)];
     let widths = resolve(&columns, table.width());
-    let head = Rect::from_min_size(table.min, vec2(table.width(), 20.0));
+    let head = Rect::from_min_size(table.min, vec2(table.width(), 24.0));
     theme::vertical_gradient(ui.painter(), head, theme::HEADER_TOP, theme::HEADER_BOTTOM);
     ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::BORDER));
     let mut x = head.left();
     for ((title, _), width) in columns.iter().zip(&widths) {
-        theme::text_in_row(ui.painter(), pos2(x + 6.0, head.center().y), title, theme::SMALL, theme::TEXT, width - 8.0);
-        ui.painter().vline(x + width - 0.5, head.shrink2(vec2(0.0, 3.0)).y_range(), Stroke::new(1.0, theme::BORDER));
+        theme::text_in_row(
+            ui.painter(),
+            pos2(x + 8.0, head.center().y),
+            title,
+            theme::SMALL + 0.5,
+            theme::TEXT_MUTED,
+            width - 8.0,
+        );
+        ui.painter().vline(x + width - 0.5, head.shrink2(vec2(0.0, 5.0)).y_range(), Stroke::new(1.0, theme::GRID_LINE));
         x += width;
     }
     let body = Rect::from_min_max(pos2(table.left(), head.bottom()), table.max);
@@ -99,7 +99,7 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for (index, number) in numbers.iter().enumerate() {
-                let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+                let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
                 if index % 2 == 1 {
                     ui.painter().rect_filled(row, 0.0, theme::ROW_ALT);
                 }
@@ -172,4 +172,38 @@ fn resolve(columns: &[(&str, f32)], total: f32) -> Vec<f32> {
     let fixed: f32 = columns.iter().map(|c| c.1).filter(|w| *w > 1.0).sum();
     let rest = (total - fixed).max(0.0);
     columns.iter().map(|c| if c.1 > 1.0 { c.1 } else { rest * c.1 }).collect()
+}
+
+/// A compact disc: a silver platter with a faint rainbow sheen, the clear hub and the hole.
+fn paint_disc(painter: &egui::Painter, rect: Rect) {
+    let center = rect.center();
+    let radius = rect.width() / 2.0;
+    theme::soft_shadow(painter, rect, radius, 10);
+    theme::rounded_gradient(
+        painter,
+        rect,
+        radius,
+        Color32::from_rgb(0xF2, 0xF4, 0xF7),
+        Color32::from_rgb(0xBF, 0xC5, 0xCE),
+    );
+    // The sheen: thin coloured arcs, as light breaks on the grooves.
+    for (i, color) in [
+        (0, Color32::from_rgba_unmultiplied(120, 180, 255, 70)),
+        (1, Color32::from_rgba_unmultiplied(255, 150, 210, 60)),
+        (2, Color32::from_rgba_unmultiplied(150, 255, 200, 60)),
+    ] {
+        let r = radius * (0.55 + 0.13 * i as f32);
+        let points: Vec<egui::Pos2> = (0..=16)
+            .map(|k| {
+                let a = -2.4 + 0.07 * k as f32 + 0.2 * i as f32;
+                center + vec2(a.cos(), a.sin()) * r
+            })
+            .collect();
+        painter.add(egui::Shape::line(points, Stroke::new(radius * 0.09, color)));
+    }
+    painter.circle_stroke(center, radius - 0.5, Stroke::new(1.0, Color32::from_rgb(0xA4, 0xAB, 0xB5)));
+    painter.circle_filled(center, radius * 0.3, Color32::from_rgba_unmultiplied(235, 238, 242, 230));
+    painter.circle_stroke(center, radius * 0.3, Stroke::new(1.0, Color32::from_rgb(0xB8, 0xBE, 0xC6)));
+    painter.circle_filled(center, radius * 0.1, Color32::from_rgb(0xFA, 0xFA, 0xFB));
+    painter.circle_stroke(center, radius * 0.1, Stroke::new(1.0, Color32::from_rgb(0xA4, 0xAB, 0xB5)));
 }

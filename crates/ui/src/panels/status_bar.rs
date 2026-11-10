@@ -35,9 +35,6 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
             if widgets::toggle_button(ui, Glyph::Artwork, cx.view.show_artwork, "Show or hide artwork").clicked() {
                 cx.view.show_artwork = !cx.view.show_artwork;
             }
-            if widgets::toggle_button(ui, Glyph::Visualizer, cx.view.show_visualizer, "Visualizer").clicked() {
-                cx.act(Action::Run(CommandId::Visualizer));
-            }
         },
     );
     ui.painter().text(

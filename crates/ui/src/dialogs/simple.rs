@@ -66,13 +66,9 @@ impl ConfirmRemove {
 
 pub fn about(ctx: &egui::Context) -> bool {
     let mut open = true;
-    egui::Window::new("About TuneBox")
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-        .open(&mut open)
-        .show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
+    super::modal(ctx, "about", |ui| {
+        ui.set_width(380.0);
+        ui.vertical_centered(|ui| {
                 ui.add_space(6.0);
                 ui.label(RichText::new("TuneBox").size(24.0).strong());
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
@@ -81,8 +77,12 @@ pub fn about(ctx: &egui::Context) -> bool {
                 ui.add_space(8.0);
                 ui.label(RichText::new("Decoding by symphonia through craft-audio · tags by lofty\nCD access by cd-da-reader · sound by cpal · interface by egui").size(11.0).weak());
                 ui.label(RichText::new("MIT OR Apache-2.0").size(11.0).weak());
-                ui.add_space(6.0);
+                ui.add_space(10.0);
+                if ui.add(egui::Button::new("Close").min_size(egui::vec2(88.0, 28.0))).clicked() {
+                    open = false;
+                }
+                ui.add_space(4.0);
             });
-        });
+    });
     open && !ctx.input(|i| i.key_pressed(egui::Key::Escape))
 }

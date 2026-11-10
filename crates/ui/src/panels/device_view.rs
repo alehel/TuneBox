@@ -83,7 +83,14 @@ fn set_up(ui: &mut Ui, cx: &mut PanelContext, root: &Path, default_name: &str) {
         ui.horizontal(|ui| {
             ui.label("Name:");
             ui.add(egui::TextEdit::singleline(&mut name).desired_width(240.0));
-            if ui.add_enabled(!name.trim().is_empty(), egui::Button::new("Set Up for Syncing")).clicked() {
+            if crate::panels::widgets::primary_button(
+                ui,
+                "Set Up for Syncing",
+                !name.trim().is_empty(),
+                vec2(160.0, 28.0),
+            )
+            .clicked()
+            {
                 cx.act(Action::RegisterDevice { root: root.to_path_buf(), name: name.trim().to_owned() });
             }
         });
@@ -177,7 +184,10 @@ fn capacity(ui: &mut Ui, cx: &mut PanelContext, entry: &DeviceEntry) {
     let button = Rect::from_min_size(pos2(bar.right() + 16.0, bar.top() - 2.0), vec2(104.0, 26.0));
     let busy = cx.session.is_busy(JobKind::Sync);
     let label = if busy { "Syncing…" } else { "Sync" };
-    if ui.put(button, egui::Button::new(RichText::new(label).strong())).clicked() && !busy {
+    let response =
+        ui.interact(button, ui.scope_id().with("sync"), if busy { egui::Sense::hover() } else { egui::Sense::click() });
+    crate::panels::widgets::paint_primary(ui, button, label, !busy, &response);
+    if response.clicked() {
         cx.act(Action::SyncDevice(entry.volume.root.clone()));
     }
 }

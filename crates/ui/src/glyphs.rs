@@ -71,9 +71,9 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
         }
         Glyph::Note => note(painter, &r, color),
         Glyph::Disc => {
-            painter.circle_filled(r.at(0.5, 0.5), r.size * 0.42, color);
-            painter.circle_filled(r.at(0.5, 0.5), r.size * 0.14, Color32::WHITE);
-            painter.circle_stroke(r.at(0.5, 0.5), r.size * 0.27, Stroke::new(r.size * 0.04, color.gamma_multiply(0.4)));
+            // A ring and a hub, so the disc reads in any colour (white on a selection too).
+            painter.circle_stroke(r.at(0.5, 0.5), r.size * 0.32, Stroke::new(r.size * 0.2, color));
+            painter.circle_filled(r.at(0.5, 0.5), r.size * 0.07, color);
         }
         Glyph::Player => {
             let body = Rect::from_min_max(r.at(0.24, 0.06), r.at(0.76, 0.94));
@@ -220,12 +220,6 @@ fn gear(painter: &Painter, r: &Square, color: Color32) {
     }
     painter.circle_filled(center, r.size * 0.3, color);
     painter.circle_filled(center, r.size * 0.12, Color32::WHITE);
-}
-
-/// Draws `glyph` with a soft white highlight below it, the embossed look of toolbar icons.
-pub fn paint_embossed(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
-    paint(painter, rect.translate(vec2(0.0, 1.0)), glyph, Color32::from_white_alpha(170));
-    paint(painter, rect, glyph, color);
 }
 
 /// A `size`-sided square centred in `rect`.

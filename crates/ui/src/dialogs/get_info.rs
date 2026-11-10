@@ -182,7 +182,7 @@ fn summary(ui: &mut Ui, track: &Track, artwork: &mut ArtworkCache) {
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(150.0, 150.0), egui::Sense::hover());
         let texture = artwork.get(track);
-        artwork::paint(ui.painter(), rect, texture.as_ref());
+        artwork::paint(ui, rect, texture.as_ref());
         ui.add_space(10.0);
         ui.vertical(|ui| {
             ui.label(RichText::new(track.title()).size(16.0).strong());
