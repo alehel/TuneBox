@@ -20,6 +20,7 @@ mod fields;
 mod format;
 mod id;
 mod meta;
+pub mod naming;
 pub mod organize;
 mod playlist;
 mod rating;

@@ -24,6 +24,10 @@ impl Session {
         if self.jobs.is_running(JobKind::Import) {
             return Err(EngineError::Busy("An import"));
         }
+        // A file being renamed would be found under its new name and taken for a new song.
+        if self.jobs.is_running(JobKind::Rename) {
+            return Err(EngineError::Busy(JobKind::Rename.noun()));
+        }
         if self.prefs.copy_to_media_folder && !crate::files::may_write(&self.prefs, &self.prefs.media_folder) {
             return Err(EngineError::Protected(self.prefs.media_folder.clone()));
         }
@@ -127,6 +131,10 @@ impl Session {
             .track(id)
             .map(|t| (t.location.clone(), t.file.format))
             .ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
+        // Its file may be on its way to a new name; writing to the old one could bring it back.
+        if self.renaming.as_ref().is_some_and(|run| run.tracks.contains(&id)) {
+            return Err(EngineError::Busy(JobKind::Rename.noun()));
+        }
         // A value the file has no place for, or that does not suit its field, would show in
         // TuneBox but never reach the file; the frontends do not offer them, and this keeps it so.
         meta.extra.retain(|field, value| tunebox_tags::can_store(format, *field) && field.accepts(value));

@@ -25,6 +25,7 @@ pub enum JobKind {
     Refresh,
     Locate,
     Artwork,
+    Rename,
 }
 
 impl JobKind {
@@ -38,6 +39,7 @@ impl JobKind {
             JobKind::Refresh => "Refreshing from files",
             JobKind::Locate => "Looking for missing songs",
             JobKind::Artwork => "Changing covers",
+            JobKind::Rename => "Renaming files",
         }
     }
 }

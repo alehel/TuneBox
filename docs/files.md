@@ -25,12 +25,43 @@ browsing, rating and making playlists never touch a music file.
 | Watching library folders | **Nothing.** New songs are added to the library, changed songs are read again, a moved song is relinked (keeping its ratings and plays), and a deleted song stays in the library |
 | Choose Artwork / Remove Artwork | The cover is written into (or every picture removed from) each chosen song's tags, through the same hidden copy as Get Info edits, one song at a time in the background. A song that cannot be written is reported and left as it is; the others carry on. JPEG and PNG pictures go in byte for byte; other images are converted, and pictures over 1400 pixels scaled down, so each song grows by a few hundred kilobytes at most. Missing songs and songs on a drive or share that is not connected are skipped, untouched. Songs in a read-only folder: see below |
 | Refresh from Files | **Nothing.** The songs' tags are read again and the library takes what they say |
+| Tasks ▸ Rename Files from Tags… | Renames the chosen songs' files, and moves them into folders, by a pattern built from their tags. Only after a preview, and only inside the library folder each song is in or inside the media folder. See [Renaming files](#renaming-files-from-tags) |
 | Delete from Library | Removes the song from the library. The file is deleted only if you tick *Also delete the files from disk* |
 | Import CD | New files in the media folder. A track appears only when it is complete (written as `*.part`, then renamed); a cancelled or failed track leaves nothing |
 | Sync a player | Writes only to the player: music under `Music/`, playlists under `Playlists/`, and `.tunebox/device.json`, which records what TuneBox put there (on MTP players, which cannot replace a file in one step, `.tunebox/device-<n>.json`: the new copy is written before the old is removed). Sync deletes only files it put there itself, and a song cut off by an unplugged player is listed as unfinished and removed by the next sync, never taken for a synced song |
 
-Temporary files (`*.part`, `.tunebox-edit-*`) are removed when an operation fails or is
+Temporary files (`*.part`, `.tunebox-edit-*`, `.tunebox-rename-*`) are removed when an operation fails or is
 cancelled.
+
+## Renaming files from tags
+
+**Tasks ▸ Rename Files from Tags…** (or `tunebox-cli rename`) names the selected songs' files by
+a pattern such as `{album-artist|artist}/{album}/{track:02} {title}`. It is the one thing in
+TuneBox that moves your files, so it is careful:
+
+| What | What happens on disk |
+|---|---|
+| The preview | **Nothing.** Every song is listed with its new name, or with why it is left alone. Renaming is planned again when you confirm, and refused if anything changed since the preview |
+| A song is renamed | The file is renamed, or moved into the folders the pattern names (created as needed), inside the library folder the song is in or inside the media folder, as you choose. The song keeps its ratings, plays, playlists and edits |
+| A name is taken | **Nothing happens to either file.** Two chosen songs that would get one name, a file already there, or another song in the library with that name: the songs are *in conflict*, and nothing is renamed until you change the pattern or choose to skip them. A file is never replaced, even if one appears after the preview |
+| Names differing only in case | Compared as the disk compares them: on Windows and macOS `Intro.flac` and `intro.flac` clash. A rename that only changes case goes through a hidden `.tunebox-rename-…` name in between |
+| Files that go with a song | Lyrics, cue sheets and notes with the song's file name (`01 Song.lrc`, `.cue`, `.txt`, `.elrc`, `.nfo`) move with it and take its new name. One whose new name is taken stays where it was. A cue sheet's contents are not rewritten |
+| Folders left empty | Removed, but only when truly empty (a hidden file keeps a folder), never a library folder or the media folder itself, and never outside them |
+| Read-only folders | Songs in them, and moves into them, are skipped. Nothing in them changes |
+| Missing or not-connected songs | Skipped. A song on a share that is not connected is not touched at all |
+| Another drive | Refused, not copied: renaming only ever moves a file within its drive |
+| A rename fails | That song is reported and stays where it was; the others go on. However the rename ends (finished, cancelled, stopped by an error, or TuneBox quitting), the library points at where each file really is |
+
+<img src="images/tunebox-rename-files-conflicts.png" alt="Rename Files from Tags with songs in conflict">
+
+While a rename runs, the folder watcher, imports and refreshes wait for it, so renamed files are
+never taken for new songs. Renaming happens only when you ask; TuneBox does not yet rename files
+by itself when you edit their tags.
+
+The rules live in `crates/engine/src/rename/` (planning is a pure function with its own tests)
+and the moves in `crates/engine/src/files.rs`. The tests in `crates/engine/tests/session.rs`
+whose names start with `renam` (and `a_rename_…`, `one_failed_rename_…`, `a_stale_preview_…`)
+rename albums, check read-only folders byte for byte, and run the folder watcher alongside.
 
 ## Library folders, read-only or writable
 

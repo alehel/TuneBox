@@ -44,6 +44,8 @@ pub enum CommandId {
     VolumeDown,
     Shuffle,
     Repeat,
+    // Tasks
+    RenameFiles,
     // App
     About,
     Quit,
@@ -56,11 +58,13 @@ pub enum Menu {
     Edit,
     View,
     Controls,
+    /// Batch work on the selected songs.
+    Tasks,
     Help,
 }
 
 impl Menu {
-    pub const ALL: [Menu; 5] = [Menu::File, Menu::Edit, Menu::View, Menu::Controls, Menu::Help];
+    pub const ALL: [Menu; 6] = [Menu::File, Menu::Edit, Menu::View, Menu::Controls, Menu::Tasks, Menu::Help];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -68,6 +72,7 @@ impl Menu {
             Menu::Edit => "Edit",
             Menu::View => "View",
             Menu::Controls => "Controls",
+            Menu::Tasks => "Tasks",
             Menu::Help => "Help",
         }
     }
@@ -263,6 +268,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::VolumeDown, "Decrease Volume", Menu::Controls, Some(Shortcut::cmd(Key::Down)), Needs::Nothing),
     after_separator(spec(CommandId::Shuffle, "Shuffle", Menu::Controls, None, Needs::Nothing)),
     spec(CommandId::Repeat, "Repeat", Menu::Controls, None, Needs::Nothing),
+    spec(CommandId::RenameFiles, "Rename Files from Tags…", Menu::Tasks, None, Needs::Selection),
     spec(CommandId::About, "About TuneBox", Menu::Help, None, Needs::Nothing),
 ];
 
@@ -299,9 +305,19 @@ impl Session {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
-            CommandId::RefreshFromFiles => self.jobs.is_running(JobKind::Refresh),
-            CommandId::ChooseArtwork | CommandId::RemoveArtwork => self.jobs.is_running(JobKind::Artwork),
-            CommandId::AddToLibrary | CommandId::ScanLibraryFolders => self.jobs.is_running(JobKind::Import),
+            CommandId::RefreshFromFiles => {
+                self.jobs.is_running(JobKind::Refresh) || self.jobs.is_running(JobKind::Rename)
+            }
+            CommandId::ChooseArtwork | CommandId::RemoveArtwork => {
+                self.jobs.is_running(JobKind::Artwork) || self.jobs.is_running(JobKind::Rename)
+            }
+            CommandId::AddToLibrary | CommandId::ScanLibraryFolders => {
+                self.jobs.is_running(JobKind::Import) || self.jobs.is_running(JobKind::Rename)
+            }
+            // One thing at a time touches where files are, or writes into them.
+            CommandId::RenameFiles => [JobKind::Rename, JobKind::Import, JobKind::Refresh, JobKind::Artwork]
+                .into_iter()
+                .any(|kind| self.jobs.is_running(kind)),
             _ => false,
         };
         ready && !busy

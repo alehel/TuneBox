@@ -7,8 +7,9 @@ use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, PlayState, Player, RepeatMode, Session,
-    SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
+    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, RenameBase,
+    RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode, SyncSettings,
+    TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -885,4 +886,271 @@ fn a_file_that_is_not_a_picture_is_refused_before_anything_changes() {
     assert!(f.session.set_artwork(&all, &downloads.join("a.flac")).is_err());
     assert!(f.session.jobs().is_empty());
     assert_eq!(snapshot(&downloads), before);
+}
+
+// ----- Rename Files from Tags -----
+
+/// A writable library folder `Music` holding the album "Lanterns" in an untidy folder, with a
+/// lyrics file beside the first song and a cover in the folder.
+fn untidy_album(f: &mut Fixture) -> (std::path::PathBuf, Vec<tunebox_engine::model::TrackId>) {
+    let music = f.dir.path().join("Music");
+    let untidy = music.join("downloads/lanterns rip");
+    write_song(&untidy.join("track1.flac"), "First Light", "Quiet Harbour", "Lanterns", 1);
+    write_song(&untidy.join("track2.flac"), "Second Light", "Quiet Harbour", "Lanterns", 2);
+    std::fs::write(untidy.join("track1.lrc"), "[00:01.00]First words").unwrap();
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(music.clone(), false);
+    f.session.set_preferences(prefs);
+    f.session.import(vec![music.clone()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 2 && s.jobs().is_empty());
+    let ids = ["track1.flac", "track2.flac"].map(|n| f.session.library().track_at(&untidy.join(n)).unwrap());
+    f.session.take_notices();
+    (music, ids.to_vec())
+}
+
+fn request(tracks: &[tunebox_engine::model::TrackId], pattern: &str) -> RenameRequest {
+    RenameRequest { tracks: tracks.to_vec(), pattern: pattern.into(), base: RenameBase::OwnFolder }
+}
+
+/// Renames as the preview says and waits; returns the notices.
+fn rename(session: &mut Session, request: &RenameRequest) -> String {
+    let preview = session.preview_rename(request).unwrap();
+    session.rename_files(&preview, RenameConflicts::Skip).unwrap();
+    tick_until(session, |s| s.jobs().is_empty());
+    session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ")
+}
+
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> =
+        std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn renaming_files_an_album_by_its_tags_and_keeps_everything_the_library_knows() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    f.session.set_rating(&[ids[0]], Rating::from_stars(5));
+    let playlist = f.session.create_playlist("Evening", &ids).unwrap();
+    let request = request(&ids, "{album-artist|artist}/{album}/{track:02} {title}");
+
+    let preview = f.session.preview_rename(&request).unwrap();
+    let album = music.join("Quiet Harbour/Lanterns");
+    assert_eq!(
+        preview.renames().map(|(_, _, to)| to.to_path_buf()).collect::<Vec<_>>(),
+        [album.join("01 First Light.flac"), album.join("02 Second Light.flac")]
+    );
+    assert_eq!(preview.summary(), "2 files to rename.");
+    assert!(music.join("downloads/lanterns rip/track1.flac").exists(), "a preview changes nothing");
+
+    let notice = rename(&mut f.session, &request);
+    assert_eq!(notice, "Renamed 2 files. 1 lyrics or cue file went with its song. Removed 2 folders left empty.");
+    assert_eq!(names_in(&album), ["01 First Light.flac", "01 First Light.lrc", "02 Second Light.flac"]);
+    assert_eq!(names_in(&music), ["Quiet Harbour"], "the emptied folders are gone, the library folder stays");
+    let first = f.session.track(ids[0]).unwrap();
+    assert_eq!(first.location, album.join("01 First Light.flac"));
+    assert_eq!(first.stats.rating, Rating::from_stars(5));
+    assert_eq!(f.session.library().playlist_tracks(playlist, chrono::Utc::now()).unwrap(), ids);
+    assert_eq!(f.session.library().len(), 2);
+
+    // Again: nothing to do.
+    let notice = rename(&mut f.session, &request);
+    assert_eq!(notice, "No files were renamed. 2 were already named so.");
+
+    // A folder that still holds something stays.
+    std::fs::write(album.join("cover.jpg"), b"jpeg").unwrap();
+    rename(&mut f.session, &self::request(&ids, "{artist} - {title}"));
+    assert_eq!(names_in(&album), ["cover.jpg"]);
+    assert_eq!(
+        names_in(&music),
+        [
+            "Quiet Harbour",
+            "Quiet Harbour - First Light.flac",
+            "Quiet Harbour - First Light.lrc",
+            "Quiet Harbour - Second Light.flac"
+        ]
+    );
+
+    // The library file says the same after a save.
+    f.session.save().unwrap();
+    let snapshot = LibrarySnapshot::open(&paths_in(&f.dir)).unwrap();
+    assert_eq!(snapshot.view().track(ids[1]).unwrap().location, music.join("Quiet Harbour - Second Light.flac"));
+}
+
+#[test]
+fn renaming_never_touches_a_read_only_folder() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(music.clone(), true);
+    f.session.set_preferences(prefs);
+    let before = snapshot(&music);
+
+    let request = request(&ids, "{artist}/{title}");
+    let preview = f.session.preview_rename(&request).unwrap();
+    assert!(preview.items.iter().all(|i| i.planned == Planned::Skipped(SkipReason::ReadOnly)));
+    let notice = rename(&mut f.session, &request);
+    assert!(notice.starts_with("No files were renamed. 2 songs were left as they are."), "{notice}");
+
+    // Nor may songs be moved into one.
+    let mut media_request = request.clone();
+    media_request.base = RenameBase::MediaFolder;
+    let mut prefs = f.session.preferences().clone();
+    prefs.media_folder = music.join("Media");
+    f.session.set_preferences(prefs);
+    rename(&mut f.session, &media_request);
+    assert_eq!(snapshot(&music), before, "byte for byte unchanged");
+    assert_eq!(f.session.track(ids[0]).unwrap().location, music.join("downloads/lanterns rip/track1.flac"));
+}
+
+#[test]
+fn a_rename_that_only_changes_case() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    rename(&mut f.session, &request(&ids, "{title|track}"));
+    assert_eq!(names_in(&music), ["First Light.flac", "First Light.lrc", "Second Light.flac"]);
+    // Retitled in lower case, then renamed by title again.
+    let mut meta = f.session.track(ids[0]).unwrap().meta.clone();
+    meta.title = "first light".into();
+    f.session.edit_track(ids[0], meta).unwrap();
+    let notice = rename(&mut f.session, &request(&ids[..1], "{title}"));
+    assert_eq!(notice, "Renamed 1 file. 1 lyrics or cue file went with its song.");
+    assert_eq!(names_in(&music), ["Second Light.flac", "first light.flac", "first light.lrc"]);
+    assert_eq!(f.session.track(ids[0]).unwrap().location, music.join("first light.flac"));
+}
+
+#[test]
+fn one_failed_rename_does_not_stop_the_others_and_the_library_matches_the_disk() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    let request = request(&ids, "{track:02} {title}");
+    let preview = f.session.preview_rename(&request).unwrap();
+    // The first song's file goes away after the preview, before the library notices.
+    let gone = music.join("downloads/lanterns rip/track1.flac");
+    std::fs::remove_file(&gone).unwrap();
+    f.session.rename_files(&preview, RenameConflicts::Refuse).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notice = f.session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ");
+    assert!(notice.contains("Renamed 1 file."), "{notice}");
+    assert!(notice.contains("“track1.flac” could not be renamed, so it is where it was"), "{notice}");
+
+    let folder = music.join("downloads/lanterns rip");
+    assert_eq!(names_in(&folder), ["track1.lrc"], "its lyrics stay where it was, and so does the folder");
+    assert_eq!(names_in(&music), ["02 Second Light.flac", "downloads"]);
+    assert_eq!(f.session.track(ids[0]).unwrap().location, gone);
+    assert_eq!(f.session.track(ids[1]).unwrap().location, music.join("02 Second Light.flac"));
+    for id in &ids {
+        let location = &f.session.track(*id).unwrap().location;
+        assert_eq!(location.exists(), *id == ids[1], "{}", location.display());
+    }
+}
+
+#[test]
+fn a_stale_preview_or_a_conflict_renames_nothing() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    let before = snapshot(&music);
+
+    // Two songs, one name.
+    let clash = request(&ids, "{album} {track-total|title}");
+    let preview = f.session.preview_rename(&clash).unwrap();
+    assert_eq!(preview.conflicts(), 2);
+    let error = f.session.rename_files(&preview, RenameConflicts::Refuse).unwrap_err().to_string();
+    assert!(error.contains("2 songs would get names already taken"), "{error}");
+    rename(&mut f.session, &clash);
+    assert_eq!(snapshot(&music), before, "skipping the conflicts leaves nothing to do");
+
+    // A file appears where the preview said a song would go.
+    let request = request(&ids, "{title}");
+    let preview = f.session.preview_rename(&request).unwrap();
+    std::fs::write(music.join("First Light.flac"), b"someone else's").unwrap();
+    let error = f.session.rename_files(&preview, RenameConflicts::Skip).unwrap_err().to_string();
+    assert!(error.contains("changed since the preview"), "{error}");
+    assert_eq!(std::fs::read(music.join("First Light.flac")).unwrap(), b"someone else's");
+
+    // A bad pattern says what is wrong.
+    let error = f.session.preview_rename(&self::request(&ids, "{artist}/{album}")).unwrap_err().to_string();
+    assert!(error.contains("{title} or {track}"), "{error}");
+}
+
+#[test]
+fn renamed_files_are_not_taken_for_new_songs_by_the_folder_watcher() {
+    let mut f = fixture(1.0);
+    let (music, ids) = untidy_album(&mut f);
+    f.session.set_rating(&[ids[1]], Rating::from_stars(4));
+    let request = request(&ids, "{artist}/{album}/{track:02} {title}");
+    let preview = f.session.preview_rename(&request).unwrap();
+    f.session.rename_files(&preview, RenameConflicts::Refuse).unwrap();
+    // The files have moved (the job is done with the disk) but the session has not heard back
+    // yet: the moment a watcher reports the new files as new and the old ones as gone.
+    let album = music.join("Quiet Harbour/Lanterns");
+    let old = music.join("downloads/lanterns rip");
+    let start = Instant::now();
+    while old.exists() || music.join("downloads").exists() {
+        assert!(start.elapsed() < Duration::from_secs(20), "timed out");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let changes = vec![
+        music.join("Quiet Harbour"),
+        album.clone(),
+        album.join("01 First Light.flac"),
+        album.join("02 Second Light.flac"),
+        album.join("01 First Light.lrc"),
+        old.join("track1.flac"),
+        old.join("track2.flac"),
+        old.clone(),
+    ];
+    f.session.folders_changed(changes.clone());
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    // And the same again, as a watcher that settles late would.
+    f.session.folders_changed(changes);
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    f.session.tick();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+
+    assert_eq!(f.session.library().len(), 2, "no duplicates");
+    assert_eq!(f.session.track(ids[1]).unwrap().location, album.join("02 Second Light.flac"));
+    assert_eq!(f.session.track(ids[1]).unwrap().stats.rating, Rating::from_stars(4));
+    let notices = f.session.take_notices();
+    let text = notices.iter().map(|n| n.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(notices.iter().all(|n| n.level == tunebox_engine::NoticeLevel::Info), "{text}");
+    assert_eq!(text, "Renamed 2 files. 1 lyrics or cue file went with its song. Removed 2 folders left empty.");
+    for id in &ids {
+        assert_eq!(*f.session.file_status(*id), FileStatus::Present);
+    }
+}
+
+#[test]
+fn quitting_during_a_rename_saves_where_the_files_went() {
+    let dir = tempfile::tempdir().unwrap();
+    let music = dir.path().join("Music");
+    for n in 1..=40 {
+        write_song(&music.join(format!("in/{n}.flac")), &format!("Song {n}"), "Quiet Harbour", "Lanterns", n);
+    }
+    let mut session = Session::open(paths_in(&dir), Player::with_output(NullOutput { speed: 1.0 })).unwrap();
+    let mut prefs = session.preferences().clone();
+    prefs.add_library_folder(music.clone(), false);
+    session.set_preferences(prefs);
+    session.import(vec![music.clone()]).unwrap();
+    tick_until(&mut session, |s| s.library().len() == 40 && s.jobs().is_empty());
+    let ids = session.query(&TrackQuery::new(Source::Music));
+    let preview = session.preview_rename(&request(&ids, "out/{title}")).unwrap();
+    session.rename_files(&preview, RenameConflicts::Refuse).unwrap();
+    // Quit as soon as the first file has moved, without the session hearing of it.
+    let start = Instant::now();
+    while std::fs::read_dir(music.join("out")).map_or(true, |mut d| d.next().is_none()) {
+        assert!(start.elapsed() < Duration::from_secs(20), "timed out");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    session.shutdown().unwrap();
+    drop(session);
+
+    let reopened = LibrarySnapshot::open(&paths_in(&dir)).unwrap();
+    let view = reopened.view();
+    assert_eq!(view.library().len(), 40);
+    for id in ids {
+        let location = &view.track(id).unwrap().location;
+        assert!(location.exists(), "the library lost track of {}", location.display());
+    }
 }

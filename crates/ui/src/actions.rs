@@ -54,6 +54,8 @@ pub enum Action {
     /// Make this image file the cover of these songs (a picture dropped on the artwork).
     SetArtwork(Vec<TrackId>, PathBuf),
     RemoveArtwork(Vec<TrackId>),
+    /// Rename files as the dialog's preview shows (the dialog comes back if that fails).
+    RenameFiles(Box<crate::dialogs::RenameFilesDialog>),
     /// Ask where a missing song's file is now, and link the song to it.
     Locate(TrackId),
     SetPreferences(Box<Preferences>),

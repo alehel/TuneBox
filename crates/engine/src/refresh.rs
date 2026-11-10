@@ -63,8 +63,11 @@ impl Session {
         edits: LibraryOnlyEdits,
         origin: Origin,
     ) -> Result<JobId, EngineError> {
-        if self.jobs.is_running(JobKind::Refresh) {
-            return Err(EngineError::Busy(JobKind::Refresh.noun()));
+        // While files are renamed, reading them would find them gone.
+        for kind in [JobKind::Refresh, JobKind::Rename] {
+            if self.jobs.is_running(kind) {
+                return Err(EngineError::Busy(kind.noun()));
+            }
         }
         let all: Vec<_> = ids.iter().filter_map(|id| self.library.track(*id)).collect();
         // Reading from a share that is not connected could stall the refresh; those wait.

@@ -13,6 +13,7 @@
 )]
 
 mod details;
+mod rename;
 
 use clap::{Parser, Subcommand};
 use std::collections::BTreeMap;
@@ -122,6 +123,26 @@ enum Command {
         #[command(subcommand)]
         action: ArtworkAction,
     },
+    /// Rename the files of the songs matching a search by their tags, and file them in folders,
+    /// e.g. `rename --search lanterns --pattern "{album-artist|artist}/{album}/{track:02} {title}"`.
+    /// Shows what would happen; --apply renames. Fields are those `edit` takes; `{a|b}` uses the
+    /// first that is set, `{track:02}` pads with zeros, and `/` makes folders. Files never
+    /// replace one another, never leave their drive, and read-only folders are left alone.
+    Rename {
+        #[arg(long)]
+        search: String,
+        #[arg(long)]
+        pattern: String,
+        /// File them inside the library folder each song is in, or inside the media folder.
+        #[arg(long, value_enum, default_value = "folder")]
+        to: rename::RenameTo,
+        /// Rename, rather than only show what would happen.
+        #[arg(long)]
+        apply: bool,
+        /// Rename the others when some songs' new names are taken, leaving those as they are.
+        #[arg(long)]
+        skip_conflicts: bool,
+    },
     /// List the additional fields the app's Get Info always shows, or pin and unpin them.
     InfoFields {
         #[arg(long, value_name = "FIELD")]
@@ -197,6 +218,8 @@ impl Command {
             | Command::Missing
             | Command::Commands => true,
             Command::InfoFields { pin, unpin } => pin.is_empty() && unpin.is_empty(),
+            // The preview only reads; renaming needs the library open for changing.
+            Command::Rename { apply, .. } => !apply,
             Command::Folders { action } => action.is_none(),
             Command::Artwork { action } => matches!(action, ArtworkAction::Export { .. }),
             _ => false,
@@ -244,6 +267,7 @@ fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
         Command::InfoFields { .. } => details::print_info_fields(view.preferences()),
         Command::Folders { .. } => print_folders(view.preferences()),
         Command::Artwork { action: ArtworkAction::Export { search, file } } => export_artwork(view, &search, &file)?,
+        Command::Rename { search, pattern, to, .. } => rename::preview(view, &search, &pattern, to)?,
         Command::Commands => {
             for command in COMMANDS {
                 let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
@@ -281,6 +305,9 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         }
         Command::InfoFields { pin, unpin } => details::info_fields(session, &pin, &unpin)?,
         Command::Artwork { action } => artwork(session, action)?,
+        Command::Rename { search, pattern, to, apply: true, skip_conflicts } => {
+            rename::apply(session, &search, &pattern, to, skip_conflicts)?
+        }
         Command::Play { search, shuffle } => play(session, search.as_deref(), shuffle),
         Command::CdInfo { virtual_disc, lookup } => {
             read_cd(session, virtual_disc, lookup)?;
@@ -320,6 +347,7 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         | Command::Playlists
         | Command::Info { .. }
         | Command::Missing
+        | Command::Rename { apply: false, .. }
         | Command::Commands) => show(session.view(), command)?,
     }
     Ok(())
@@ -334,7 +362,7 @@ fn find_playlist(view: LibraryView<'_>, name: &str) -> Result<tunebox_engine::mo
         .ok_or_else(|| format!("there is no playlist called “{name}” (see `tunebox-cli playlists`)"))
 }
 
-fn search_ids(view: LibraryView<'_>, source: Source, search: Option<&str>) -> Vec<TrackId> {
+pub(crate) fn search_ids(view: LibraryView<'_>, source: Source, search: Option<&str>) -> Vec<TrackId> {
     let mut query = TrackQuery::new(source);
     query.search = search.unwrap_or_default().to_owned();
     query.scope = SearchScope::All;
@@ -451,7 +479,7 @@ fn print_tracks(view: LibraryView<'_>, ids: &[TrackId]) {
 }
 
 /// Ticks the session until its background work is done, printing progress.
-fn wait_for_jobs(session: &mut Session) {
+pub(crate) fn wait_for_jobs(session: &mut Session) {
     loop {
         session.tick();
         print_notices(session);
@@ -654,6 +682,8 @@ mod tests {
             &["info-fields"],
             &["artwork", "export", "x", "/cover.jpg"],
             &["missing"],
+            &["rename", "--search", "x", "--pattern", "{title}"],
+            &["rename", "--search", "x", "--pattern", "{title}", "--to", "media"],
             &["folders"],
             &["commands"],
         ] {
@@ -670,6 +700,7 @@ mod tests {
             &["refresh"],
             &["artwork", "set", "x", "/cover.jpg"],
             &["artwork", "remove", "x"],
+            &["rename", "--search", "x", "--pattern", "{title}", "--apply"],
             &["play"],
         ] {
             assert!(!command(changes).reads_only(), "{changes:?}");

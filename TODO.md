@@ -61,7 +61,11 @@ The biggest risk: these parts are built but have never run where it counts.
 - [ ] Import and export playlists as M3U. Today playlists are only written to players during
       sync.
 - [ ] Show Duplicates.
-- [ ] Keep the media folder organised: rename and move files when their tags change.
+- [ ] Keep the media folder organised: rename and move files when their tags change. Tasks ▸
+      Rename Files from Tags… does this on request, for chosen songs, by a pattern; it does
+      not yet happen by itself after an edit.
+- [ ] More tasks for the Tasks menu: Tags from File Names (the reverse of renaming), Find and
+      Replace in Tags.
 - [ ] Consolidate the library: copy every song into the media folder.
 - [ ] Import an existing iTunes library (iTunes Library XML).
 - [ ] Show lyrics while a song plays (they can be edited, not viewed).

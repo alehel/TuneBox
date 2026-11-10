@@ -27,7 +27,8 @@ radio and sharing are out of scope.
 | Artwork pane | Shipped | Selected item or now playing |
 | Add, change and remove album artwork | Shipped | Get Info's artwork (click, *Choose…*, *Remove*, or drop an image on it), Edit ▸ Choose Artwork… / Remove Artwork, the album grid's right-click menu, `tunebox-cli artwork set/remove/export`. One song or a whole album; written into each file atomically in the background, one failure never stops the rest. JPEG and PNG kept as they are; GIF, BMP and WebP converted; pictures over 1400 px scaled down. Songs in read-only folders keep the cover in TuneBox ([files.md](files.md)) |
 | Delete from library (and disk) | Shipped | Asks first |
-| Keep media folder organised after edits | Planned | Files are not yet renamed when tags change |
+| Rename files from tags | Shipped | Tasks ▸ Rename Files from Tags…: a pattern of fields (`{album-artist\|artist}/{album}/{track:02} {title}`), ready-made patterns, files kept in their library folder or moved into the media folder, a preview with skipped songs and conflicts, lyrics and cue files moved along, emptied folders removed. Never replaces a file or touches a read-only folder. `tunebox-cli rename` |
+| Keep media folder organised after edits | Partial | On request (Rename Files from Tags); files are not yet renamed by themselves when tags change |
 | Consolidate library (copy every song into the media folder) | Planned | Finding missing files ships: see Missing-file marks and Locate… |
 | Cover Flow, album list view | Planned | Grid and list exist |
 | Import an iTunes Library XML | Planned | |

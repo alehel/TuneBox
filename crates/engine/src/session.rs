@@ -54,6 +54,7 @@ pub(crate) enum Outcome {
     Refreshed(crate::refresh::RefreshReport, Origin),
     LocatedOthers(Vec<(tunebox_model::TrackId, PathBuf)>),
     ArtworkChanged(crate::artwork::ArtworkReport),
+    Renamed(crate::rename::RenameReport),
     Synced {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
@@ -82,6 +83,8 @@ pub struct Session {
     pub(crate) availability: crate::availability::Availability,
     /// Albums whose covers changed, for the frontend (see `Session::take_artwork_changes`).
     pub(crate) artwork_changes: Vec<crate::AlbumKey>,
+    /// The rename in progress, if any.
+    pub(crate) renaming: Option<crate::rename::RenameRun>,
     /// This process's hold on the library, for as long as the session lives.
     _lock: LibraryLock,
 }
@@ -127,6 +130,7 @@ impl Session {
             folder_changes: std::collections::BTreeSet::new(),
             availability: crate::availability::Availability::start(),
             artwork_changes: Vec::new(),
+            renaming: None,
             _lock: lock,
         };
         session.check_all_files();
@@ -194,7 +198,13 @@ impl Session {
         for finished in self.jobs.poll() {
             match finished.outcome {
                 Ok(outcome) => self.apply_outcome(outcome),
-                Err(message) => self.notices.push(Notice::error(format!("{} failed. {message}", finished.kind.noun()))),
+                Err(message) => {
+                    if finished.kind == JobKind::Rename {
+                        // The moves it made before stopping are logged: the library follows them.
+                        self.finish_rename(None);
+                    }
+                    self.notices.push(Notice::error(format!("{} failed. {message}", finished.kind.noun())));
+                }
             }
         }
         self.act_on_folder_changes();
@@ -220,6 +230,7 @@ impl Session {
             Outcome::Refreshed(report, origin) => self.finish_refresh(report, origin),
             Outcome::LocatedOthers(found) => self.finish_locating_others(found),
             Outcome::ArtworkChanged(report) => self.finish_artwork(report),
+            Outcome::Renamed(report) => self.finish_rename(Some(report)),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }
     }
@@ -247,6 +258,7 @@ impl Session {
     pub fn shutdown(&mut self) -> Result<(), EngineError> {
         self.jobs.cancel_all();
         self.playback.stop();
+        self.finish_rename_before_quitting();
         self.save()
     }
 }

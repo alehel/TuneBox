@@ -5,7 +5,8 @@ use crate::actions::Action;
 use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
 use crate::dialogs::{
-    ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog,
+    ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, RenameFilesDialog,
+    SmartPlaylistDialog,
 };
 use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
@@ -243,6 +244,7 @@ impl TuneBoxApp {
                 let result = self.session.remove_artwork(&tracks);
                 self.report(result);
             }
+            Action::RenameFiles(dialog) => self.rename_files(*dialog),
             Action::SetRating(ids, rating) => self.session.set_rating(&ids, rating),
             Action::SetChecked(ids, checked) => self.session.set_checked(&ids, checked),
             Action::SortBy(column) => self.view.sort_by(column),
@@ -389,8 +391,22 @@ impl TuneBoxApp {
             CommandId::VolumeDown => self.session.set_volume(self.session.volume() - 0.1),
             CommandId::Shuffle => self.session.set_shuffle(!self.session.shuffle()),
             CommandId::Repeat => self.session.cycle_repeat(),
+            CommandId::RenameFiles => {
+                let dialog = RenameFilesDialog::new(self.view.selected_tracks());
+                self.dialog = Some(Dialog::RenameFiles(Box::new(dialog)));
+            }
             CommandId::About => self.dialog = Some(Dialog::About),
             CommandId::Quit => self.ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+        }
+    }
+
+    /// Renames as the dialog's preview showed. If the engine refuses (the files changed since),
+    /// the dialog comes back with a fresh preview, so the listener sees why.
+    fn rename_files(&mut self, dialog: RenameFilesDialog) {
+        let Some((plan, conflicts)) = dialog.confirmed() else { return };
+        if let Err(e) = self.session.rename_files(plan, conflicts) {
+            self.toasts.push(Notice::error(e.to_string()));
+            self.dialog = Some(Dialog::RenameFiles(Box::new(dialog.reopened())));
         }
     }
 

@@ -84,8 +84,9 @@ impl Session {
     }
 
     fn start_artwork(&mut self, ids: &[TrackId], change: Change) -> Result<JobId, EngineError> {
-        if self.jobs.is_running(JobKind::Artwork) {
-            return Err(EngineError::Busy(JobKind::Artwork.noun()));
+        // A cover written into a file while it is renamed could bring back its old name.
+        if let Some(kind) = [JobKind::Artwork, JobKind::Rename].into_iter().find(|k| self.jobs.is_running(*k)) {
+            return Err(EngineError::Busy(kind.noun()));
         }
         let mut report = ArtworkReport { removing: matches!(change, Change::Remove), ..ArtworkReport::default() };
         let mut files = Vec::new();

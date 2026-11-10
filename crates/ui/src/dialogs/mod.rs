@@ -4,11 +4,13 @@ mod extra_fields;
 mod get_info;
 mod layout;
 mod preferences;
+mod rename_files;
 mod simple;
 mod smart_playlist;
 
 pub use get_info::GetInfoDialog;
 pub use preferences::{PreferencesDialog, Tab as PreferencesTab};
+pub use rename_files::RenameFilesDialog;
 pub use simple::{ConfirmLocate, ConfirmRefresh, ConfirmRemove, RenamePlaylist};
 pub use smart_playlist::SmartPlaylistDialog;
 
@@ -22,6 +24,7 @@ pub enum Dialog {
     GetInfo(Box<GetInfoDialog>),
     Preferences(Box<PreferencesDialog>),
     SmartPlaylist(Box<SmartPlaylistDialog>),
+    RenameFiles(Box<RenameFilesDialog>),
     RenamePlaylist(RenamePlaylist),
     ConfirmRemove(ConfirmRemove),
     ConfirmRefresh(ConfirmRefresh),
@@ -46,6 +49,7 @@ impl Dialog {
             Dialog::GetInfo(dialog) => dialog.show(ctx, session, artwork, actions),
             Dialog::Preferences(dialog) => dialog.show(ctx, actions),
             Dialog::SmartPlaylist(dialog) => dialog.show(ctx, actions),
+            Dialog::RenameFiles(dialog) => dialog.show(ctx, session, actions),
             Dialog::RenamePlaylist(dialog) => dialog.show(ctx, actions),
             Dialog::ConfirmRemove(dialog) => dialog.show(ctx, actions),
             Dialog::ConfirmRefresh(dialog) => dialog.show(ctx, actions),

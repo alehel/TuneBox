@@ -20,7 +20,9 @@
   Sort by any of 20 columns, browse by genre, artist and album, search as you type, rate with
   stars, uncheck songs to skip them, and edit details for one song or many at once: the
   everyday fields up front, and 31 more (credits, classical, release, sort names, lyrics…)
-  under *Show all fields*, with the ones you use pinned in Preferences.
+  under *Show all fields*, with the ones you use pinned in Preferences. *Tasks ▸ Rename Files
+  from Tags…* names files and files them in folders by a pattern such as
+  `{album-artist|artist}/{album}/{track:02} {title}`, after a preview, never over another file.
 - **Playlists and smart playlists.** Drag songs onto playlists. Smart playlists match rules on
   text, numbers and dates, can be limited by count, time or size, and stay up to date as you
   listen.
@@ -43,7 +45,7 @@
   songs on a NAS or drive that is not connected are marked differently and wait for it to come
   back; a share that stops answering never freezes the app.
 - **Your files are safe.** Nothing is written to your music folder unless you edit a song's
-  details or artwork or ask for a file to be deleted, and you can list any number of library folders, each strictly read-only or writable (for
+  details or artwork, ask for a file to be deleted, or rename files from their tags, and you can list any number of library folders, each strictly read-only or writable (for
   example a read-only collection with a writable imports folder inside it).
   The library lives in the application data folder. See [docs/files.md](docs/files.md).
 
@@ -103,6 +105,8 @@ tunebox-cli refresh --search "Paper Boats"                      # re-read tags a
 tunebox-cli missing                                             # songs whose files are gone or offline
 tunebox-cli locate "Driftwood" ~/Music/Moved/Driftwood.flac     # point a missing song at its file
 tunebox-cli artwork set "Paper Boats" ~/Pictures/cover.jpg      # also: artwork remove, artwork export
+tunebox-cli rename --search "Paper Boats" --pattern "{artist}/{album}/{track:02} {title}"  # preview
+tunebox-cli rename --search "Paper Boats" --pattern "{artist}/{album}/{track:02} {title}" --apply
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
 tunebox-cli devices                                             # mounted and MTP players
@@ -134,7 +138,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 237
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 265
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

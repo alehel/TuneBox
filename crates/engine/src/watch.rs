@@ -4,8 +4,9 @@
 //! ratings and play counts included, for the listener to deal with: nothing is removed behind
 //! their back. A song that moved is relinked by the import (see `MovedSongs`).
 //!
-//! Watching only ever reads. Changes that arrive while an import or refresh runs wait for it to
-//! end and go into the next one.
+//! Watching only ever reads. Changes that arrive while an import, refresh or rename runs wait
+//! for it to end and go into the next one: a file TuneBox is renaming must not be taken for a
+//! new song before the library knows where it went.
 
 use crate::LibraryOnlyEdits;
 use crate::notices::Notice;
@@ -46,7 +47,9 @@ impl Session {
     }
 
     pub(crate) fn act_on_folder_changes(&mut self) {
-        let busy = self.jobs.is_running(crate::JobKind::Import) || self.jobs.is_running(crate::JobKind::Refresh);
+        let busy = [crate::JobKind::Import, crate::JobKind::Refresh, crate::JobKind::Rename]
+            .into_iter()
+            .any(|kind| self.jobs.is_running(kind));
         if self.folder_changes.is_empty() || busy {
             return;
         }
