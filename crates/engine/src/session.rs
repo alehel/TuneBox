@@ -1,7 +1,7 @@
 //! The session: what it owns, opening and saving, and the per-frame [`Session::tick`].
 //!
 //! Its methods are grouped by subject in sibling modules (`library_ops`, `playback`, `sources`,
-//! `devices`, `cd`), each adding an `impl Session` block.
+//! `devices`, `cd`, `disc_cover`, `album_artwork`), each adding an `impl Session` block.
 
 use crate::EngineError;
 use crate::cd::CdState;
@@ -11,10 +11,12 @@ use crate::notices::Notice;
 use crate::playback::PlaybackState;
 use crate::prefs::Preferences;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_import::ImportReport;
 use tunebox_library::store::{self, StoreError};
 use tunebox_library::{Library, LibraryLock};
+use tunebox_metabrainz::{CachingClient, WebClient};
 use tunebox_playback::Player;
 #[cfg(feature = "musicbrainz")]
 use tunebox_rip::DiscInfo;
@@ -54,6 +56,10 @@ pub(crate) enum Outcome {
     Refreshed(crate::refresh::RefreshReport, Origin),
     LocatedOthers(Vec<(tunebox_model::TrackId, PathBuf)>),
     ArtworkChanged(crate::artwork::ArtworkReport),
+    DiscCoverFetched(crate::disc_cover::DiscCoverReply),
+    ReleasesFound(crate::album_artwork::SearchReply),
+    ThumbnailFetched(crate::album_artwork::ThumbnailReply),
+    ReleaseCoverFetched(crate::album_artwork::ReleaseCoverReply),
     Renamed(crate::rename::RenameReport),
     Synced {
         root: PathBuf,
@@ -85,6 +91,11 @@ pub struct Session {
     pub(crate) artwork_changes: Vec<crate::AlbumKey>,
     /// The rename in progress, if any.
     pub(crate) renaming: Option<crate::rename::RenameRun>,
+    /// Every request to MusicBrainz and the Cover Art Archive goes through this, remembering
+    /// replies for the session (see `use_web_client`).
+    pub(crate) web: Arc<dyn WebClient>,
+    /// "Find Album Artwork…": the search and the releases found, if one is open.
+    pub(crate) artwork_search: Option<crate::album_artwork::ArtworkSearch>,
     /// This process's hold on the library, for as long as the session lives.
     _lock: LibraryLock,
 }
@@ -131,10 +142,19 @@ impl Session {
             availability: crate::availability::Availability::start(),
             artwork_changes: Vec::new(),
             renaming: None,
+            web: Arc::new(CachingClient::new(tunebox_metabrainz::default_client())),
+            artwork_search: None,
             _lock: lock,
         };
         session.check_all_files();
         Ok(session)
+    }
+
+    /// Sends every web request through `client` from now on (remembering its replies for the
+    /// session). For tests and demos, which must not depend on the network; the session starts
+    /// with the real client.
+    pub fn use_web_client(&mut self, client: Arc<dyn WebClient>) {
+        self.web = Arc::new(CachingClient::new(client));
     }
 
     pub fn library(&self) -> &Library {
@@ -203,10 +223,12 @@ impl Session {
                         // The moves it made before stopping are logged: the library follows them.
                         self.finish_rename(None);
                     }
+                    self.forget_failed_cover_job(finished.kind, &message);
                     self.notices.push(Notice::error(format!("{} failed. {message}", finished.kind.noun())));
                 }
             }
         }
+        self.fetch_next_thumbnail();
         self.act_on_folder_changes();
         self.follow_file_checks();
         self.follow_player();
@@ -230,6 +252,10 @@ impl Session {
             Outcome::Refreshed(report, origin) => self.finish_refresh(report, origin),
             Outcome::LocatedOthers(found) => self.finish_locating_others(found),
             Outcome::ArtworkChanged(report) => self.finish_artwork(report),
+            Outcome::DiscCoverFetched(reply) => self.finish_disc_cover(reply),
+            Outcome::ReleasesFound(reply) => self.finish_release_search(reply),
+            Outcome::ThumbnailFetched(reply) => self.finish_thumbnail(reply),
+            Outcome::ReleaseCoverFetched(reply) => self.finish_release_cover(reply),
             Outcome::Renamed(report) => self.finish_rename(Some(report)),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }

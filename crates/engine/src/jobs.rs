@@ -26,6 +26,12 @@ pub enum JobKind {
     Locate,
     Artwork,
     Rename,
+    /// Fetching a cover from the Cover Art Archive (for the CD, or a chosen release).
+    FetchCover,
+    /// Searching MusicBrainz for an album's releases.
+    FindArtwork,
+    /// Fetching the picker's thumbnails, one at a time.
+    Thumbnail,
 }
 
 impl JobKind {
@@ -40,6 +46,9 @@ impl JobKind {
             JobKind::Locate => "Looking for missing songs",
             JobKind::Artwork => "Changing covers",
             JobKind::Rename => "Renaming files",
+            JobKind::FetchCover => "Getting a cover",
+            JobKind::FindArtwork => "Looking for album artwork",
+            JobKind::Thumbnail => "Getting cover thumbnails",
         }
     }
 }

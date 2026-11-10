@@ -30,6 +30,9 @@ pub struct Preferences {
     /// Look up CD track names on MusicBrainz as soon as a disc is inserted. Off by default:
     /// TuneBox makes no network request the listener did not ask for.
     pub lookup_cd_names_automatically: bool,
+    /// Fetch the cover from the Cover Art Archive as soon as a CD's names have been looked up
+    /// on MusicBrainz. Off by default, for the same reason.
+    pub fetch_cd_covers_automatically: bool,
     pub volume: f32,
     pub shuffle: bool,
     pub repeat: RepeatMode,
@@ -113,6 +116,7 @@ impl Default for Preferences {
             library_folders: Vec::new(),
             rip_format: LosslessFormat::Flac,
             lookup_cd_names_automatically: false,
+            fetch_cd_covers_automatically: false,
             volume: 0.8,
             shuffle: false,
             repeat: RepeatMode::Off,

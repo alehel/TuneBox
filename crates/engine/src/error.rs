@@ -16,6 +16,10 @@ pub enum EngineError {
     Device(String),
     #[error("there is no disc in the drive")]
     NoDisc,
+    #[error(
+        "TuneBox does not know which MusicBrainz release this disc is. Get Track Names first: the cover is found by the release they come from"
+    )]
+    NoRelease,
     #[error("{0} is already in progress")]
     Busy(&'static str),
     #[error("{0}")]

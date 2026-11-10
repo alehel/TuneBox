@@ -1,6 +1,7 @@
 //! The audio CD in the drive: reading it, naming its tracks, and importing it.
 
 use crate::EngineError;
+use crate::disc_cover::DiscCover;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Outcome, Session};
@@ -22,6 +23,10 @@ pub struct CdState {
     pub include: Vec<bool>,
     /// Audio track numbers imported in this session.
     pub imported: BTreeSet<u8>,
+    /// The cover from the Cover Art Archive, once asked for.
+    pub cover: DiscCover,
+    /// The songs imported from this disc, which a cover found later goes into too.
+    pub imported_songs: Vec<tunebox_model::TrackId>,
 }
 
 impl std::fmt::Debug for CdState {
@@ -52,6 +57,8 @@ impl CdState {
             alternatives: Vec::new(),
             include,
             imported: BTreeSet::new(),
+            cover: DiscCover::NotAsked,
+            imported_songs: Vec::new(),
         }))
     }
 
@@ -113,10 +120,19 @@ impl Session {
         self.content_changed();
     }
 
-    /// Replaces the album and track names (typed in, or chosen among lookup results).
+    /// Replaces the album and track names (typed in, or chosen among lookup results). Choosing
+    /// another release forgets the cover of the one before.
     pub fn set_disc_info(&mut self, info: DiscInfo) {
+        let mut other_release = false;
         if let Some(cd) = self.cd.as_mut() {
+            other_release = cd.info.release_id != info.release_id;
+            if other_release {
+                cd.cover = DiscCover::NotAsked;
+            }
             cd.info = info;
+        }
+        if other_release {
+            self.fetch_disc_cover_if_wanted();
         }
         self.content_changed();
     }
@@ -134,9 +150,10 @@ impl Session {
         if self.jobs.is_running(JobKind::LookupNames) {
             return Err(EngineError::Busy("Looking up track names"));
         }
+        let web = std::sync::Arc::clone(&self.web);
         Ok(self.jobs.spawn(JobKind::LookupNames, "Getting track names".into(), move |ctx| {
             ctx.progress(0.0, "Contacting MusicBrainz…");
-            let result = tunebox_rip::musicbrainz::lookup(&disc_id).map_err(|e| e.to_string());
+            let result = tunebox_rip::musicbrainz::lookup(web.as_ref(), &disc_id).map_err(|e| e.to_string());
             Outcome::NamesFound { disc_id, result }
         }))
     }
@@ -154,8 +171,12 @@ impl Session {
                 let count = cd.info.tracks.len();
                 best.tracks.resize(count.max(best.tracks.len()), (String::new(), String::new()));
                 best.tracks.truncate(count);
+                if cd.info.release_id != best.release_id {
+                    cd.cover = DiscCover::NotAsked;
+                }
                 cd.info = best;
                 cd.alternatives = found;
+                self.fetch_disc_cover_if_wanted();
             }
             Err(message) => self.notices.push(Notice::warning(format!("Could not get track names. {message}"))),
         }
@@ -196,9 +217,10 @@ impl Session {
 
     pub(crate) fn finish_rip(&mut self, report: RipReport) {
         let count = report.tracks.len();
+        let mut added = Vec::new();
         for track in report.tracks {
             let number = track.meta.track.number;
-            self.library.add_track(track);
+            added.push(self.library.add_track(track));
             if let (Some(cd), Some(n)) = (self.cd.as_mut(), number) {
                 // The tag holds the position among audio tracks; map it back to the disc number.
                 if let Some(disc_number) = cd.audio_numbers().get(n.saturating_sub(1) as usize) {
@@ -214,5 +236,9 @@ impl Session {
         for (track, reason) in report.failures {
             self.notices.push(Notice::warning(format!("Track {track} could not be imported: {reason}")));
         }
+        if let Some(cd) = self.cd.as_mut() {
+            cd.imported_songs.extend(&added);
+        }
+        self.put_disc_cover_into(&added);
     }
 }

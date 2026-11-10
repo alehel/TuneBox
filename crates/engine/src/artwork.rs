@@ -68,6 +68,15 @@ impl Session {
         self.start_artwork(ids, Change::Set(data))
     }
 
+    /// Sets the front cover of `ids` to an image already in memory (a cover fetched from the
+    /// Cover Art Archive), in the background, exactly as [`Session::set_artwork`] does.
+    pub(crate) fn set_artwork_data(&mut self, ids: &[TrackId], data: Vec<u8>) -> Result<JobId, EngineError> {
+        if !tunebox_tags::looks_like_image(&data) {
+            return Err(EngineError::Artwork(tunebox_tags::PictureError::NotAnImage.to_string()));
+        }
+        self.start_artwork(ids, Change::Set(data))
+    }
+
     /// Removes the covers of `ids`, in the background.
     pub fn remove_artwork(&mut self, ids: &[TrackId]) -> Result<JobId, EngineError> {
         self.start_artwork(ids, Change::Remove)
