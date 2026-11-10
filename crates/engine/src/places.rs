@@ -119,6 +119,15 @@ mod tests {
         assert_eq!(at("/home/alex/Music/a.flac"), None, "the system's own disk");
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn a_mapped_drive_letter_is_a_network_place() {
+        let network = [PathBuf::from(r"Z:\")];
+        assert_eq!(place_of(Path::new(r"z:\Music\a.flac"), &[], &network), place(r"Z:\", true));
+        assert_eq!(place_of(Path::new(r"C:\Music\a.flac"), &[], &network), place(r"C:\", false));
+        assert_eq!(place_of(Path::new(r"\\nas\music\a.flac"), &[], &[]), place(r"\\nas\music\", true));
+    }
+
     #[test]
     fn a_place_is_named_by_its_last_part() {
         assert_eq!(Place { root: "/Volumes/NAS".into(), network: true }.name(), "NAS");

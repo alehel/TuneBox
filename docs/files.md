@@ -87,8 +87,10 @@ Neither ever removes a song from the library. Hover over a marked song to see wh
 library songs, the library file records it as a network place. Later, a share that is not
 mounted reads as *not connected* without TuneBox touching it, even when its mount point is left
 behind as an empty folder (as on Linux), which would otherwise look like a folder of deleted
-songs. Windows network paths (`\\server\share`) are always treated as network places; mapped
-drive letters are treated like other drives.
+songs. On Windows, network paths (`\\server\share`) are always network places, and mapped
+network drive letters (`Z:`) are recognised from the user's mappings (`net use`), including a
+mapping whose server is away. Either is asked directly, within the deadline: a drive letter
+can stay mapped while its server is off.
 
 **A share that stops answering never freezes TuneBox.** Every look at a drive or share runs on a
 background thread with a deadline of a few seconds; a place that does not answer in time is

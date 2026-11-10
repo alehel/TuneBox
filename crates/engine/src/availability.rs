@@ -300,8 +300,37 @@ impl LibraryView<'_> {
     }
 }
 
-/// Whether a network place is a mount point (rather than a `\\server\share` path, which is
-/// reached directly and never appears among the mounts).
+/// Whether a network place is a mount point, judged by whether it is mounted. A Windows place
+/// (a mapped drive letter like `Z:\`, or a `\\server\share` path) is not: a mapping can
+/// outlive its server, so those are asked directly, within the deadline.
 fn is_mountable(root: &std::path::Path) -> bool {
     !matches!(root.components().next(), Some(std::path::Component::Prefix(_)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn network(root: &str) -> Place {
+        Place { root: PathBuf::from(root), network: true }
+    }
+
+    #[test]
+    fn a_share_is_judged_by_the_mounts_once_they_are_known() {
+        let share = network("/mnt/nas");
+        assert!(awaits_mounts(&share, None));
+        assert!(is_unmounted(&share, Some(&[])));
+        assert!(!is_unmounted(&share, Some(&[PathBuf::from("/mnt/nas")])));
+        let local = Place { root: PathBuf::from("/mnt/usb"), network: false };
+        assert!(!is_unmounted(&local, Some(&[])) && !awaits_mounts(&local, None));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_mapped_drive_or_server_path_is_asked_directly() {
+        for place in [network(r"Z:\"), network(r"\\nas\music\")] {
+            assert!(!awaits_mounts(&place, None), "{place:?}");
+            assert!(!is_unmounted(&place, Some(&[])), "{place:?}");
+        }
+    }
 }
