@@ -37,8 +37,9 @@
 - **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…), and on Linux
   and macOS players that connect over MTP (Android-based players and phones, recent Walkmans;
   so far tested only against a simulated device): pick the whole library or chosen playlists,
-  see what fits, and sync. Only changes are copied, playlists are written as M3U8, and only
-  files TuneBox put there are ever removed.
+  see what fits, and sync. A blank memory card can be set up for the player that will read
+  it (Snowsky Echo Mini and Echo Nano get only formats they play). Only changes are copied,
+  playlists are written as M3U8, and only files TuneBox put there are ever removed.
 - **Library folders stay in step.** Songs copied into a library folder appear in the library,
   tags changed by another program are read again, and a renamed folder keeps its songs'
   ratings and play counts. Watching only reads. Songs whose files are gone are marked, and
@@ -138,7 +139,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 266
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 270
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

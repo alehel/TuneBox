@@ -7,7 +7,7 @@ use crate::theme;
 use egui::{Align2, Color32, FontId, Rect, RichText, Stroke, Ui, pos2, vec2};
 use std::path::Path;
 use tunebox_engine::model::{PlaylistId, format_bytes};
-use tunebox_engine::{Access, DeviceEntry, JobKind, SyncMode, SyncSettings, Volume};
+use tunebox_engine::{Access, DeviceEntry, JobKind, PlayerModel, SyncMode, SyncSettings, Volume};
 
 pub fn show(ui: &mut Ui, cx: &mut PanelContext, root: &Path) {
     let Some(entry) = cx.session.device(root).cloned() else {
@@ -97,6 +97,13 @@ fn set_up(ui: &mut Ui, cx: &mut PanelContext, root: &Path, default_name: &str) {
         ui.add_space(6.0);
         let id = ui.scope_id().with(("device-name", root));
         let mut name: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| default_name.to_owned());
+        let player_id = ui.scope_id().with(("device-player", root));
+        let mut player: PlayerModel = ui.data_mut(|d| d.get_temp(player_id)).unwrap_or_default();
+        ui.horizontal(|ui| {
+            ui.label("Player:");
+            crate::dialogs::player_choice(ui, "set-up-player", &mut player);
+        });
+        ui.data_mut(|d| d.insert_temp(player_id, player));
         ui.horizontal(|ui| {
             ui.label("Name:");
             ui.add(egui::TextEdit::singleline(&mut name).desired_width(240.0));
@@ -108,7 +115,7 @@ fn set_up(ui: &mut Ui, cx: &mut PanelContext, root: &Path, default_name: &str) {
             )
             .clicked()
             {
-                cx.act(Action::RegisterDevice { root: root.to_path_buf(), name: name.trim().to_owned() });
+                cx.act(Action::RegisterDevice { root: root.to_path_buf(), name: name.trim().to_owned(), player });
             }
         });
         ui.data_mut(|d| d.insert_temp(id, name));
@@ -118,6 +125,11 @@ fn set_up(ui: &mut Ui, cx: &mut PanelContext, root: &Path, default_name: &str) {
 fn sync_settings(ui: &mut Ui, cx: &mut PanelContext, root: &Path, current: &SyncSettings) {
     let mut settings = current.clone();
     group(ui, "Music", |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Player:");
+            crate::dialogs::player_choice(ui, "device-player", &mut settings.player);
+        });
+        ui.add_space(4.0);
         let mut everything = matches!(settings.mode, SyncMode::Everything);
         ui.horizontal(|ui| {
             ui.radio_value(&mut everything, true, "Entire music library");

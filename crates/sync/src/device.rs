@@ -1,5 +1,6 @@
 //! A player TuneBox manages, and the manifest it keeps on it.
 
+use crate::players::PlayerModel;
 use crate::storage::{FolderStorage, Storage};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -47,6 +48,15 @@ pub struct SyncSettings {
     pub music_folder: String,
     /// Playlist folder on the device, relative to its root.
     pub playlist_folder: String,
+    /// The player the files are for: decides which formats are copied.
+    pub player: PlayerModel,
+}
+
+impl SyncSettings {
+    /// The defaults for `player` (playlists off for players that may not read them).
+    pub fn for_player(player: PlayerModel) -> Self {
+        Self { player, write_playlists: player.reads_playlists(), ..Self::default() }
+    }
 }
 
 impl Default for SyncSettings {
@@ -57,6 +67,7 @@ impl Default for SyncSettings {
             write_playlists: true,
             music_folder: "Music".into(),
             playlist_folder: "Playlists".into(),
+            player: PlayerModel::default(),
         }
     }
 }

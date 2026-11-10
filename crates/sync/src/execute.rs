@@ -32,6 +32,8 @@ pub struct SyncReport {
     pub cancelled: bool,
     /// Wanted songs whose files could not be read (see `SyncPlan::unavailable`).
     pub unavailable: usize,
+    /// Wanted songs in a format the device's player cannot play (see `SyncPlan::unplayable`).
+    pub unplayable: usize,
     /// Free space afterwards, where the device reports it (MTP).
     pub free_bytes: Option<u64>,
 }
@@ -60,7 +62,7 @@ pub fn execute_on(
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(SyncProgress),
 ) -> Result<SyncReport, DeviceError> {
-    let mut report = SyncReport { unavailable: plan.unavailable, ..SyncReport::default() };
+    let mut report = SyncReport { unavailable: plan.unavailable, unplayable: plan.unplayable, ..SyncReport::default() };
     let total = plan.deletes.len() + plan.copies.len();
     let mut done = 0;
 

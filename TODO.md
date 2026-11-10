@@ -97,7 +97,11 @@ The biggest risk: these parts are built but have never run where it counts.
       docs/mtp.md).
 - [ ] MTP playlist objects and metadata properties, for older non-Android MTP players that
       ignore M3U8 files and do not read tags.
-- [ ] Convert songs to a smaller format for the player.
+- [x] Players that read files off a card (Snowsky Echo Mini and Nano): set up any drive, choose
+      the player (docs/file-players.md). Not yet tried on a real Echo.
+- [ ] Copy `.lrc` lyrics beside songs for players that show them (the Echo players).
+- [ ] More player profiles (FiiO, HiBy, Shanling, older Sony) with the formats each plays.
+- [ ] Convert songs to a smaller format for the player (or one it can play).
 - [ ] Manage songs on the player by hand (today it is sync only).
 
 ## Interface

@@ -32,6 +32,7 @@ pub enum Action {
     RegisterDevice {
         root: PathBuf,
         name: String,
+        player: tunebox_engine::PlayerModel,
     },
     SetDeviceSettings {
         root: PathBuf,

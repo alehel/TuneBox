@@ -73,6 +73,8 @@ pub struct Session {
     pub(crate) jobs: Jobs<Outcome>,
     pub(crate) playback: PlaybackState,
     pub(crate) devices: Vec<DeviceEntry>,
+    /// Removable drives that are not players (yet): a blank microSD card in a reader, say.
+    pub(crate) drives: Vec<tunebox_sync::Volume>,
     /// MTP players whose settings changed while another save was running: saved when it ends.
     pub(crate) unsaved_devices: Vec<PathBuf>,
     pub(crate) cd: Option<CdState>,
@@ -128,6 +130,7 @@ impl Session {
             jobs: Jobs::new(),
             playback,
             devices: Vec::new(),
+            drives: Vec::new(),
             unsaved_devices: Vec::new(),
             cd: None,
             notices,

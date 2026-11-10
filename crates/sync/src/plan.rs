@@ -84,6 +84,9 @@ pub struct SyncPlan {
     /// Wanted tracks whose files could not be read: kept as they are on the device if they
     /// were there, left out if not.
     pub unavailable: usize,
+    /// Wanted tracks in a format the device's player cannot play: left off (and removed, if an
+    /// earlier sync for another player put them there).
+    pub unplayable: usize,
     pub playlists: Vec<PlaylistFile>,
     /// Everything that will be on the device afterwards, for writing playlists.
     pub final_paths: BTreeMap<TrackId, SyncItem>,
@@ -107,12 +110,19 @@ impl SyncPlan {
 /// A track is copied when it is not on the device, or when its file changed (size or
 /// modification time) or its place on the device did (its tags changed). Files TuneBox put on
 /// the device that are no longer wanted are deleted. Files TuneBox did not put there are never
-/// touched.
+/// touched. Songs the device's player cannot play are left off. Copies are made in path order
+/// (artist, album, track), so players that list songs in the order their files were made
+/// (Snowsky's Echo players) list an album in track order.
 pub fn plan(wanted: &[SyncItem], playlists: Vec<PlaylistFile>, manifest: &DeviceManifest) -> SyncPlan {
     let mut result = SyncPlan { playlists, ..SyncPlan::default() };
     let mut seen = HashSet::new();
     for item in wanted {
         if seen.contains(&item.id) {
+            continue;
+        }
+        if !manifest.settings.player.plays(&item.device_path) {
+            seen.insert(item.id);
+            result.unplayable += 1;
             continue;
         }
         if !item.available {
@@ -149,13 +159,16 @@ pub fn plan(wanted: &[SyncItem], playlists: Vec<PlaylistFile>, manifest: &Device
             }
         }
     }
+    // Whatever will not be on the device (unwanted, or unplayable there) is removed.
     for (id, synced) in &manifest.files {
-        if !seen.contains(id) {
+        if !result.final_paths.contains_key(id) {
             result.bytes_to_free = result.bytes_to_free.saturating_add(synced.source_size);
             result.deletes.push(DeleteOp { id: *id, device_path: synced.path.clone() });
         }
     }
-    result.playlists.iter_mut().for_each(|p| p.tracks.retain(|id| seen.contains(id)));
+    let on_device = &result.final_paths;
+    result.playlists.iter_mut().for_each(|p| p.tracks.retain(|id| on_device.contains_key(id)));
+    result.copies.sort_by(|a, b| a.item.device_path.cmp(&b.item.device_path));
     result
 }
 
@@ -218,6 +231,35 @@ mod tests {
         assert_eq!((plan.unchanged, plan.unavailable), (1, 2));
         assert_eq!(plan.final_paths[&TrackId(1)].device_path, "Music/a.flac", "playlists point at the kept copy");
         assert!(!plan.final_paths.contains_key(&TrackId(2)));
+    }
+
+    #[test]
+    fn songs_the_player_cannot_play_are_left_off_and_removed() {
+        let mut m = manifest(&[(1, "Music/a.ogg", 10), (2, "Music/b.flac", 20)]);
+        m.settings.player = crate::PlayerModel::SnowskyEchoMini;
+        let wanted = [item(1, "Music/a.ogg", 10), item(2, "Music/b.flac", 20), item(3, "Music/c.opus", 30)];
+        let playlist = PlaylistFile { name: "Mix".into(), tracks: vec![TrackId(3), TrackId(2), TrackId(1)] };
+        let p = plan(&wanted, vec![playlist], &m);
+        assert_eq!((p.unchanged, p.unplayable), (1, 2));
+        assert!(p.copies.is_empty());
+        assert_eq!(
+            p.deletes,
+            [DeleteOp { id: TrackId(1), device_path: "Music/a.ogg".into() }],
+            "put there for another player"
+        );
+        assert_eq!(p.playlists[0].tracks, [TrackId(2)]);
+    }
+
+    #[test]
+    fn copies_follow_artist_album_track_order() {
+        let m = manifest(&[]);
+        let wanted = [
+            item(1, "Music/B/Album/02 Two.flac", 1),
+            item(2, "Music/A/Album/01 One.flac", 1),
+            item(3, "Music/B/Album/01 One.flac", 1),
+        ];
+        let order: Vec<u64> = plan(&wanted, Vec::new(), &m).copies.iter().map(|c| c.item.id.0).collect();
+        assert_eq!(order, [2, 3, 1]);
     }
 
     #[test]

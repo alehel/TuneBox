@@ -67,5 +67,5 @@ pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, VirtualDrive};
 pub use tunebox_sync::mtp::{MtpLink, mtp_links, probe as probe_mtp_link};
-pub use tunebox_sync::{Access, Candidate, Device, MtpAddress, SyncMode, SyncSettings, Volume};
+pub use tunebox_sync::{Access, Candidate, Device, MtpAddress, PlayerModel, SyncMode, SyncSettings, Volume};
 pub use tunebox_tags::{Artwork, MAX_COVER_SIDE, can_store};

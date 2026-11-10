@@ -29,6 +29,7 @@ pub mod mtp;
 #[cfg(test)]
 mod mtp_tests;
 mod plan;
+mod players;
 mod storage;
 
 pub use device::{Device, DeviceError, DeviceManifest, SyncMode, SyncSettings, SyncedFile};
@@ -36,4 +37,5 @@ pub use discover::{Access, Candidate, Volume, looks_like_player, scan};
 pub use execute::{SyncProgress, SyncReport, execute, execute_on};
 pub use mtp::{MtpAddress, MtpLink, MtpStorage};
 pub use plan::{CopyOp, DeleteOp, PlaylistFile, SyncItem, SyncPlan, plan};
+pub use players::PlayerModel;
 pub use storage::{FolderStorage, Storage};
