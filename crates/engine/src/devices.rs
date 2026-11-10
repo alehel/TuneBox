@@ -114,17 +114,63 @@ impl Session {
         self.change_device(root, |device| device.manifest.name = name.trim().to_owned())
     }
 
-    /// Changes a managed player's manifest and saves it on the player.
+    /// Changes a managed player's manifest and saves it on the player. A mounted player is
+    /// written at once. An MTP player must be opened over USB first, which can take seconds, so
+    /// the change applies here at once and is written by a job (see [`Session::save_device`]).
     fn change_device(&mut self, root: &Path, change: impl FnOnce(&mut Device)) -> Result<(), EngineError> {
         let volume = self.connected_volume(root)?;
         let device = self.managed_device_mut(root)?;
         change(device);
+        if volume.is_mtp() {
+            self.content_changed();
+            self.save_device(root);
+            return Ok(());
+        }
         let saved = volume
             .storage()
             .and_then(|mut storage| device.save_to(&mut *storage))
             .map_err(|e| EngineError::Device(device_message(&volume, e)));
         self.content_changed();
         saved
+    }
+
+    /// Writes an MTP player's manifest as it is now, in the background. One save runs at a
+    /// time (the player can only be opened once); a player changed meanwhile is saved again
+    /// when it ends, with its latest settings.
+    fn save_device(&mut self, root: &Path) {
+        if self.jobs.is_running(JobKind::SaveDevice) {
+            if !self.unsaved_devices.iter().any(|r| r == root) {
+                self.unsaved_devices.push(root.to_path_buf());
+            }
+            return;
+        }
+        let Some(entry) = self.device(root) else { return };
+        let Some(device) = entry.device.clone() else { return };
+        let volume = entry.volume.clone();
+        let root = root.to_path_buf();
+        let title = format!("Saving the settings of “{}”", device.manifest.name);
+        self.jobs.spawn(JobKind::SaveDevice, title, move |_| {
+            let result = volume
+                .storage()
+                .and_then(|mut storage| device.save_to(&mut *storage))
+                .map_err(|e| device_message(&volume, e));
+            Outcome::DeviceSaved { root, result }
+        });
+    }
+
+    pub(crate) fn finish_device_save(&mut self, root: &Path, result: Result<(), String>) {
+        if let Err(message) = result {
+            let name = self.device(root).map_or_else(|| "the player".to_owned(), |d| format!("“{}”", d.name()));
+            // The session keeps the change, and a sync writes the whole manifest.
+            self.notices.push(Notice::warning(format!(
+                "The settings were not saved on {name}. {message} They will be saved with the next sync."
+            )));
+        }
+        // Players that went away meanwhile are no longer listed and are skipped.
+        if !self.unsaved_devices.is_empty() {
+            let next = self.unsaved_devices.remove(0);
+            self.save_device(&next);
+        }
     }
 
     /// The volume of a connected player, ready to be written. An MTP player is held by a sync
@@ -158,6 +204,10 @@ impl Session {
     pub fn sync_device(&mut self, root: &Path) -> Result<JobId, EngineError> {
         if self.jobs.is_running(JobKind::Sync) {
             return Err(EngineError::Busy("A sync"));
+        }
+        // A save holds an MTP player open; the sync would find it busy.
+        if self.jobs.is_running(JobKind::SaveDevice) || !self.unsaved_devices.is_empty() {
+            return Err(EngineError::Busy("Saving a player's settings"));
         }
         let entry =
             self.device(root).ok_or_else(|| EngineError::Device("The player is no longer connected.".into()))?;

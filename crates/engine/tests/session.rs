@@ -288,6 +288,42 @@ fn syncs_a_player() {
 }
 
 #[test]
+fn mtp_settings_are_saved_in_the_background_latest_last() {
+    use tunebox_mtp::simulator::SimulatedDevice;
+    use tunebox_sync::mtp::{MtpLink, probe};
+
+    let mut f = fixture(1.0);
+    let player = SimulatedDevice::new("NW-A306", 1 << 30);
+    f.session.refresh_mtp_devices(&probe(&MtpLink::Simulated(player.clone())));
+    let root = f.session.devices()[0].volume.root.clone();
+    f.session.register_device(&root, "Walkman").unwrap();
+    let on_player = || probe(&MtpLink::Simulated(player.clone())).remove(0).device.unwrap().manifest;
+
+    // Both return at once and show at once; the player is written by jobs, one at a time.
+    f.session.rename_device(&root, "First").unwrap();
+    f.session.rename_device(&root, "Second").unwrap();
+    let settings = SyncSettings { only_checked: false, ..SyncSettings::default() };
+    f.session.set_device_settings(&root, settings.clone()).unwrap();
+    assert_eq!(f.session.devices()[0].name(), "Second");
+    assert!(f.session.is_busy(tunebox_engine::JobKind::SaveDevice));
+    assert!(f.session.sync_device(&root).is_err(), "a sync waits for the save, which holds the player");
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let manifest = on_player();
+    assert_eq!((manifest.name.as_str(), &manifest.settings), ("Second", &settings), "the latest change wins");
+
+    // A save that fails says so, and that the next sync will write it.
+    player.hold(true);
+    f.session.rename_device(&root, "Third").unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notices: Vec<String> = f.session.take_notices().into_iter().map(|n| n.text).collect();
+    assert!(notices.iter().any(|n| n.contains("will be saved with the next sync")), "{notices:?}");
+    player.hold(false);
+    f.session.sync_device(&root).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    assert_eq!(on_player().name, "Third");
+}
+
+#[test]
 fn syncs_an_mtp_player() {
     use tunebox_mtp::simulator::SimulatedDevice;
     use tunebox_sync::mtp::{MtpLink, probe};

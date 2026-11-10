@@ -199,8 +199,17 @@ fn capacity(ui: &mut Ui, cx: &mut PanelContext, entry: &DeviceEntry) {
         );
     }
     let button = Rect::from_min_size(pos2(bar.right() + 16.0, bar.top() - 2.0), vec2(104.0, 26.0));
-    let busy = cx.session.is_busy(JobKind::Sync);
-    let label = if busy { "Syncing…" } else { "Sync" };
+    let syncing = cx.session.is_busy(JobKind::Sync);
+    // An MTP player's settings are written in the background; the sync waits for that.
+    let saving = cx.session.is_busy(JobKind::SaveDevice);
+    let busy = syncing || saving;
+    let label = if syncing {
+        "Syncing…"
+    } else if saving {
+        "Saving…"
+    } else {
+        "Sync"
+    };
     let response =
         ui.interact(button, ui.scope_id().with("sync"), if busy { egui::Sense::hover() } else { egui::Sense::click() });
     crate::panels::widgets::paint_primary(ui, button, label, !busy, &response);

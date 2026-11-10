@@ -287,7 +287,10 @@ As recommended, for Linux and macOS:
   `tunebox_platform::MtpPlayers` (a thread that opens each new device once, and busy ones
   again every few seconds) in the app and by `find_mtp_players` in `tunebox-cli devices`,
   `setup-device` and `sync` (players named by their `mtp:` id). The device page says where an
-  MTP player is ("Internal storage, over USB (MTP)"), shows the problem instead of the set-up
+  MTP player is ("Internal storage, over USB (MTP)"), saves an MTP player's changed settings
+  or name in a background job (opening the player can take seconds; the change shows at
+  once, changes made meanwhile are saved when it ends, latest last, and a failed save is
+  written by the next sync), shows the problem instead of the set-up
   form when it cannot be used, and Eject just says it can be unplugged.
 
 **Tested** against the simulated device: copies, re-syncs, deletes of only TuneBox's files (the

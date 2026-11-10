@@ -26,6 +26,8 @@ pub enum JobKind {
     Locate,
     Artwork,
     Rename,
+    /// Writing an MTP player's manifest after its settings changed.
+    SaveDevice,
 }
 
 impl JobKind {
@@ -39,6 +41,7 @@ impl JobKind {
             JobKind::Refresh => "Refreshing from files",
             JobKind::Locate => "Looking for missing songs",
             JobKind::Artwork => "Changing covers",
+            JobKind::SaveDevice => "Saving a player's settings",
             JobKind::Rename => "Renaming files",
         }
     }
