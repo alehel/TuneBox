@@ -112,11 +112,6 @@ impl Session {
         &self.prefs
     }
 
-    /// The folder TuneBox must not write to, if the listener protected one.
-    pub fn protected_folder(&self) -> Option<&std::path::Path> {
-        crate::files::protected_folder(&self.prefs)
-    }
-
     /// Replaces the preferences and saves them.
     pub fn set_preferences(&mut self, prefs: Preferences) {
         self.playback.apply_preferences(&prefs);

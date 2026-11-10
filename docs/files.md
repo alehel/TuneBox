@@ -1,7 +1,7 @@
 # What TuneBox does with your files
 
-Your music folder is yours. TuneBox reads it; it writes to it only when you ask it to change a
-song, and never if you mark the folder read-only.
+Your music folders are yours. TuneBox reads them; it writes to them only when you ask it to
+change a song, and never to a folder you mark read-only.
 
 ## Where TuneBox keeps its own files
 
@@ -27,19 +27,42 @@ browsing, rating and making playlists never touch a music file.
 Temporary files (`*.part`, `.tunebox-edit-*`) are removed when an operation fails or is
 cancelled.
 
-## A read-only music folder
+## Library folders, read-only or writable
 
-**Preferences ▸ General ▸ Your music folder**: choose the folder and keep *Read only* ticked
-(the default). Then TuneBox will never create, change, move or delete anything inside it:
+**Preferences ▸ General ▸ Library folders** lists the folders your music lives in. You can list
+as many as you like, and each is **read only** (the default for a new folder) or **writable**:
 
-- edits from Get Info are kept in the library only (you are told once);
-- *Delete from Library* removes songs from the library and leaves their files;
-- copying and CD imports refuse to write there: choose a media folder outside it.
+- In a **read-only** folder TuneBox never creates, changes, moves or deletes anything. Edits
+  from Get Info are kept in the library only (you are told once); *Delete from Library* removes
+  songs from the library and leaves their files; copies and CD imports refuse to go there.
+- In a **writable** folder TuneBox may write edited details into songs, delete files you ask it
+  to delete, and put CD imports and copies there (*Use for Imports*).
+- **The deepest listed folder decides.** A typical setup is a curated collection that is read
+  only, with a writable `Imports` folder inside it (or anywhere else) for CD rips:
 
-From the command line: `tunebox-cli music-folder ~/Music` (add `--writable` to allow edits,
-`--clear` to forget it).
+  | Folder | Rule |
+  |---|---|
+  | `~/Music/Collection` | read only |
+  | `~/Music/Collection/Imports` | writable, imports go here |
+  | `~/Music/Vinyl Rips` | read only |
 
-The check lives in one place, `crates/engine/src/files.rs`, which every write in the engine goes
-through. Symbolic links into the folder are resolved, so they are protected too. The test
-`a_protected_music_folder_is_never_changed` (`crates/engine/tests/session.rs`) edits, deletes,
-imports and rips with the folder protected, and checks it is byte-for-byte unchanged.
+- Songs from folders that are not listed (added with *Add to Library* from anywhere) are
+  writable, as they always were.
+- *Scan All* (or File ▸ Scan Library Folders) adds songs that appeared in the folders since the
+  last scan. Songs already in the library are left alone.
+
+From the command line:
+
+```sh
+tunebox-cli folders add ~/Music/Collection                       # read only, and add its songs
+tunebox-cli folders add ~/Music/Collection/Imports --writable
+tunebox-cli folders imports ~/Music/Collection/Imports           # CD imports go here
+tunebox-cli folders scan
+tunebox-cli folders                                              # list them
+```
+
+The rule lives in one place, `crates/engine/src/files.rs`, which every write in the engine goes
+through. Symbolic links are resolved, so a link into a read-only folder is read only too. The
+tests `a_read_only_library_folder_is_never_changed` and
+`a_writable_imports_folder_inside_a_read_only_collection` (`crates/engine/tests/session.rs`)
+edit, delete, import and rip, and check read-only folders byte for byte.

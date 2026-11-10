@@ -63,6 +63,13 @@ impl Session {
         }
     }
 
+    /// Adds every song in the library folders that is not in the library yet ("Scan Library
+    /// Folders"): the way to pick up music added to those folders outside TuneBox.
+    pub fn scan_library_folders(&mut self) -> Result<JobId, EngineError> {
+        let folders: Vec<PathBuf> = self.prefs.library_folders.iter().map(|f| f.path.clone()).collect();
+        self.import(folders)
+    }
+
     /// Edits a track's details, writing them into its file as well, unless the file is in the
     /// protected music folder: then only the library changes. If the file cannot be written
     /// (read-only, missing) the library still takes the edit and a warning says why.
@@ -76,7 +83,7 @@ impl Session {
             }
         } else if !self.protected_edit_noted {
             self.notices.push(Notice::info(
-                "The song is in your protected music folder, so the change is kept in TuneBox's library only.",
+                "The song is in a read-only library folder, so the change is kept in TuneBox's library only.",
             ));
             self.protected_edit_noted = true;
         }
@@ -115,7 +122,7 @@ impl Session {
             }
             if !protected.is_empty() {
                 self.notices.push(Notice::info(format!(
-                    "{} songs were removed from the library only: their files are in your protected music folder.",
+                    "{} songs were removed from the library only: their files are in a read-only library folder.",
                     protected.len()
                 )));
             }

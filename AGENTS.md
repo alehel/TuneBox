@@ -59,7 +59,7 @@ unplugged player or a bad library file must produce an error the listener can ac
 - **Treat input as hostile.** Prefer `get()` to indexing, checked or saturating arithmetic for
   sizes and counts, bounded recursion (the import walker has a depth limit).
 - **The listener's files are theirs.** Every write to a path the listener owns goes through
-  `crates/engine/src/files.rs`, which honours the protected music folder. Never add a write
+  `crates/engine/src/files.rs`, which honours read-only library folders. Never add a write
   that bypasses it. See [docs/files.md](docs/files.md).
 - **Writes are atomic.** The library, preferences and device manifests are written through
   `craft-atomic`; ripped and synced files go through `*.part` files renamed on completion.

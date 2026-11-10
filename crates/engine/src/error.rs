@@ -17,7 +17,7 @@ pub enum EngineError {
     #[error("{0} is already in progress")]
     Busy(&'static str),
     #[error(
-        "{} is inside your protected music folder, which TuneBox does not change. Choose a media folder outside it in Preferences, or turn off the protection.",
+        "{} is in a read-only library folder, which TuneBox does not change. Choose a media folder in a writable folder in Preferences.",
         .0.display()
     )]
     Protected(std::path::PathBuf),

@@ -34,7 +34,8 @@
   whole library or chosen playlists, see what fits, and sync. Only changes are copied, playlists
   are written as M3U8, and only files TuneBox put there are ever removed.
 - **Your files are safe.** Nothing is written to your music folder unless you edit a song's
-  details or ask for a file to be deleted, and you can make the folder strictly read-only.
+  details or ask for a file to be deleted, and you can list any number of library folders, each strictly read-only or writable (for
+  example a read-only collection with a writable imports folder inside it).
   The library lives in the application data folder. See [docs/files.md](docs/files.md).
 
 <table>
@@ -56,11 +57,11 @@
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/tunebox-smart-editor.png" alt="The smart playlist editor"></td>
-<td width="50%"><img src="docs/images/tunebox-preferences.png" alt="Preferences with a read-only music folder"></td>
+<td width="50%"><img src="docs/images/tunebox-preferences.png" alt="Preferences with read-only and writable library folders"></td>
 </tr>
 <tr>
 <td align="center"><sub>Smart playlist rules</sub></td>
-<td align="center"><sub>A read-only music folder</sub></td>
+<td align="center"><sub>Read-only and writable library folders</sub></td>
 </tr>
 </table>
 
@@ -86,7 +87,9 @@ tunebox-cli list --search "harbour"
 tunebox-cli new-playlist "Evening" --search jazz
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
-tunebox-cli music-folder ~/Music        # protect it: TuneBox will never write there
+tunebox-cli folders add ~/Music/Collection                    # read only: never written to
+tunebox-cli folders add ~/Music/Collection/Imports --writable
+tunebox-cli folders imports ~/Music/Collection/Imports        # CD rips go here
 ```
 
 ## How it's built
@@ -110,7 +113,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 129
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 131
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

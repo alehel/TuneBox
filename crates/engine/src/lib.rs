@@ -23,7 +23,7 @@ mod cd;
 pub mod commands;
 mod devices;
 mod error;
-mod files;
+pub mod files;
 pub mod jobs;
 mod library_ops;
 mod notices;
@@ -38,7 +38,7 @@ pub use error::EngineError;
 pub use jobs::{JobId, JobKind, JobStatus};
 pub use notices::{Notice, NoticeLevel};
 pub use playback::NowPlaying;
-pub use prefs::Preferences;
+pub use prefs::{LibraryFolder, Preferences};
 pub use session::{Session, SessionPaths};
 pub use sources::{Source, TrackQuery};
 

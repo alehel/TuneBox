@@ -221,6 +221,10 @@ impl TuneBoxApp {
                 self.dialog = Some(Dialog::SmartPlaylist(Box::new(SmartPlaylistDialog::new_rules())))
             }
             CommandId::AddToLibrary => self.add_to_library(),
+            CommandId::ScanLibraryFolders => {
+                let result = self.session.scan_library_folders();
+                self.report(result);
+            }
             CommandId::ImportCd => {
                 let result = self.session.import_cd();
                 self.report(result);

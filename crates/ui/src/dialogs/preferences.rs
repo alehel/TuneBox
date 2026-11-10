@@ -52,9 +52,9 @@ impl PreferencesDialog {
 }
 
 fn general(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
-    music_folder(ui, prefs, actions);
+    library_folders(ui, prefs, actions);
     ui.separator();
-    ui.label(RichText::new("TuneBox Media folder location").strong());
+    ui.label(RichText::new("Imports folder (CD imports and copies)").strong());
     ui.horizontal(|ui| {
         ui.label(tunebox_platform::display_path(&prefs.media_folder));
         if ui.button("Change…").clicked()
@@ -70,44 +70,72 @@ fn general(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>
             .weak()
             .size(11.0),
     );
-    if prefs.music_folder_read_only && prefs.music_folder.as_ref().is_some_and(|m| prefs.media_folder.starts_with(m)) {
+    if !tunebox_engine::files::may_write(prefs, &prefs.media_folder) {
         ui.colored_label(
             egui::Color32::from_rgb(0xB0, 0x30, 0x30),
-            "The media folder is inside your read-only music folder, so CD imports and copies are not possible. Choose another media folder.",
+            "The media folder is in a read-only library folder, so CD imports and copies are not possible. Choose a writable folder.",
         );
     }
 }
 
-/// The listener's own music folder, and protecting it.
-fn music_folder(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
-    ui.label(RichText::new("Your music folder").strong());
+/// The listener's music folders, each read-only or writable.
+fn library_folders(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
+    ui.label(RichText::new("Library folders").strong());
+    let mut remove = None;
+    let mut use_for_imports = None;
+    egui::Frame::new()
+        .fill(egui::Color32::WHITE)
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0xB0)))
+        .inner_margin(6)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            if prefs.library_folders.is_empty() {
+                ui.label(RichText::new("No folders yet. Songs you add are played from wherever they are.").weak());
+            }
+            egui::Grid::new("library-folders").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
+                for (index, folder) in prefs.library_folders.iter_mut().enumerate() {
+                    ui.label(tunebox_platform::display_path(&folder.path));
+                    ui.checkbox(&mut folder.read_only, "Read only");
+                    let is_imports = folder.path == prefs.media_folder;
+                    if is_imports {
+                        ui.label(RichText::new("Imports go here").weak());
+                    } else if ui.add_enabled(!folder.read_only, egui::Button::new("Use for Imports")).clicked() {
+                        use_for_imports = Some(folder.path.clone());
+                    }
+                    if ui
+                        .small_button("Remove")
+                        .on_hover_text("Stop listing it; its songs stay in the library")
+                        .clicked()
+                    {
+                        remove = Some(index);
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    if let Some(index) = remove {
+        prefs.library_folders.remove(index);
+    }
+    if let Some(path) = use_for_imports {
+        prefs.media_folder = path;
+    }
     ui.horizontal(|ui| {
-        match &prefs.music_folder {
-            Some(folder) => ui.label(tunebox_platform::display_path(folder)),
-            None => ui.label(RichText::new("Not chosen").weak()),
-        };
-        if ui.button("Choose…").clicked()
-            && let Some(folder) = rfd::FileDialog::new().set_title("Your Music Folder").pick_folder()
+        if ui.button("Add Folder…").clicked()
+            && let Some(folder) = rfd::FileDialog::new().set_title("Add a Library Folder").pick_folder()
         {
-            prefs.music_folder = Some(folder);
+            prefs.add_library_folder(folder.clone(), true);
+            actions.push(Action::AddToLibrary(vec![folder]));
         }
-        if let Some(folder) = prefs.music_folder.clone() {
-            if ui.button("Add to Library").on_hover_text("Adds every song in the folder, in place").clicked() {
-                actions.push(Action::AddToLibrary(vec![folder]));
-            }
-            if ui.button("Forget").clicked() {
-                prefs.music_folder = None;
-            }
+        if ui
+            .add_enabled(!prefs.library_folders.is_empty(), egui::Button::new("Scan All"))
+            .on_hover_text("Add songs that appeared since the last scan")
+            .clicked()
+        {
+            actions.push(Action::AddToLibrary(prefs.library_folders.iter().map(|f| f.path.clone()).collect()));
         }
-    });
-    ui.add_enabled_ui(prefs.music_folder.is_some(), |ui| {
-        ui.checkbox(
-            &mut prefs.music_folder_read_only,
-            "Read only: never change, move or delete anything in this folder",
-        );
     });
     ui.label(
-        RichText::new("Edits to songs in a read-only folder are kept in TuneBox's library; deleting a song only removes it from the library.")
+        RichText::new("New folders are read only. TuneBox never changes, moves or deletes anything in a read-only folder: edits stay in its library, and deleting only removes songs from the library. A folder inside another follows its own setting.")
             .weak()
             .size(11.0),
     );

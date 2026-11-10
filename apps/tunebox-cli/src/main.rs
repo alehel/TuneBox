@@ -33,6 +33,23 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum FolderAction {
+    /// List a folder (read only unless --writable) and add its songs to the library.
+    Add {
+        path: PathBuf,
+        /// Let TuneBox write in it: edit tags, delete files, put CD imports there.
+        #[arg(long)]
+        writable: bool,
+    },
+    /// Stop listing a folder (its songs stay in the library).
+    Remove { path: PathBuf },
+    /// Add songs that appeared in the folders since they were last scanned.
+    Scan,
+    /// Put CD imports and copies in this folder (it must not be read only).
+    Imports { path: PathBuf },
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Song count, total time and size.
     Stats,
@@ -90,16 +107,10 @@ enum Command {
         #[arg(long = "playlist")]
         playlists: Vec<String>,
     },
-    /// Show or set your music folder and whether TuneBox may change it.
-    MusicFolder {
-        /// The folder (omit to show the current setting).
-        path: Option<PathBuf>,
-        /// Let TuneBox write into it (edit tags, delete files). Read-only is the default.
-        #[arg(long)]
-        writable: bool,
-        /// Forget the music folder.
-        #[arg(long, conflicts_with = "path")]
-        clear: bool,
+    /// List your library folders, or add, remove or scan them.
+    Folders {
+        #[command(subcommand)]
+        action: Option<FolderAction>,
     },
     /// List the app's commands and shortcuts.
     Commands,
@@ -178,7 +189,7 @@ fn run(cli: Cli) -> Result<(), String> {
             println!("“{name}” is ready to sync.");
         }
         Command::Sync { root, playlists } => sync(&mut session, &root, &playlists)?,
-        Command::MusicFolder { path, writable, clear } => music_folder(&mut session, path, writable, clear),
+        Command::Folders { action } => folders(&mut session, action)?,
         Command::Commands => {
             for command in COMMANDS {
                 let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
@@ -317,23 +328,48 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
     Ok(())
 }
 
-fn music_folder(session: &mut Session, path: Option<PathBuf>, writable: bool, clear: bool) {
+fn folders(session: &mut Session, action: Option<FolderAction>) -> Result<(), String> {
     let mut prefs = session.preferences().clone();
-    if clear {
-        prefs.music_folder = None;
-    } else if let Some(path) = path {
-        prefs.music_folder = Some(path);
-        prefs.music_folder_read_only = !writable;
-    }
-    if prefs != *session.preferences() {
-        session.set_preferences(prefs);
+    match action {
+        Some(FolderAction::Add { path, writable }) => {
+            prefs.add_library_folder(path.clone(), !writable);
+            session.set_preferences(prefs);
+            session.import(vec![path]).map_err(|e| e.to_string())?;
+            wait_for_jobs(session);
+        }
+        Some(FolderAction::Remove { path }) => {
+            prefs.remove_library_folder(&path);
+            session.set_preferences(prefs);
+        }
+        Some(FolderAction::Imports { path }) => {
+            if !tunebox_engine::files::may_write(&prefs, &path) {
+                return Err(format!(
+                    "{} is in a read-only library folder; list it as --writable first",
+                    path.display()
+                ));
+            }
+            prefs.media_folder = path;
+            session.set_preferences(prefs);
+        }
+        Some(FolderAction::Scan) => {
+            session.scan_library_folders().map_err(|e| e.to_string())?;
+            wait_for_jobs(session);
+        }
+        None => {}
     }
     let prefs = session.preferences();
-    match &prefs.music_folder {
-        Some(folder) if prefs.music_folder_read_only => {
-            println!("{} (read only: TuneBox never changes it)", folder.display())
-        }
-        Some(folder) => println!("{} (TuneBox may edit tags and delete files in it)", folder.display()),
-        None => println!("No music folder is set."),
+    if prefs.library_folders.is_empty() {
+        println!("No library folders are listed. Add one with `tunebox-cli folders add <path>`.");
     }
+    for folder in &prefs.library_folders {
+        let rule = if folder.read_only { "read only" } else { "writable" };
+        println!("{:<10} {}", rule, folder.path.display());
+    }
+    let imports = if tunebox_engine::files::may_write(prefs, &prefs.media_folder) {
+        ""
+    } else {
+        "  (in a read-only folder: CD imports are blocked)"
+    };
+    println!("CD imports and copies go to {}{imports}", prefs.media_folder.display());
+    Ok(())
 }

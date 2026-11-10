@@ -6,6 +6,14 @@ use tunebox_audio::LosslessFormat;
 use tunebox_model::Column;
 use tunebox_playback::RepeatMode;
 
+/// A folder of music the listener keeps, and whether TuneBox may write in it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryFolder {
+    pub path: PathBuf,
+    /// Never create, change or delete anything in this folder.
+    pub read_only: bool,
+}
+
 /// Everything the listener can set.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -15,10 +23,8 @@ pub struct Preferences {
     /// "Copy files to the media folder when adding to library". Off by default: songs are
     /// played from where they are and nothing is added to the listener's folders.
     pub copy_to_media_folder: bool,
-    /// The listener's own music folder, if they chose one.
-    pub music_folder: Option<PathBuf>,
-    /// Never create, change or delete anything in `music_folder`.
-    pub music_folder_read_only: bool,
+    /// The listener's own music folders, each read-only or writable (see `files`).
+    pub library_folders: Vec<LibraryFolder>,
     /// What CDs are ripped to.
     pub rip_format: LosslessFormat,
     /// Look up CD track names on MusicBrainz as soon as a disc is inserted. Off by default:
@@ -39,6 +45,19 @@ pub struct Preferences {
 impl Preferences {
     pub fn with_media_folder(media_folder: PathBuf) -> Self {
         Self { media_folder, ..Self::default() }
+    }
+
+    /// Lists `path` as a library folder, or changes its rule if it is listed already.
+    pub fn add_library_folder(&mut self, path: PathBuf, read_only: bool) {
+        match self.library_folders.iter_mut().find(|f| f.path == path) {
+            Some(folder) => folder.read_only = read_only,
+            None => self.library_folders.push(LibraryFolder { path, read_only }),
+        }
+    }
+
+    /// Stops listing `path` (its songs stay in the library).
+    pub fn remove_library_folder(&mut self, path: &Path) {
+        self.library_folders.retain(|f| f.path != path);
     }
 
     /// Reads preferences; a missing or unreadable file gives the defaults (and the problem is
@@ -74,8 +93,7 @@ impl Default for Preferences {
         Self {
             media_folder: PathBuf::new(),
             copy_to_media_folder: false,
-            music_folder: None,
-            music_folder_read_only: true,
+            library_folders: Vec::new(),
             rip_format: LosslessFormat::Flac,
             lookup_cd_names_automatically: false,
             volume: 0.8,

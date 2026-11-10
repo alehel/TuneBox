@@ -15,6 +15,7 @@ pub enum CommandId {
     NewPlaylistFromSelection,
     NewSmartPlaylist,
     AddToLibrary,
+    ScanLibraryFolders,
     ImportCd,
     GetTrackNames,
     SyncDevice,
@@ -156,6 +157,8 @@ pub enum Needs {
     Device,
     /// A disc or a player is selected.
     Ejectable,
+    /// Library folders are listed in Preferences.
+    LibraryFolders,
 }
 
 /// One row of the registry.
@@ -197,6 +200,7 @@ pub const COMMANDS: &[CommandSpec] = &[
         Some(Shortcut::cmd(Key::Letter('o'))),
         Needs::Nothing,
     )),
+    spec(CommandId::ScanLibraryFolders, "Scan Library Folders", Menu::File, None, Needs::LibraryFolders),
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
@@ -276,12 +280,13 @@ impl Session {
             Needs::Disc => self.cd.is_some(),
             Needs::Device => context.device_selected,
             Needs::Ejectable => context.device_selected || context.cd_selected,
+            Needs::LibraryFolders => !self.prefs.library_folders.is_empty(),
         };
         let busy = match id {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
-            CommandId::AddToLibrary => self.jobs.is_running(JobKind::Import),
+            CommandId::AddToLibrary | CommandId::ScanLibraryFolders => self.jobs.is_running(JobKind::Import),
             _ => false,
         };
         ready && !busy

@@ -187,16 +187,17 @@ fn visualizer_spectrum(app: &mut TuneBoxApp) {
     show_visualizer(app, "spectrum", true);
 }
 
-/// Preferences with the demo's music folder chosen and protected (shown, not saved).
+/// Preferences with a read-only collection and a writable imports folder inside it (shown, not
+/// saved).
 fn preferences(app: &mut TuneBoxApp) {
     app.view.select_source(SourceItem::Music);
     let mut prefs = app.session.preferences().clone();
-    if let Some(track) = app.session.library().tracks().next() {
-        prefs.music_folder = track.location.ancestors().nth(3).map(std::path::Path::to_path_buf);
-    }
-    prefs.music_folder_read_only = true;
     if let Some(home) = std::env::var_os("HOME") {
-        prefs.media_folder = std::path::PathBuf::from(home).join("TuneBox Media");
+        let music = std::path::PathBuf::from(home).join("Music");
+        prefs.add_library_folder(music.join("Collection"), true);
+        prefs.add_library_folder(music.join("Collection/Imports"), false);
+        prefs.add_library_folder(music.join("Vinyl Rips"), true);
+        prefs.media_folder = music.join("Collection/Imports");
     }
     app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(&prefs))));
 }

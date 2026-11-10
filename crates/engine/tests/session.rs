@@ -199,13 +199,12 @@ fn by_default_songs_are_played_where_they_are() {
 }
 
 #[test]
-fn a_protected_music_folder_is_never_changed() {
+fn a_read_only_library_folder_is_never_changed() {
     let mut f = fixture(1.0);
     import_two_songs(&mut f);
     let downloads = f.dir.path().join("Downloads");
     let mut prefs = f.session.preferences().clone();
-    prefs.music_folder = Some(downloads.clone());
-    prefs.music_folder_read_only = true;
+    prefs.add_library_folder(downloads.clone(), true);
     f.session.set_preferences(prefs.clone());
     let before = snapshot(&downloads);
 
@@ -230,4 +229,35 @@ fn a_protected_music_folder_is_never_changed() {
     tick_until(&mut f.session, |s| s.cd().is_some());
     assert!(f.session.import_cd().is_err());
     assert_eq!(snapshot(&downloads), before);
+}
+
+#[test]
+fn a_writable_imports_folder_inside_a_read_only_collection() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let collection = f.dir.path().join("Downloads");
+    let imports = collection.join("Imports");
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(collection.clone(), true);
+    prefs.add_library_folder(imports.clone(), false);
+    prefs.media_folder = imports.clone();
+    f.session.set_preferences(prefs);
+    let before = snapshot(&collection);
+
+    // CD imports go to the writable folder…
+    f.session.read_disc(Arc::new(VirtualDrive::new("Virtual Drive", vec![1])));
+    tick_until(&mut f.session, |s| s.cd().is_some());
+    f.session.import_cd().unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+    let ripped = snapshot(&imports);
+    assert_eq!(ripped.len(), 1);
+    // …and nothing else in the collection changed.
+    let mut after = snapshot(&collection);
+    after.retain(|(path, _)| !path.starts_with(&imports));
+    assert_eq!(after, before);
+
+    // Songs dropped into a library folder outside TuneBox are picked up by a scan.
+    write_song(&collection.join("New/late.flac"), "Late Arrival", "Quiet Harbour", "Lanterns", 3);
+    f.session.scan_library_folders().unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 4);
 }

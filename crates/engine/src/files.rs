@@ -2,32 +2,37 @@
 //!
 //! TuneBox changes files a listener already has in only two ways: writing edited details into
 //! a song (Get Info), and deleting a song's file when asked. It creates files only in the media
-//! folder (imported copies, CD rips) and on players it syncs. With a protected music folder
-//! (Preferences ▸ General) none of that may touch the folder: edits stay in the library, deletes
-//! only remove the song from the library, and copies and rips must go elsewhere.
+//! folder (imported copies, CD rips) and on players it syncs.
+//!
+//! The listener lists their library folders in Preferences, each read-only or writable. A path
+//! is governed by the deepest listed folder that contains it, so a writable `~/Music/Imports`
+//! can sit inside a read-only `~/Music`. In a read-only folder nothing is created, changed or
+//! deleted: edits stay in the library, deletes only remove songs from the library, and copies
+//! and rips must go elsewhere. Paths in no listed folder are writable, as before.
 
-use crate::prefs::Preferences;
+use crate::prefs::{LibraryFolder, Preferences};
 use std::path::{Path, PathBuf};
 
-/// The folder TuneBox must not write to, if the listener protected one.
-pub(crate) fn protected_folder(prefs: &Preferences) -> Option<&Path> {
-    prefs.music_folder.as_deref().filter(|_| prefs.music_folder_read_only)
+/// The library folder whose rule applies to `path`: the deepest one containing it.
+pub fn governing_folder<'a>(prefs: &'a Preferences, path: &Path) -> Option<&'a LibraryFolder> {
+    let path = resolve(path);
+    prefs
+        .library_folders
+        .iter()
+        .map(|folder| (folder, resolve(&folder.path)))
+        .filter(|(_, root)| path.starts_with(root))
+        .max_by_key(|(_, root)| root.components().count())
+        .map(|(folder, _)| folder)
 }
 
 /// Whether TuneBox may create, change or delete `path`.
-pub(crate) fn may_write(prefs: &Preferences, path: &Path) -> bool {
-    protected_folder(prefs).is_none_or(|folder| !is_inside(path, folder))
+pub fn may_write(prefs: &Preferences, path: &Path) -> bool {
+    governing_folder(prefs, path).is_none_or(|folder| !folder.read_only)
 }
 
-/// Whether `path` is `folder` or lies inside it. Both are resolved through symbolic links where
-/// they exist, so a link into the protected folder is still protected.
-pub(crate) fn is_inside(path: &Path, folder: &Path) -> bool {
-    let folder = resolve(folder);
-    resolve(path).starts_with(&folder) || path.starts_with(&folder)
-}
-
-/// `path` with links resolved: the path itself if it exists, else its nearest existing parent
-/// with the rest appended (a media folder that does not exist yet still resolves correctly).
+/// `path` with links resolved, so a link into a read-only folder is still read-only: the path
+/// itself if it exists, else its nearest existing parent with the rest appended (a media folder
+/// that does not exist yet still resolves correctly).
 fn resolve(path: &Path) -> PathBuf {
     let mut missing = Vec::new();
     let mut current = path;
@@ -49,30 +54,50 @@ fn resolve(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    fn prefs(folders: &[(&Path, bool)]) -> Preferences {
+        let mut prefs = Preferences::default();
+        for (path, read_only) in folders {
+            prefs.add_library_folder(path.to_path_buf(), *read_only);
+        }
+        prefs
+    }
+
     #[test]
-    fn only_the_protected_folder_is_off_limits() {
+    fn read_only_folders_are_off_limits_and_others_are_not() {
         let dir = tempfile::tempdir().unwrap();
         let music = dir.path().join("Music");
         std::fs::create_dir_all(music.join("Album")).unwrap();
-        let mut prefs = Preferences::with_media_folder(dir.path().join("TuneBox Media"));
-        prefs.music_folder = Some(music.clone());
+        let mut prefs = prefs(&[(&music, true)]);
         assert!(!may_write(&prefs, &music.join("Album/song.flac")));
         assert!(!may_write(&prefs, &music.join("New Folder/not yet there.flac")));
-        assert!(may_write(&prefs, &dir.path().join("TuneBox Media/x.flac")));
-        assert!(may_write(&prefs, &dir.path().join("Musicals/x.flac")), "a sibling with a similar name is fine");
-        prefs.music_folder_read_only = false;
+        assert!(may_write(&prefs, &dir.path().join("Downloads/x.flac")), "unlisted paths are writable");
+        assert!(may_write(&prefs, &dir.path().join("Musicals/x.flac")), "a sibling with a similar name is not inside");
+        prefs.library_folders[0].read_only = false;
         assert!(may_write(&prefs, &music.join("Album/song.flac")));
+    }
+
+    #[test]
+    fn the_deepest_folder_decides() {
+        let dir = tempfile::tempdir().unwrap();
+        let music = dir.path().join("Music");
+        let imports = music.join("Imports");
+        let archive = imports.join("Archive");
+        std::fs::create_dir_all(&archive).unwrap();
+        let prefs = prefs(&[(&imports, false), (&music, true), (&archive, true)]);
+        assert!(!may_write(&prefs, &music.join("Album/song.flac")));
+        assert!(may_write(&prefs, &imports.join("Rip/track.flac")), "a writable folder inside a read-only one");
+        assert!(!may_write(&prefs, &archive.join("old.flac")), "and a read-only one inside that");
+        assert_eq!(governing_folder(&prefs, &imports.join("x")).map(|f| f.path.clone()), Some(imports));
     }
 
     #[cfg(unix)]
     #[test]
-    fn links_into_the_folder_are_protected_too() {
+    fn links_into_a_read_only_folder_are_read_only_too() {
         let dir = tempfile::tempdir().unwrap();
         let music = dir.path().join("Music");
         std::fs::create_dir_all(&music).unwrap();
         std::os::unix::fs::symlink(&music, dir.path().join("Link")).unwrap();
-        let mut prefs = Preferences::with_media_folder(dir.path().join("Media"));
-        prefs.music_folder = Some(music);
+        let prefs = prefs(&[(&music, true)]);
         assert!(!may_write(&prefs, &dir.path().join("Link/song.flac")));
     }
 }
