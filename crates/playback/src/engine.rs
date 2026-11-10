@@ -62,7 +62,12 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
-    pub fn new(factory: Box<dyn OutputFactory>, shared: Arc<Shared>, status: Arc<Mutex<Status>>, events: Sender<PlayerEvent>) -> Self {
+    pub fn new(
+        factory: Box<dyn OutputFactory>,
+        shared: Arc<Shared>,
+        status: Arc<Mutex<Status>>,
+        events: Sender<PlayerEvent>,
+    ) -> Self {
         Self { factory, shared, status, events, output: None, current: None }
     }
 
@@ -125,7 +130,8 @@ impl Engine {
     }
 
     fn start_output(&mut self, format: OutputFormat) -> Result<ActiveOutput, String> {
-        let capacity = ((f64::from(format.sample_rate) * BUFFER_SECONDS) as usize).max(1024) * usize::from(format.channels.max(1));
+        let capacity =
+            ((f64::from(format.sample_rate) * BUFFER_SECONDS) as usize).max(1024) * usize::from(format.channels.max(1));
         let (producer, consumer) = RingBuffer::new(capacity);
         let stream = self.factory.start(format, consumer, Arc::clone(&self.shared))?;
         Ok(ActiveOutput { format, producer, capacity, _stream: stream })
@@ -216,7 +222,11 @@ impl Engine {
                 let elapsed = Duration::from_secs_f64(played as f64 / f64::from(output.format.sample_rate.max(1)));
                 let position = current.base.saturating_add(elapsed);
                 Status {
-                    state: if self.shared.playing.load(Ordering::Relaxed) { PlayState::Playing } else { PlayState::Paused },
+                    state: if self.shared.playing.load(Ordering::Relaxed) {
+                        PlayState::Playing
+                    } else {
+                        PlayState::Paused
+                    },
                     path: Some(current.path.clone()),
                     position: current.duration.map_or(position, |d| position.min(d)),
                     duration: current.duration,

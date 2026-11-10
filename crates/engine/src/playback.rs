@@ -60,8 +60,11 @@ impl Session {
     /// except the one started explicitly.
     pub fn play_tracks(&mut self, list: &[TrackId], start: usize) {
         let Some(&chosen) = list.get(start) else { return };
-        let playable: Vec<TrackId> =
-            list.iter().copied().filter(|id| *id == chosen || self.library.track(*id).is_some_and(|t| t.checked)).collect();
+        let playable: Vec<TrackId> = list
+            .iter()
+            .copied()
+            .filter(|id| *id == chosen || self.library.track(*id).is_some_and(|t| t.checked))
+            .collect();
         let start = playable.iter().position(|id| *id == chosen).unwrap_or(0);
         let state = &mut self.playback;
         state.queue = PlayQueue::new(playable, start, state.shuffle, state.repeat, shuffle_seed());
@@ -158,7 +161,8 @@ impl Session {
     pub fn now_playing(&self) -> Option<NowPlaying> {
         let track = self.playback.current()?;
         let status = self.playback.player.status();
-        let duration = status.duration.or_else(|| self.library.track(track).map(|t| t.file.duration)).unwrap_or_default();
+        let duration =
+            status.duration.or_else(|| self.library.track(track).map(|t| t.file.duration)).unwrap_or_default();
         Some(NowPlaying { track, state: status.state, position: status.position, duration })
     }
 

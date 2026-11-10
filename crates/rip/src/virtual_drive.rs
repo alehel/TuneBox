@@ -44,7 +44,12 @@ impl CdDrive for VirtualDrive {
         if self.track_seconds.is_empty() { Err(DriveError::NoDisc) } else { Ok(self.toc()) }
     }
 
-    fn read_track(&self, toc: &DiscToc, number: u8, sink: &mut dyn FnMut(&[u8], f32) -> bool) -> Result<(), DriveError> {
+    fn read_track(
+        &self,
+        toc: &DiscToc,
+        number: u8,
+        sink: &mut dyn FnMut(&[u8], f32) -> bool,
+    ) -> Result<(), DriveError> {
         if *toc != self.toc() {
             return Err(DriveError::DiscChanged);
         }

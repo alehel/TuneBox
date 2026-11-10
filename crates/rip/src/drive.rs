@@ -28,7 +28,8 @@ pub trait CdDrive: Send + Sync {
     /// Streams track `number` of the disc described by `toc` to `sink`, as raw CD audio
     /// (44.1 kHz stereo, 16-bit little-endian) in sector-aligned chunks, together with the
     /// fraction of the track read so far. `sink` returns `false` to stop early.
-    fn read_track(&self, toc: &DiscToc, number: u8, sink: &mut dyn FnMut(&[u8], f32) -> bool) -> Result<(), DriveError>;
+    fn read_track(&self, toc: &DiscToc, number: u8, sink: &mut dyn FnMut(&[u8], f32) -> bool)
+    -> Result<(), DriveError>;
 }
 
 #[cfg(feature = "drives")]
@@ -88,7 +89,12 @@ mod physical {
             Ok(toc)
         }
 
-        fn read_track(&self, toc: &DiscToc, number: u8, sink: &mut dyn FnMut(&[u8], f32) -> bool) -> Result<(), DriveError> {
+        fn read_track(
+            &self,
+            toc: &DiscToc,
+            number: u8,
+            sink: &mut dyn FnMut(&[u8], f32) -> bool,
+        ) -> Result<(), DriveError> {
             let reader = self.open()?;
             let disc = reader.read_toc().map_err(|_| DriveError::NoDisc)?;
             if to_toc(&disc) != *toc {

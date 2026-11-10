@@ -5,7 +5,14 @@
 //! and playlists only refer to tracks that exist. [`store`] reads and writes it as a versioned
 //! JSON file, atomically.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod browse;
 mod error;

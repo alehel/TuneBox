@@ -142,19 +142,41 @@ impl Column {
             Column::AlbumArtist => meta.album_artist.clone(),
             Column::Album => meta.album.clone(),
             Column::Genre => meta.genre.clone(),
-            Column::Rating => if track.stats.rating.is_rated() { track.stats.rating.glyphs() } else { String::new() },
-            Column::Plays => if track.stats.play_count > 0 { track.stats.play_count.to_string() } else { String::new() },
+            Column::Rating => {
+                if track.stats.rating.is_rated() {
+                    track.stats.rating.glyphs()
+                } else {
+                    String::new()
+                }
+            }
+            Column::Plays => {
+                if track.stats.play_count > 0 {
+                    track.stats.play_count.to_string()
+                } else {
+                    String::new()
+                }
+            }
             Column::Year => some_or_blank(meta.year),
             Column::TrackNumber => meta.track.label(),
             Column::DiscNumber => meta.disc.label(),
             Column::Composer => meta.composer.clone(),
             Column::Kind => track.file.format.kind_label().to_owned(),
             Column::BitRate => track.file.bit_rate_kbps.map(|k| format!("{k} kbps")).unwrap_or_default(),
-            Column::SampleRate => track.file.sample_rate.map(|r| format!("{:.1} kHz", f64::from(r) / 1000.0)).unwrap_or_default(),
+            Column::SampleRate => {
+                track.file.sample_rate.map(|r| format!("{:.1} kHz", f64::from(r) / 1000.0)).unwrap_or_default()
+            }
             Column::Size => format_bytes(track.file.size_bytes),
             Column::DateAdded => track.date_added.format("%Y-%m-%d %H:%M").to_string(),
-            Column::LastPlayed => track.stats.last_played.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default(),
-            Column::Skips => if track.stats.skip_count > 0 { track.stats.skip_count.to_string() } else { String::new() },
+            Column::LastPlayed => {
+                track.stats.last_played.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default()
+            }
+            Column::Skips => {
+                if track.stats.skip_count > 0 {
+                    track.stats.skip_count.to_string()
+                } else {
+                    String::new()
+                }
+            }
             Column::Comments => meta.comments.clone(),
         }
     }

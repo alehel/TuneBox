@@ -59,7 +59,8 @@ pub struct JobContext {
 impl JobContext {
     /// Reports progress (0–1) and the current step.
     pub fn progress(&self, fraction: f32, message: impl Into<String>) {
-        let _ = self.updates.send(Progress { id: self.id, fraction: fraction.clamp(0.0, 1.0), message: message.into() });
+        let _ =
+            self.updates.send(Progress { id: self.id, fraction: fraction.clamp(0.0, 1.0), message: message.into() });
     }
 
     /// The flag the job should check between steps.
@@ -136,13 +137,15 @@ impl<T: Send + 'static> Jobs<T> {
         let context = JobContext { id, updates: self.progress_tx.clone(), cancel: Arc::clone(&cancel) };
         let done = self.done_tx.clone();
         let spawned = std::thread::Builder::new().name(format!("tunebox-job-{}", id.0)).spawn(move || {
-            let outcome = catch_unwind(AssertUnwindSafe(|| work(&context))).map_err(|panic| panic_message(panic.as_ref()));
+            let outcome =
+                catch_unwind(AssertUnwindSafe(|| work(&context))).map_err(|panic| panic_message(panic.as_ref()));
             let _ = done.send(Done { id, outcome });
         });
         if let Err(e) = spawned {
             let _ = self.done_tx.send(Done { id, outcome: Err(format!("could not start a worker thread: {e}")) });
         }
-        self.running.push(Running { status: JobStatus { id, kind, title, message: String::new(), progress: None }, cancel });
+        self.running
+            .push(Running { status: JobStatus { id, kind, title, message: String::new(), progress: None }, cancel });
         id
     }
 

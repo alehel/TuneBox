@@ -63,7 +63,12 @@ mod tests {
     #[test]
     fn track_artist_overrides_album_artist() {
         let toc = sample_toc();
-        let mut info = DiscInfo { album: "Mix".into(), artist: "Various Artists".into(), compilation: true, ..DiscInfo::placeholder(&toc) };
+        let mut info = DiscInfo {
+            album: "Mix".into(),
+            artist: "Various Artists".into(),
+            compilation: true,
+            ..DiscInfo::placeholder(&toc)
+        };
         info.tracks[1] = ("Song".into(), "Guest".into());
         let meta = info.track_meta(&toc, 2);
         assert_eq!((meta.title.as_str(), meta.artist.as_str()), ("Song", "Guest"));

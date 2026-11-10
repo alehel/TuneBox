@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TrackMeta};
-use tunebox_engine::{NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume};
+use tunebox_engine::{
+    NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
+};
 
 struct Fixture {
     dir: tempfile::TempDir,
@@ -138,7 +140,13 @@ fn syncs_a_player() {
     import_two_songs(&mut f);
     let player_root = f.dir.path().join("PLAYER");
     std::fs::create_dir_all(player_root.join("Music")).unwrap();
-    let volume = Volume { root: player_root.clone(), label: "PLAYER".into(), total_bytes: 1 << 30, free_bytes: 1 << 30, removable: true };
+    let volume = Volume {
+        root: player_root.clone(),
+        label: "PLAYER".into(),
+        total_bytes: 1 << 30,
+        free_bytes: 1 << 30,
+        removable: true,
+    };
     f.session.refresh_devices(&[volume]);
     assert_eq!(f.session.devices().len(), 1);
     f.session.register_device(&player_root, "Pocket").unwrap();

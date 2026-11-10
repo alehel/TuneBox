@@ -4,7 +4,14 @@
 //! showing a file in the file manager ([`reveal`]) and ejecting a player or disc ([`eject`]).
 //! Nothing here holds state; the engine is told the results.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,7 +20,10 @@ use tunebox_engine::{SessionPaths, Volume};
 /// The folder TuneBox keeps its library in: `~/Music/TuneBox`, like a music app's own folder
 /// next to the music. Falls back to the home folder, then the current folder.
 pub fn tunebox_folder() -> PathBuf {
-    dirs::audio_dir().or_else(|| dirs::home_dir().map(|h| h.join("Music"))).unwrap_or_else(|| PathBuf::from(".")).join("TuneBox")
+    dirs::audio_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join("Music")))
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("TuneBox")
 }
 
 /// The session's files inside `folder` (normally [`tunebox_folder`]).
@@ -66,7 +76,19 @@ fn is_removable_mount(mount: &Path) -> bool {
 /// The volume's label, or the last part of its mount point.
 fn volume_label(name: &str, mount: &Path) -> String {
     let from_mount = mount.file_name().map(|n| n.to_string_lossy().into_owned());
-    if name.is_empty() || name.starts_with("/dev/") { from_mount.unwrap_or_else(|| name.to_owned()) } else { name.to_owned() }
+    if name.is_empty() || name.starts_with("/dev/") {
+        from_mount.unwrap_or_else(|| name.to_owned())
+    } else {
+        name.to_owned()
+    }
+}
+
+/// A path for display, with the home folder shortened to `~`.
+pub fn display_path(path: &Path) -> String {
+    match dirs::home_dir().and_then(|home| path.strip_prefix(home).ok().map(Path::to_path_buf)) {
+        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+        None => path.display().to_string(),
+    }
 }
 
 /// Shows `path` in the system file manager.
@@ -78,7 +100,9 @@ pub fn reveal(path: &Path) -> Result<(), String> {
     } else {
         Command::new("xdg-open").arg(path.parent().unwrap_or(path)).status()
     };
-    status.map_err(|e| e.to_string()).and_then(|s| if s.success() || cfg!(windows) { Ok(()) } else { Err(format!("the file manager reported {s}")) })
+    status
+        .map_err(|e| e.to_string())
+        .and_then(|s| if s.success() || cfg!(windows) { Ok(()) } else { Err(format!("the file manager reported {s}")) })
 }
 
 /// Unmounts and ejects the volume mounted at `root`, so it can be unplugged safely.

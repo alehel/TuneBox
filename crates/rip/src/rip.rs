@@ -66,7 +66,13 @@ pub fn rip(
         }
         let meta = request.info.track_meta(&request.toc, number);
         let mut report_progress = |fraction| {
-            progress(RipProgress { track: number, title: meta.title.clone(), index, count: request.tracks.len(), fraction })
+            progress(RipProgress {
+                track: number,
+                title: meta.title.clone(),
+                index,
+                count: request.tracks.len(),
+                fraction,
+            })
         };
         match rip_track(drive, request, number, &meta, cancel, &mut report_progress) {
             Ok(Some(path)) => match finish_track(&path, &meta, now) {

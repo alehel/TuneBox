@@ -1,0 +1,159 @@
+//! `tunebox --demo <folder> --screenshots <out>`: sets up each documented view in turn,
+//! captures the window and saves it as a PNG, then quits. The README's pictures come from here.
+
+use crate::app::TuneBoxApp;
+use crate::dialogs::{Dialog, GetInfoDialog, SmartPlaylistDialog};
+use crate::state::{SourceItem, ViewMode};
+use egui::ColorImage;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+use tunebox_engine::model::{PlaylistKind, TrackId};
+use tunebox_engine::{Source, TrackQuery};
+
+/// Frames to let a scene settle (layout, artwork, the player) before capturing it.
+const SETTLE_FRAMES: u32 = 40;
+
+struct Scene {
+    name: &'static str,
+    setup: fn(&mut TuneBoxApp),
+}
+
+const SCENES: [Scene; 7] = [
+    Scene { name: "tunebox-library", setup: library },
+    Scene { name: "tunebox-albums", setup: albums },
+    Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
+    Scene { name: "tunebox-smart-editor", setup: smart_editor },
+    Scene { name: "tunebox-get-info", setup: get_info },
+    Scene { name: "tunebox-cd-import", setup: cd },
+    Scene { name: "tunebox-device-sync", setup: device },
+];
+
+type Shot = Arc<Mutex<Option<Arc<ColorImage>>>>;
+
+pub struct ScreenshotRunner {
+    dir: PathBuf,
+    index: usize,
+    frames: u32,
+    requested: bool,
+    shot: Shot,
+}
+
+impl ScreenshotRunner {
+    pub fn new(dir: PathBuf) -> Self {
+        Self { dir, index: 0, frames: 0, requested: false, shot: Arc::new(Mutex::new(None)) }
+    }
+
+    /// Advances one frame. Returns `false` when every scene is saved.
+    pub fn step(&mut self, app: &mut TuneBoxApp) -> bool {
+        let Some(scene) = SCENES.get(self.index) else { return false };
+        let ctx = app.ctx().clone();
+        ctx.request_repaint();
+        if self.frames == 0 {
+            app.dialog = None;
+            (scene.setup)(app);
+        }
+        self.frames += 1;
+        if !self.requested && self.frames >= SETTLE_FRAMES && app.artwork.is_idle() {
+            let slot = Arc::clone(&self.shot);
+            let repaint = ctx.clone();
+            ctx.request_screenshot(move |image| {
+                *slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(image);
+                repaint.request_repaint();
+            });
+            self.requested = true;
+        }
+        let taken = self.shot.lock().unwrap_or_else(PoisonError::into_inner).take();
+        if let Some(image) = taken {
+            let path = self.dir.join(format!("{}.png", scene.name));
+            match save_png(&image, &path) {
+                Ok(()) => log::info!("saved {}", path.display()),
+                Err(e) => log::error!("could not save {}: {e}", path.display()),
+            }
+            self.index += 1;
+            self.frames = 0;
+            self.requested = false;
+        }
+        true
+    }
+}
+
+fn save_png(image: &ColorImage, path: &std::path::Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let bytes: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+    let [width, height] = image.size;
+    let buffer =
+        image::RgbaImage::from_raw(width as u32, height as u32, bytes).ok_or("the screenshot had the wrong size")?;
+    buffer.save(path).map_err(|e| e.to_string())
+}
+
+// ----- scenes -----
+
+fn find_track(app: &TuneBoxApp, title: &str) -> Option<(Vec<TrackId>, usize)> {
+    let rows = app.session.query(&TrackQuery::new(Source::Music));
+    let index = rows.iter().position(|id| app.session.track(*id).is_some_and(|t| t.title() == title))?;
+    Some((rows, index))
+}
+
+fn library(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    app.view.view_mode = ViewMode::List;
+    app.view.browse.genre = Some("Indie Folk".into());
+    if let Some((rows, index)) = find_track(app, "Lanterns on the Water") {
+        app.session.play_tracks(&rows, index);
+        app.session.seek(Duration::from_secs(74));
+        if let Some(id) = rows.get(index) {
+            app.view.selection.set([*id]);
+        }
+    }
+}
+
+fn albums(app: &mut TuneBoxApp) {
+    app.view.browse = Default::default();
+    app.view.selection.clear();
+    app.view.view_mode = ViewMode::Albums;
+}
+
+fn smart_playlist_id(app: &TuneBoxApp, name: &str) -> Option<tunebox_engine::model::PlaylistId> {
+    app.session.library().playlists().iter().find(|p| p.name == name).map(|p| p.id)
+}
+
+fn smart_playlist(app: &mut TuneBoxApp) {
+    app.view.view_mode = ViewMode::List;
+    if let Some(id) = smart_playlist_id(app, "Top 25 Most Played") {
+        app.view.select_source(SourceItem::Playlist(id));
+    }
+}
+
+fn smart_editor(app: &mut TuneBoxApp) {
+    let Some(id) = smart_playlist_id(app, "Road Trip Mix") else { return };
+    app.view.select_source(SourceItem::Playlist(id));
+    if let Some(playlist) = app.session.library().playlist(id)
+        && let PlaylistKind::Smart(rules) = &playlist.kind
+    {
+        app.dialog =
+            Some(Dialog::SmartPlaylist(Box::new(SmartPlaylistDialog::from_rules(Some(id), &playlist.name, rules))));
+    }
+}
+
+fn get_info(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    if let Some((rows, index)) = find_track(app, "Paper Boats")
+        && let Some(id) = rows.get(index)
+    {
+        app.view.selection.set([*id]);
+        app.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&app.session, vec![*id]))));
+    }
+}
+
+fn cd(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Cd);
+}
+
+fn device(app: &mut TuneBoxApp) {
+    if let Some(root) = app.demo.as_ref().map(|d| d.player_volume().root) {
+        app.view.select_source(SourceItem::Device(root));
+    }
+}

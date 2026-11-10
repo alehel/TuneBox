@@ -9,7 +9,14 @@
 //! 3. [`rip`] reads the chosen tracks, encodes them losslessly into the media folder, tags them
 //!    and returns them as `NewTrack`s for the library.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod discid;
 mod drive;

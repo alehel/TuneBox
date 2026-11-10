@@ -11,7 +11,14 @@
 //!    files so an unplugged player never holds a truncated track, writes M3U8 playlists, and
 //!    saves the manifest as it goes.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod device;
 mod discover;

@@ -109,7 +109,11 @@ pub fn plan(wanted: &[SyncItem], playlists: Vec<PlaylistFile>, manifest: &Device
         }
         result.final_paths.insert(item.id, item.clone());
         match manifest.files.get(&item.id) {
-            Some(synced) if synced.path == item.device_path && synced.source_size == item.size && synced.source_modified == item.modified => {
+            Some(synced)
+                if synced.path == item.device_path
+                    && synced.source_size == item.size
+                    && synced.source_modified == item.modified =>
+            {
                 result.unchanged += 1;
             }
             Some(synced) => {
@@ -157,7 +161,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut manifest = Device::register(dir.path(), "Test").unwrap().manifest;
         for (id, path, size) in entries {
-            manifest.files.insert(TrackId(*id), SyncedFile { path: (*path).into(), source_size: *size, source_modified: 100 });
+            manifest
+                .files
+                .insert(TrackId(*id), SyncedFile { path: (*path).into(), source_size: *size, source_modified: 100 });
         }
         manifest
     }

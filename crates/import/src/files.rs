@@ -6,7 +6,12 @@ use tunebox_model::{AudioFormat, TrackMeta, organize};
 
 /// Copies `source` to its organised place in `media_folder` and returns the new path. If a file
 /// of the same size is already there it is taken to be this file, imported before, and reused.
-pub fn copy_into_media_folder(source: &Path, meta: &TrackMeta, format: AudioFormat, media_folder: &Path) -> io::Result<PathBuf> {
+pub fn copy_into_media_folder(
+    source: &Path,
+    meta: &TrackMeta,
+    format: AudioFormat,
+    media_folder: &Path,
+) -> io::Result<PathBuf> {
     let fallback = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled");
     let extension = source.extension().and_then(|e| e.to_str()).map(str::to_lowercase);
     let extension = extension.as_deref().unwrap_or(format.extension());
@@ -61,6 +66,9 @@ mod tests {
         assert_eq!(first, media.join("A/B/T.mp3"));
         assert_eq!(copy_into_media_folder(&source, &meta, AudioFormat::Mp3, &media).unwrap(), first);
         std::fs::write(&source, b"different length").unwrap();
-        assert_eq!(copy_into_media_folder(&source, &meta, AudioFormat::Mp3, &media).unwrap(), media.join("A/B/T 1.mp3"));
+        assert_eq!(
+            copy_into_media_folder(&source, &meta, AudioFormat::Mp3, &media).unwrap(),
+            media.join("A/B/T 1.mp3")
+        );
     }
 }

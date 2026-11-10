@@ -3,7 +3,14 @@
 //! It opens the same library as the app (or the one given with `--library-dir`) through the
 //! same engine, so what it does is exactly what the app would do.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -194,7 +201,10 @@ fn print_tracks(session: &Session, ids: &[TrackId]) {
     for id in ids {
         let Some(track) = session.track(*id) else { continue };
         let cells: Vec<String> = columns.iter().map(|c| c.text(track)).collect();
-        println!("{:<36.36} {:>7} {:<24.24} {:<28.28} {:<5} {:>4}", cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]);
+        println!(
+            "{:<36.36} {:>7} {:<24.24} {:<28.28} {:<5} {:>4}",
+            cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]
+        );
     }
     println!("{}", session.summary(ids).label());
 }
@@ -271,12 +281,22 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
     session.refresh_devices(&tunebox_platform::volumes());
     if session.device(root).is_none() {
         // Not a removable volume the platform reports (a folder, for example): sync it anyway.
-        let volume = tunebox_engine::Volume { root: root.to_path_buf(), label: String::new(), total_bytes: u64::MAX, free_bytes: u64::MAX, removable: true };
+        let volume = tunebox_engine::Volume {
+            root: root.to_path_buf(),
+            label: String::new(),
+            total_bytes: u64::MAX,
+            free_bytes: u64::MAX,
+            removable: true,
+        };
         session.refresh_devices(&[volume]);
     }
     if !playlists.is_empty() {
         let ids = playlists.iter().map(|name| find_playlist(session, name)).collect::<Result<Vec<_>, _>>()?;
-        let mut settings = session.device(root).and_then(|d| d.device.as_ref()).map(|d| d.manifest.settings.clone()).unwrap_or_default();
+        let mut settings = session
+            .device(root)
+            .and_then(|d| d.device.as_ref())
+            .map(|d| d.manifest.settings.clone())
+            .unwrap_or_default();
         settings.mode = SyncMode::Playlists(ids);
         session.set_device_settings(root, settings).map_err(|e| e.to_string())?;
     }

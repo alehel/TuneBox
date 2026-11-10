@@ -1,9 +1,9 @@
 //! The audio CD in the drive: reading it, naming its tracks, and importing it.
 
+use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Outcome, Session};
-use crate::EngineError;
 use chrono::Utc;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -26,7 +26,11 @@ pub struct CdState {
 
 impl std::fmt::Debug for CdState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CdState").field("drive", &self.drive.name()).field("disc_id", &self.disc_id).field("info", &self.info).finish()
+        f.debug_struct("CdState")
+            .field("drive", &self.drive.name())
+            .field("disc_id", &self.disc_id)
+            .field("info", &self.info)
+            .finish()
     }
 }
 
@@ -106,6 +110,7 @@ impl Session {
     /// Forgets the disc (after the frontend ejects it).
     pub fn eject_disc(&mut self) {
         self.cd = None;
+        self.content_changed();
     }
 
     /// Replaces the album and track names (typed in, or chosen among lookup results).
@@ -113,6 +118,7 @@ impl Session {
         if let Some(cd) = self.cd.as_mut() {
             cd.info = info;
         }
+        self.content_changed();
     }
 
     pub fn set_cd_track_included(&mut self, index: usize, include: bool) {
@@ -139,9 +145,9 @@ impl Session {
     pub(crate) fn finish_lookup(&mut self, disc_id: &str, result: Result<Vec<DiscInfo>, String>) {
         let Some(cd) = self.cd.as_mut().filter(|cd| cd.disc_id == disc_id) else { return };
         match result {
-            Ok(found) if found.is_empty() => {
-                self.notices.push(Notice::info("This disc is not in the MusicBrainz database. You can type its names in."))
-            }
+            Ok(found) if found.is_empty() => self
+                .notices
+                .push(Notice::info("This disc is not in the MusicBrainz database. You can type its names in.")),
             Ok(mut found) => {
                 let mut best = found.remove(0);
                 // Keep a name for every track on this disc even if the release lists fewer.
@@ -161,8 +167,13 @@ impl Session {
             return Err(EngineError::Busy("Importing the CD"));
         }
         let cd = self.cd.as_ref().ok_or(EngineError::NoDisc)?;
-        let tracks: Vec<u8> =
-            cd.audio_numbers().into_iter().zip(&cd.include).filter(|(_, include)| **include).map(|(number, _)| number).collect();
+        let tracks: Vec<u8> = cd
+            .audio_numbers()
+            .into_iter()
+            .zip(&cd.include)
+            .filter(|(_, include)| **include)
+            .map(|(number, _)| number)
+            .collect();
         let request = RipRequest {
             toc: cd.toc.clone(),
             tracks,

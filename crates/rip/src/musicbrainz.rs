@@ -40,11 +40,8 @@ pub fn parse(json: &str, disc_id: &str) -> Result<Vec<DiscInfo>, LookupError> {
 
 fn release_info(release: &Release, disc_id: &str) -> Option<DiscInfo> {
     let medium_count = release.media.len() as u32;
-    let medium = release
-        .media
-        .iter()
-        .find(|m| m.discs.iter().any(|d| d.id == disc_id))
-        .or_else(|| release.media.first())?;
+    let medium =
+        release.media.iter().find(|m| m.discs.iter().any(|d| d.id == disc_id)).or_else(|| release.media.first())?;
     let artist = credit(&release.artist_credit);
     let compilation = artist == "Various Artists";
     let tracks = medium
@@ -62,7 +59,11 @@ fn release_info(release: &Release, disc_id: &str) -> Option<DiscInfo> {
         genre,
         year: release.date.get(..4).and_then(|y| y.parse().ok()),
         compilation,
-        disc: if medium_count > 1 { NumberOf { number: medium.position, total: Some(medium_count) } } else { NumberOf::default() },
+        disc: if medium_count > 1 {
+            NumberOf { number: medium.position, total: Some(medium_count) }
+        } else {
+            NumberOf::default()
+        },
         tracks,
     })
 }
@@ -167,7 +168,10 @@ mod tests {
         assert_eq!(info.year, Some(2009));
         assert_eq!(info.genre, "Indie Folk");
         assert_eq!(info.disc, NumberOf::new(2, 2));
-        assert_eq!(info.tracks, [("Low Tide".into(), String::new()), ("Breakwater".into(), "The Lanterns feat. Mara".into())]);
+        assert_eq!(
+            info.tracks,
+            [("Low Tide".into(), String::new()), ("Breakwater".into(), "The Lanterns feat. Mara".into())]
+        );
     }
 
     #[test]

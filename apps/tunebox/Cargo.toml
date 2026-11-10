@@ -1,5 +1,15 @@
 [package]
 name = "tunebox"
+description = "TuneBox: your music library, CD importing and player syncing."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
 [dependencies]
+tunebox-ui = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }

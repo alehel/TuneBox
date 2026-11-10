@@ -1,5 +1,25 @@
 [package]
 name = "tunebox-ui"
+description = "The TuneBox desktop interface, in egui."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["sound", "drives", "musicbrainz"]
+sound = ["tunebox-engine/sound"]
+drives = ["tunebox-engine/drives"]
+musicbrainz = ["tunebox-engine/musicbrainz"]
+
 [dependencies]
+tunebox-engine = { workspace = true }
+tunebox-platform = { workspace = true }
+egui = { workspace = true }
+eframe = { workspace = true }
+image = { workspace = true }
+rfd = { workspace = true }
+log = { workspace = true }

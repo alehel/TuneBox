@@ -12,7 +12,14 @@
 //!          ◀──status / events───                                         (cpal or NullOutput)
 //! ```
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod convert;
 mod engine;
@@ -20,8 +27,8 @@ mod output;
 mod player;
 mod queue;
 
-pub use output::{NullOutput, OutputFactory, OutputFormat, Shared};
 #[cfg(feature = "cpal")]
 pub use output::CpalOutput;
+pub use output::{NullOutput, OutputFactory, OutputFormat, Shared};
 pub use player::{PlayState, Player, PlayerEvent, Status};
 pub use queue::{PlayQueue, RepeatMode};

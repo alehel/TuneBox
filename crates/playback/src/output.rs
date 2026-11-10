@@ -81,7 +81,12 @@ pub trait OutputFactory: Send + 'static {
     fn negotiate(&mut self, wanted: OutputFormat) -> Result<OutputFormat, String>;
 
     /// Starts an output in `format` that drains `queue`. Dropping the returned value stops it.
-    fn start(&mut self, format: OutputFormat, queue: Consumer<f32>, shared: Arc<Shared>) -> Result<Box<dyn Any>, String>;
+    fn start(
+        &mut self,
+        format: OutputFormat,
+        queue: Consumer<f32>,
+        shared: Arc<Shared>,
+    ) -> Result<Box<dyn Any>, String>;
 }
 
 /// An output with no sound device: a thread drains the queue at `speed` times real time.
@@ -113,11 +118,17 @@ impl OutputFactory for NullOutput {
         Ok(wanted)
     }
 
-    fn start(&mut self, format: OutputFormat, mut queue: Consumer<f32>, shared: Arc<Shared>) -> Result<Box<dyn Any>, String> {
+    fn start(
+        &mut self,
+        format: OutputFormat,
+        mut queue: Consumer<f32>,
+        shared: Arc<Shared>,
+    ) -> Result<Box<dyn Any>, String> {
         const FRAMES: usize = 512;
         let stop = Arc::new(AtomicBool::new(false));
         let stop_flag = Arc::clone(&stop);
-        let period = Duration::from_secs_f64(FRAMES as f64 / f64::from(format.sample_rate.max(1)) / self.speed.max(0.001));
+        let period =
+            Duration::from_secs_f64(FRAMES as f64 / f64::from(format.sample_rate.max(1)) / self.speed.max(0.001));
         std::thread::Builder::new()
             .name("tunebox-null-output".into())
             .spawn(move || {
@@ -152,7 +163,9 @@ mod cpal_output {
 
     impl CpalOutput {
         fn device() -> Result<cpal::Device, String> {
-            cpal::default_host().default_output_device().ok_or_else(|| "No sound output device is available.".to_owned())
+            cpal::default_host()
+                .default_output_device()
+                .ok_or_else(|| "No sound output device is available.".to_owned())
         }
     }
 
@@ -176,7 +189,12 @@ mod cpal_output {
             Ok(OutputFormat { sample_rate: config.sample_rate(), channels: config.channels() })
         }
 
-        fn start(&mut self, format: OutputFormat, queue: Consumer<f32>, shared: Arc<Shared>) -> Result<Box<dyn Any>, String> {
+        fn start(
+            &mut self,
+            format: OutputFormat,
+            queue: Consumer<f32>,
+            shared: Arc<Shared>,
+        ) -> Result<Box<dyn Any>, String> {
             let device = Self::device()?;
             let config = StreamConfig {
                 channels: format.channels,
@@ -196,7 +214,12 @@ mod cpal_output {
 
     /// A stream whose callback fills an `f32` scratch buffer through [`Shared::fill`] and
     /// converts it to the device's sample type.
-    fn build<T>(device: &cpal::Device, config: &StreamConfig, mut queue: Consumer<f32>, shared: Arc<Shared>) -> Result<cpal::Stream, String>
+    fn build<T>(
+        device: &cpal::Device,
+        config: &StreamConfig,
+        mut queue: Consumer<f32>,
+        shared: Arc<Shared>,
+    ) -> Result<cpal::Stream, String>
     where
         T: SizedSample + FromSample<f32>,
     {

@@ -10,7 +10,14 @@
 //! [`commands`] lists every user-facing action with its label, menu and shortcut, so menus,
 //! keyboard handling and the command line agree.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod cd;
 pub mod commands;
@@ -41,3 +48,4 @@ pub use tunebox_model as model;
 pub use tunebox_playback::{NullOutput, PlayState, Player, RepeatMode};
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, VirtualDrive};
 pub use tunebox_sync::{Device, SyncMode, SyncSettings, Volume};
+pub use tunebox_tags::{Artwork, read_artwork};

@@ -29,7 +29,12 @@ const SAVE_EVERY: usize = 20;
 
 /// Carries out `plan` on `device`, updating and saving its manifest. Individual files that fail
 /// are reported and skipped; the manifest always reflects what is really on the device.
-pub fn execute(device: &mut Device, plan: &SyncPlan, cancel: &AtomicBool, progress: &mut dyn FnMut(SyncProgress)) -> Result<SyncReport, DeviceError> {
+pub fn execute(
+    device: &mut Device,
+    plan: &SyncPlan,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(SyncProgress),
+) -> Result<SyncReport, DeviceError> {
     let mut report = SyncReport::default();
     let total = plan.deletes.len() + plan.copies.len();
     let mut done = 0;
@@ -58,7 +63,11 @@ pub fn execute(device: &mut Device, plan: &SyncPlan, cancel: &AtomicBool, progre
             Ok(()) => {
                 device.manifest.files.insert(
                     copy.item.id,
-                    SyncedFile { path: copy.item.device_path.clone(), source_size: copy.item.size, source_modified: copy.item.modified },
+                    SyncedFile {
+                        path: copy.item.device_path.clone(),
+                        source_size: copy.item.size,
+                        source_modified: copy.item.modified,
+                    },
                 );
                 report.copied += 1;
             }
@@ -79,7 +88,10 @@ pub fn execute(device: &mut Device, plan: &SyncPlan, cancel: &AtomicBool, progre
 }
 
 fn device_path(root: &Path, relative: &str) -> PathBuf {
-    relative.split('/').filter(|part| !part.is_empty() && *part != "..").fold(root.to_path_buf(), |path, part| path.join(part))
+    relative
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != "..")
+        .fold(root.to_path_buf(), |path, part| path.join(part))
 }
 
 /// Copies through a `.part` file, renamed only once complete.
@@ -128,7 +140,10 @@ fn write_playlists(device: &mut Device, plan: &SyncPlan, failures: &mut Vec<Stri
         let name = tunebox_model::organize::component(&playlist.name, "Playlist");
         let relative = format!("{folder}/{name}.m3u8");
         let path = device_path(&device.root, &relative);
-        let result = path.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|()| craft_atomic::atomic_write(&path, text.as_bytes()));
+        let result = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| craft_atomic::atomic_write(&path, text.as_bytes()));
         match result {
             Ok(()) => written.push(relative),
             Err(e) => failures.push(format!("Could not write playlist {}: {e}", playlist.name)),
@@ -176,7 +191,10 @@ mod tests {
         assert_eq!((report.copied, report.deleted, report.playlists_written), (2, 0, 1));
         assert_eq!(std::fs::read(player.path().join("Music/Artist/Two.flac")).unwrap().len(), 102);
         let m3u = std::fs::read_to_string(player.path().join("Playlists/Mix_Tape.m3u8")).unwrap();
-        assert_eq!(m3u, "#EXTM3U\n#EXTINF:61,Artist - Two\n../Music/Artist/Two.flac\n#EXTINF:61,Artist - One\n../Music/Artist/One.flac\n");
+        assert_eq!(
+            m3u,
+            "#EXTM3U\n#EXTINF:61,Artist - Two\n../Music/Artist/Two.flac\n#EXTINF:61,Artist - One\n../Music/Artist/One.flac\n"
+        );
 
         // The manifest survives a reconnect, and dropping a track deletes only that file.
         let mut device = Device::open(player.path()).unwrap().unwrap();

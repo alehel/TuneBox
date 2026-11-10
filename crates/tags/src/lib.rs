@@ -5,7 +5,14 @@
 //! (ID3v2, MP4 atoms, Vorbis comments, RIFF INFO…) are lofty's business; this crate maps them
 //! onto TuneBox's model and nothing else.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 use lofty::config::WriteOptions;
 use lofty::file::FileType;

@@ -1,6 +1,22 @@
 [package]
 name = "xtask"
+description = "TuneBox build tooling: quality gates, the layering check, the demo library and screenshots."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 publish = false
+
+[lints]
+workspace = true
+
 [dependencies]
+tunebox-model = { workspace = true }
+tunebox-library = { workspace = true }
+tunebox-tags = { workspace = true }
+tunebox-audio = { workspace = true }
+tunebox-sync = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+image = { workspace = true }
+serde_json = { workspace = true }

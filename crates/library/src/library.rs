@@ -4,7 +4,9 @@ use crate::LibraryError;
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use tunebox_model::{FileInfo, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, Track, TrackId, TrackMeta};
+use tunebox_model::{
+    FileInfo, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, Track, TrackId, TrackMeta,
+};
 
 /// A file to add: everything about a track except what the library assigns.
 #[derive(Clone, Debug, PartialEq, Eq)]

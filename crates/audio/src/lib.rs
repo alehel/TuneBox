@@ -5,7 +5,14 @@
 //! craft-audio, which decodes WAV, AIFF and AAC natively and MP3, FLAC, ALAC and Vorbis through
 //! symphonia. Swapping codec back-ends later touches this crate alone.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod decode;
 mod encode;

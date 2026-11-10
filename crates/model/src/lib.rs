@@ -5,7 +5,14 @@
 //! crate is pure: no file system, no threads, no clocks (callers pass "now" in), so everything
 //! here is deterministic and unit-tested.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod column;
 mod display;

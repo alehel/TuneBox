@@ -1,9 +1,9 @@
 //! Players: finding them, setting them up, and syncing them.
 
+use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Outcome, Session};
-use crate::EngineError;
 use chrono::Utc;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -42,7 +42,12 @@ impl Session {
     /// platform for them every few seconds).
     pub fn refresh_devices(&mut self, volumes: &[Volume]) {
         let found = tunebox_sync::scan(volumes);
-        self.devices = found.into_iter().map(|c| DeviceEntry { volume: c.volume, device: c.device }).collect();
+        let devices: Vec<DeviceEntry> =
+            found.into_iter().map(|c| DeviceEntry { volume: c.volume, device: c.device }).collect();
+        if devices != self.devices {
+            self.devices = devices;
+            self.content_changed();
+        }
     }
 
     /// Sets up the player at `root` for syncing under `name` ("Set up as a TuneBox device").
@@ -51,6 +56,7 @@ impl Session {
         if let Some(entry) = self.devices.iter_mut().find(|d| d.volume.root == root) {
             entry.device = Some(device);
         }
+        self.content_changed();
         Ok(())
     }
 
@@ -58,18 +64,23 @@ impl Session {
     pub fn set_device_settings(&mut self, root: &Path, settings: SyncSettings) -> Result<(), EngineError> {
         let device = self.managed_device_mut(root)?;
         device.manifest.settings = settings;
-        device.save().map_err(|e| EngineError::Device(e.to_string()))
+        let saved = device.save().map_err(|e| EngineError::Device(e.to_string()));
+        self.content_changed();
+        saved
     }
 
     pub fn rename_device(&mut self, root: &Path, name: &str) -> Result<(), EngineError> {
         let device = self.managed_device_mut(root)?;
         device.manifest.name = name.trim().to_owned();
-        device.save().map_err(|e| EngineError::Device(e.to_string()))
+        let saved = device.save().map_err(|e| EngineError::Device(e.to_string()));
+        self.content_changed();
+        saved
     }
 
     /// Drops a player from the list (after the frontend has ejected it).
     pub fn forget_device(&mut self, root: &Path) {
         self.devices.retain(|d| d.volume.root != root);
+        self.content_changed();
     }
 
     fn managed_device_mut(&mut self, root: &Path) -> Result<&mut Device, EngineError> {
@@ -85,8 +96,12 @@ impl Session {
         if self.jobs.is_running(JobKind::Sync) {
             return Err(EngineError::Busy("A sync"));
         }
-        let entry = self.device(root).ok_or_else(|| EngineError::Device("The player is no longer connected.".into()))?;
-        let mut device = entry.device.clone().ok_or_else(|| EngineError::Device("This player is not set up for syncing yet.".into()))?;
+        let entry =
+            self.device(root).ok_or_else(|| EngineError::Device("The player is no longer connected.".into()))?;
+        let mut device = entry
+            .device
+            .clone()
+            .ok_or_else(|| EngineError::Device("This player is not set up for syncing yet.".into()))?;
         let free_bytes = entry.volume.free_bytes;
         let settings = device.manifest.settings.clone();
         let (tracks, playlists) = self.sync_selection(&settings);
@@ -94,8 +109,10 @@ impl Session {
         let title = format!("Syncing “{}”", device.manifest.name);
         Ok(self.jobs.spawn(JobKind::Sync, title, move |ctx| {
             ctx.progress(0.0, "Preparing to sync…");
-            let items: Vec<SyncItem> =
-                tracks.iter().map(|t| SyncItem::from_track(t, &settings.music_folder, modified_secs(&t.location))).collect();
+            let items: Vec<SyncItem> = tracks
+                .iter()
+                .map(|t| SyncItem::from_track(t, &settings.music_folder, modified_secs(&t.location)))
+                .collect();
             let plan = tunebox_sync::plan(&items, playlists, &device.manifest);
             let result = if plan.fits(free_bytes) {
                 tunebox_sync::execute(&mut device, &plan, ctx.cancel_flag(), &mut |p| {

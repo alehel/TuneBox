@@ -5,7 +5,9 @@
 //! rules, so a smart playlist shows the same tracks until the library or the seed changes.
 
 use crate::{Track, TrackId};
-use chrono::{DateTime, Months, NaiveDate, TimeDelta, Utc};
+/// Calendar dates in date rules.
+pub use chrono::NaiveDate;
+use chrono::{DateTime, Months, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -193,7 +195,9 @@ impl SmartRules {
 impl Rule {
     pub fn matches(&self, track: &Track, now: DateTime<Utc>) -> bool {
         match self {
-            Rule::Text { field, op, value } => text_matches(&text_value(*field, track).to_lowercase(), *op, &value.to_lowercase()),
+            Rule::Text { field, op, value } => {
+                text_matches(&text_value(*field, track).to_lowercase(), *op, &value.to_lowercase())
+            }
             Rule::Number { field, op } => number_value(*field, track).is_some_and(|v| number_matches(v, *op)),
             Rule::Date { field, op } => date_matches(date_value(*field, track), *op, now),
         }
@@ -347,10 +351,7 @@ pub fn presets() -> Vec<(&'static str, SmartRules)> {
             "Classical Music",
             rules(vec![Rule::Text { field: TextField::Genre, op: TextOp::Is, value: "Classical".into() }], None),
         ),
-        (
-            "My Top Rated",
-            rules(vec![Rule::Number { field: NumberField::Rating, op: NumberOp::GreaterThan(3) }], None),
-        ),
+        ("My Top Rated", rules(vec![Rule::Number { field: NumberField::Rating, op: NumberOp::GreaterThan(3) }], None)),
         (
             "Recently Added",
             rules(

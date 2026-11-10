@@ -107,7 +107,13 @@ impl Shortcut {
             Key::Letter(c) => c.to_ascii_uppercase().to_string(),
             Key::Comma => ",".into(),
             Key::Space => "Space".into(),
-            Key::Delete => if mac { "⌫".into() } else { "Delete".into() },
+            Key::Delete => {
+                if mac {
+                    "⌫".into()
+                } else {
+                    "Delete".into()
+                }
+            }
             Key::Left => "←".into(),
             Key::Right => "→".into(),
             Key::Up => "↑".into(),
@@ -176,26 +182,62 @@ const fn after_separator(mut spec: CommandSpec) -> CommandSpec {
 pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::NewPlaylist, "New Playlist", Menu::File, Some(Shortcut::cmd(Key::Letter('n'))), Needs::Nothing),
     spec(CommandId::NewPlaylistFromSelection, "New Playlist from Selection", Menu::File, None, Needs::Selection),
-    spec(CommandId::NewSmartPlaylist, "New Smart Playlist…", Menu::File, Some(Shortcut::cmd_shift(Key::Letter('n'))), Needs::Nothing),
-    after_separator(spec(CommandId::AddToLibrary, "Add to Library…", Menu::File, Some(Shortcut::cmd(Key::Letter('o'))), Needs::Nothing)),
+    spec(
+        CommandId::NewSmartPlaylist,
+        "New Smart Playlist…",
+        Menu::File,
+        Some(Shortcut::cmd_shift(Key::Letter('n'))),
+        Needs::Nothing,
+    ),
+    after_separator(spec(
+        CommandId::AddToLibrary,
+        "Add to Library…",
+        Menu::File,
+        Some(Shortcut::cmd(Key::Letter('o'))),
+        Needs::Nothing,
+    )),
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
     spec(CommandId::Eject, "Eject", Menu::File, Some(Shortcut::cmd(Key::Letter('e'))), Needs::Ejectable),
-    after_separator(spec(CommandId::ShowInFolder, "Show in Folder", Menu::File, Some(Shortcut::cmd_shift(Key::Letter('r'))), Needs::SingleSelection)),
+    after_separator(spec(
+        CommandId::ShowInFolder,
+        "Show in Folder",
+        Menu::File,
+        Some(Shortcut::cmd_shift(Key::Letter('r'))),
+        Needs::SingleSelection,
+    )),
     spec(CommandId::Quit, "Quit TuneBox", Menu::File, Some(Shortcut::cmd(Key::Letter('q'))), Needs::Nothing),
     spec(CommandId::SelectAll, "Select All", Menu::Edit, Some(Shortcut::cmd(Key::Letter('a'))), Needs::Nothing),
     spec(CommandId::Delete, "Delete", Menu::Edit, Some(Shortcut::plain(Key::Delete)), Needs::Selection),
     spec(CommandId::GetInfo, "Get Info", Menu::Edit, Some(Shortcut::cmd(Key::Letter('i'))), Needs::Selection),
     spec(CommandId::Find, "Find", Menu::Edit, Some(Shortcut::cmd(Key::Letter('f'))), Needs::Nothing),
-    after_separator(spec(CommandId::Preferences, "Preferences…", Menu::Edit, Some(Shortcut::cmd(Key::Comma)), Needs::Nothing)),
+    after_separator(spec(
+        CommandId::Preferences,
+        "Preferences…",
+        Menu::Edit,
+        Some(Shortcut::cmd(Key::Comma)),
+        Needs::Nothing,
+    )),
     spec(CommandId::AsList, "as List", Menu::View, Some(Shortcut::cmd(Key::Letter('1'))), Needs::Nothing),
     spec(CommandId::AsAlbums, "as Album Grid", Menu::View, Some(Shortcut::cmd(Key::Letter('2'))), Needs::Nothing),
-    after_separator(spec(CommandId::ShowBrowser, "Column Browser", Menu::View, Some(Shortcut::cmd(Key::Letter('b'))), Needs::Nothing)),
+    after_separator(spec(
+        CommandId::ShowBrowser,
+        "Column Browser",
+        Menu::View,
+        Some(Shortcut::cmd(Key::Letter('b'))),
+        Needs::Nothing,
+    )),
     spec(CommandId::PlayPause, "Play / Pause", Menu::Controls, Some(Shortcut::plain(Key::Space)), Needs::Nothing),
     spec(CommandId::NextTrack, "Next", Menu::Controls, Some(Shortcut::cmd(Key::Right)), Needs::Nothing),
     spec(CommandId::PreviousTrack, "Previous", Menu::Controls, Some(Shortcut::cmd(Key::Left)), Needs::Nothing),
-    after_separator(spec(CommandId::VolumeUp, "Increase Volume", Menu::Controls, Some(Shortcut::cmd(Key::Up)), Needs::Nothing)),
+    after_separator(spec(
+        CommandId::VolumeUp,
+        "Increase Volume",
+        Menu::Controls,
+        Some(Shortcut::cmd(Key::Up)),
+        Needs::Nothing,
+    )),
     spec(CommandId::VolumeDown, "Decrease Volume", Menu::Controls, Some(Shortcut::cmd(Key::Down)), Needs::Nothing),
     after_separator(spec(CommandId::Shuffle, "Shuffle", Menu::Controls, None, Needs::Nothing)),
     spec(CommandId::Repeat, "Repeat", Menu::Controls, None, Needs::Nothing),

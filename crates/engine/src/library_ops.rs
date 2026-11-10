@@ -1,9 +1,9 @@
 //! Changing the library: importing, editing, rating, removing, and playlists.
 
+use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
 use crate::session::{Outcome, Session};
-use crate::EngineError;
 use chrono::Utc;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -21,8 +21,10 @@ impl Session {
             return Err(EngineError::Busy("An import"));
         }
         let known: HashSet<PathBuf> = self.library.tracks().map(|t| t.location.clone()).collect();
-        let options =
-            ImportOptions { media_folder: self.prefs.media_folder.clone(), copy_to_media_folder: self.prefs.copy_to_media_folder };
+        let options = ImportOptions {
+            media_folder: self.prefs.media_folder.clone(),
+            copy_to_media_folder: self.prefs.copy_to_media_folder,
+        };
         Ok(self.jobs.spawn(JobKind::Import, "Adding to Library".into(), move |ctx| {
             ctx.progress(0.0, "Looking for music…");
             let files = tunebox_import::find_audio_files(&paths, ctx.cancel_flag());
@@ -61,9 +63,11 @@ impl Session {
     /// Edits a track's details, writing them into its file as well. If the file cannot be
     /// written (read-only, missing) the library still takes the edit and a warning says why.
     pub fn edit_track(&mut self, id: TrackId, meta: TrackMeta) -> Result<(), EngineError> {
-        let location = self.library.track(id).map(|t| t.location.clone()).ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
+        let location =
+            self.library.track(id).map(|t| t.location.clone()).ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
         if let Err(e) = tunebox_tags::write(&location, &meta) {
-            self.notices.push(Notice::warning(format!("The details were saved in the library but not in the file: {e}")));
+            self.notices
+                .push(Notice::warning(format!("The details were saved in the library but not in the file: {e}")));
         }
         self.library.set_meta(id, meta)?;
         self.library_changed();

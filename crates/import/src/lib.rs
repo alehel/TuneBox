@@ -6,7 +6,14 @@
 //! this crate never touches the library itself, so it can run on a worker thread while the
 //! library stays with its single owner.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 mod files;
 mod scan;
@@ -127,14 +134,18 @@ mod tests {
         assert_eq!(files.len(), 2);
         let options = ImportOptions { media_folder: media.path().to_path_buf(), copy_to_media_folder: true };
         let mut calls = 0;
-        let report = import(&files, &HashSet::new(), &options, Utc::now(), &AtomicBool::new(false), &mut |_| calls += 1);
+        let report =
+            import(&files, &HashSet::new(), &options, Utc::now(), &AtomicBool::new(false), &mut |_| calls += 1);
         assert_eq!(calls, 2);
         assert!(report.failures.is_empty(), "{:?}", report.failures);
         let mut locations: Vec<_> = report.tracks.iter().map(|t| t.location.clone()).collect();
         locations.sort();
         assert_eq!(
             locations,
-            [media.path().join("Night Ferry/Harbour/01 Departure.flac"), media.path().join("Night Ferry/Harbour/02 Arrival.flac")]
+            [
+                media.path().join("Night Ferry/Harbour/01 Departure.flac"),
+                media.path().join("Night Ferry/Harbour/02 Arrival.flac")
+            ]
         );
         assert!(locations.iter().all(|p| p.exists()));
     }
@@ -158,7 +169,14 @@ mod tests {
     #[test]
     fn cancel_stops_the_import() {
         let options = ImportOptions { media_folder: PathBuf::from("/nowhere"), copy_to_media_folder: false };
-        let report = import(&[PathBuf::from("/x.mp3")], &HashSet::new(), &options, Utc::now(), &AtomicBool::new(true), &mut |_| {});
+        let report = import(
+            &[PathBuf::from("/x.mp3")],
+            &HashSet::new(),
+            &options,
+            Utc::now(),
+            &AtomicBool::new(true),
+            &mut |_| {},
+        );
         assert!(report.cancelled);
         assert!(report.failures.is_empty());
     }

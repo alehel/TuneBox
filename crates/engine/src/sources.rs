@@ -85,7 +85,8 @@ impl Session {
     pub fn browser(&self, query: &TrackQuery) -> Browser {
         let search = Query::new(&query.search, query.scope);
         let ids = self.source_tracks(&query.source);
-        let tracks: Vec<_> = ids.iter().filter_map(|id| self.library.track(*id)).filter(|t| search.matches(t)).collect();
+        let tracks: Vec<_> =
+            ids.iter().filter_map(|id| self.library.track(*id)).filter(|t| search.matches(t)).collect();
         Browser::build(&tracks, &query.browse)
     }
 

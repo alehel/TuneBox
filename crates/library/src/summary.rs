@@ -26,7 +26,12 @@ impl Summary {
             return String::new();
         }
         let noun = if self.count == 1 { "song" } else { "songs" };
-        format!("{} {noun}, {}, {}", group_thousands(self.count), format_total_time(self.duration), format_bytes(self.bytes))
+        format!(
+            "{} {noun}, {}, {}",
+            group_thousands(self.count),
+            format_total_time(self.duration),
+            format_bytes(self.bytes)
+        )
     }
 }
 
@@ -34,7 +39,7 @@ fn group_thousands(n: usize) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);

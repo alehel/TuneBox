@@ -3,18 +3,18 @@
 //! Its methods are grouped by subject in sibling modules (`library_ops`, `playback`, `sources`,
 //! `devices`, `cd`), each adding an `impl Session` block.
 
+use crate::EngineError;
 use crate::cd::CdState;
 use crate::devices::DeviceEntry;
 use crate::jobs::{JobId, JobKind, JobStatus, Jobs};
 use crate::notices::Notice;
 use crate::playback::PlaybackState;
 use crate::prefs::Preferences;
-use crate::EngineError;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tunebox_import::ImportReport;
-use tunebox_library::store::{self, StoreError};
 use tunebox_library::Library;
+use tunebox_library::store::{self, StoreError};
 use tunebox_playback::Player;
 #[cfg(feature = "musicbrainz")]
 use tunebox_rip::DiscInfo;
@@ -38,9 +38,15 @@ pub(crate) enum Outcome {
     Imported(ImportReport),
     DiscRead(Result<Option<CdState>, String>),
     #[cfg(feature = "musicbrainz")]
-    NamesFound { disc_id: String, result: Result<Vec<DiscInfo>, String> },
+    NamesFound {
+        disc_id: String,
+        result: Result<Vec<DiscInfo>, String>,
+    },
     Ripped(RipReport),
-    Synced { root: PathBuf, result: Result<(Device, SyncReport), String> },
+    Synced {
+        root: PathBuf,
+        result: Result<(Device, SyncReport), String>,
+    },
 }
 
 /// One listener's TuneBox: the library and everything acting on it.
@@ -55,6 +61,8 @@ pub struct Session {
     pub(crate) notices: Vec<Notice>,
     /// When the library first changed since it was last saved.
     unsaved_since: Option<Instant>,
+    /// Bumped whenever anything a view shows may have changed (see [`Session::revision`]).
+    revision: u64,
 }
 
 impl Session {
@@ -89,6 +97,7 @@ impl Session {
             cd: None,
             notices,
             unsaved_since: None,
+            revision: 0,
         })
     }
 
@@ -116,6 +125,18 @@ impl Session {
     /// Marks the library as changed; it is saved shortly after.
     pub(crate) fn library_changed(&mut self) {
         self.unsaved_since.get_or_insert_with(Instant::now);
+        self.content_changed();
+    }
+
+    /// Notes that something views show (tracks, playlists, devices, the disc) changed.
+    pub(crate) fn content_changed(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// A number that changes whenever the library, the devices or the disc change, so a
+    /// frontend can cache what it derives from them (sorted rows, the browser) until it does.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     pub fn has_unsaved_changes(&self) -> bool {
@@ -150,6 +171,7 @@ impl Session {
     }
 
     fn apply_outcome(&mut self, outcome: Outcome) {
+        self.content_changed();
         match outcome {
             Outcome::Imported(report) => self.finish_import(report),
             Outcome::DiscRead(result) => self.finish_disc_read(result),

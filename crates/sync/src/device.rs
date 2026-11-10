@@ -106,7 +106,8 @@ impl Device {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
-        let manifest: DeviceManifest = serde_json::from_slice(&bytes).map_err(|e| DeviceError::Damaged(e.to_string()))?;
+        let manifest: DeviceManifest =
+            serde_json::from_slice(&bytes).map_err(|e| DeviceError::Damaged(e.to_string()))?;
         if manifest.format != FORMAT {
             return Err(DeviceError::Damaged(format!("unexpected format \"{}\"", manifest.format)));
         }
@@ -165,7 +166,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(Device::open(dir.path()).unwrap(), None);
         let mut device = Device::register(dir.path(), "Pocket Player").unwrap();
-        device.manifest.files.insert(TrackId(7), SyncedFile { path: "Music/a.flac".into(), source_size: 10, source_modified: 1 });
+        device
+            .manifest
+            .files
+            .insert(TrackId(7), SyncedFile { path: "Music/a.flac".into(), source_size: 10, source_modified: 1 });
         device.save().unwrap();
         let renamed = Device::register(dir.path(), "Running Player").unwrap();
         assert_eq!(renamed.manifest.name, "Running Player");
