@@ -1,0 +1,100 @@
+# TODO
+
+What TuneBox lacks or has not proven yet. What already works is described feature by feature in
+[docs/feature-parity.md](docs/feature-parity.md). Tick an item off when it ships, with its tests.
+
+## Top priorities
+
+1. CI on Linux, macOS and Windows.
+2. Japanese, Chinese and Korean text (a system font as fallback).
+3. Adding and changing album artwork.
+4. MTP players.
+5. Gapless playback and volume levelling.
+6. Installers.
+7. Undo.
+
+## Not yet verified
+
+The biggest risk: these parts are built but have never run where it counts.
+
+- [ ] Run on macOS and Windows. All testing so far is on Linux; the Windows code compiles
+      (and passes Clippy) for the Windows target, but has never run.
+- [ ] Set up CI (`.github/workflows`) building and testing on all three systems, so a broken
+      Windows or macOS build is caught when it happens.
+- [ ] Try real hardware: a CD drive, a portable player, a sound card, a NAS. All of these have
+      only been simulated.
+- [ ] Open the native file dialogs (Add Folder, Locate…, the startup error box). They have never
+      been opened.
+- [ ] Measure large libraries (tens of thousands of songs): the library is one JSON file,
+      rewritten about 2 seconds after each change, and the startup file check looks at every
+      song.
+- [ ] Check Opus playback. Opus files import and their tags are read, but the decoder
+      (symphonia, through craft-audio) has no Opus support, so they probably do not play.
+
+## Playback
+
+- [ ] Gapless playback.
+- [ ] Crossfade.
+- [ ] Volume levelling (Sound Check / ReplayGain).
+- [ ] Equaliser.
+- [ ] An editable Up Next queue, and a party-shuffle mode in the manner of iTunes DJ.
+- [ ] Media keys and the system's Now Playing (MPRIS on Linux, Now Playing on macOS, media
+      controls on Windows).
+- [ ] Full-screen visualizer.
+- [ ] Visualizer plug-ins loaded at run time (WebAssembly); today a new look is compiled in.
+
+## Library and editing
+
+- [ ] Add and change album artwork. `tunebox_tags::write_artwork` exists but nothing uses it.
+- [ ] Undo for edits, deletes and removing songs from playlists.
+- [ ] Drag files in from Finder or Explorer.
+- [ ] Drag to reorder songs in a playlist (the engine supports it; the list does not yet).
+- [ ] Playlist folders.
+- [ ] Smart playlists that are not live (a snapshot that does not update).
+- [ ] Import and export playlists as M3U. Today playlists are only written to players during
+      sync.
+- [ ] Show Duplicates.
+- [ ] Keep the media folder organised: rename and move files when their tags change.
+- [ ] Consolidate the library: copy every song into the media folder.
+- [ ] Import an existing iTunes library (iTunes Library XML).
+- [ ] Show lyrics while a song plays (they can be edited, not viewed).
+
+## CD import
+
+- [ ] AAC and MP3 encoding (lossless only today: FLAC, WAV, AIFF). Waits for permissively
+      licensed pure-Rust encoders.
+- [ ] AccurateRip verification that a rip is error-free.
+- [ ] Play a CD directly.
+- [ ] Cover art from the Cover Art Archive.
+
+## Portable players
+
+- [ ] MTP players. Many newer players (Android-based ones, recent Sony Walkmans) only connect
+      this way; TuneBox syncs mass-storage players only.
+- [ ] Convert songs to a smaller format for the player.
+- [ ] Manage songs on the player by hand (today it is sync only).
+
+## Interface
+
+- [ ] Japanese, Chinese and Korean text: the bundled fonts do not cover them, so such names
+      show as boxes. Load a system font as fallback (see `crates/ui/src/fonts.rs`).
+- [ ] The app icon: waiting on the source image.
+- [ ] Dark mode.
+- [ ] Translations (English only today).
+- [ ] Screen-reader support (enable egui's AccessKit integration).
+- [ ] Cover Flow and an album-list view.
+
+## Smaller limits
+
+- [ ] While the app is open, only read-only `tunebox-cli` commands work; commands that change
+      the library are refused by the library lock.
+- [ ] Windows: drives mapped only in an administrator session are not seen (`net use` lists the
+      current session's mappings).
+- [ ] Locate… does not open the file picker in the right folder for a song on a share that is
+      not connected (on purpose, since looking there could hang).
+
+## Distribution
+
+- [ ] Installers: `.dmg` (macOS), `.msi` (Windows), AppImage or Flatpak (Linux).
+- [ ] Code signing and macOS notarisation, so systems do not warn on first launch.
+- [ ] An update mechanism.

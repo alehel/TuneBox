@@ -12,7 +12,6 @@ radio and sharing are out of scope.
 |---|---|---|
 | Add files and folders to the library | Shipped | Played in place by default; optionally copied into the media folder, organised by artist and album |
 | Library folders, each read-only or writable | Shipped | Nested folders follow their own setting; scan for new songs ([files.md](files.md)) |
-| Watch folders for changes automatically | Planned | Scanning is on request |
 | Track list with sortable columns | Shipped | 20 columns; choose them in Preferences ▸ Columns |
 | Column browser (Genres, Artists, Albums) | Shipped | ⌘B / Ctrl+B |
 | Album grid view | Shipped | Embedded artwork; double-click plays the album |
@@ -28,7 +27,7 @@ radio and sharing are out of scope.
 | Artwork pane | Shipped | Selected item or now playing |
 | Delete from library (and disk) | Shipped | Asks first |
 | Keep media folder organised after edits | Planned | Files are not yet renamed when tags change |
-| Consolidate library, find missing files | Planned | |
+| Consolidate library (copy every song into the media folder) | Planned | Finding missing files ships: see Missing-file marks and Locate… |
 | Cover Flow, album list view | Planned | Grid and list exist |
 | Import an iTunes Library XML | Planned | |
 

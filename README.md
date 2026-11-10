@@ -73,6 +73,7 @@
 </table>
 
 What exists and what is planned, feature by feature: [docs/feature-parity.md](docs/feature-parity.md).
+What is missing or not yet proven, in order of priority: [TODO.md](TODO.md).
 
 ## Get started
 
