@@ -22,7 +22,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 23] = [
+const SCENES: [Scene; 24] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-unplayable", setup: unplayable },
@@ -46,6 +46,8 @@ const SCENES: [Scene; 23] = [
     Scene { name: "tunebox-visualizer-pulse", setup: visualizer_pulse },
     Scene { name: "tunebox-visualizer-aurora", setup: visualizer_aurora },
     Scene { name: "tunebox-visualizer-spectrum", setup: visualizer_spectrum },
+    // Last: it asks the system for full screen, and the scenes are all taken in one window.
+    Scene { name: "tunebox-visualizer-full-screen", setup: visualizer_full_screen },
 ];
 
 type Shot = Arc<Mutex<Option<Arc<ColorImage>>>>;
@@ -70,6 +72,7 @@ impl ScreenshotRunner {
         ctx.request_repaint();
         if self.frames == 0 {
             app.dialog = None;
+            app.leave_full_screen();
             app.view.browse = Default::default();
             app.view.show_visualizer = false;
             app.visualizer.controls_pinned = false;
@@ -203,6 +206,16 @@ fn visualizer_aurora(app: &mut TuneBoxApp) {
 
 fn visualizer_spectrum(app: &mut TuneBoxApp) {
     show_visualizer(app, "spectrum", true);
+}
+
+/// The visualizer alone, with the controls showing. Under xvfb there is no window manager to
+/// make the window full screen, so this shows the full-screen layout filling the window.
+fn visualizer_full_screen(app: &mut TuneBoxApp) {
+    show_visualizer(app, "aurora", true);
+    // Entered from the song list, as from the View menu.
+    app.view.show_visualizer = false;
+    app.enter_full_screen();
+    app.visualizer.controls_pinned = true;
 }
 
 /// Preferences with a read-only collection and a writable imports folder inside it (shown, not

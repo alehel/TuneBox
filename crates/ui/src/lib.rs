@@ -22,6 +22,7 @@ mod artwork;
 mod demo;
 mod dialogs;
 mod fonts;
+mod full_screen;
 mod glyphs;
 mod library_watch;
 mod panels;

@@ -30,7 +30,8 @@
   playback from song to song, shuffle, repeat one or all, and play and skip counts. The status display shows what's playing and what's being
   imported or synced.
 - **Visualizer.** Five looks (Spectrum, Aurora, Pulse, Oscilloscope, Hyperspace), driven by what
-  the sound card is playing, with an optional track-info card. Writing a new look is one file
+  the sound card is playing, with an optional track-info card, in the window or full screen
+  (⇧⌘F / Ctrl+Shift+F). Writing a new look is one file
   ([docs/visualizers.md](docs/visualizers.md)).
 - **CDs.** See the disc, fetch its track names from MusicBrainz (only when you ask), edit them
   and import to FLAC, WAV or AIFF.
@@ -138,7 +139,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 265
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 276
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

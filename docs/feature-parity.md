@@ -53,7 +53,8 @@ radio and sharing are out of scope.
 | Status display (LCD) | Shipped | Title, artist/album, elapsed and remaining time, click to seek; shows import and sync progress |
 | Formats | Shipped | MP3, AAC, ALAC, FLAC, WAV, AIFF, Ogg Vorbis (through craft-audio and symphonia) |
 | Visualizer | Shipped | Five looks, track-info card, ⌘T / Ctrl+T; new looks are one file or a compile-time plug-in |
-| Full-screen visualizer, run-time (WebAssembly) visualizer plug-ins | Planned | |
+| Full-screen visualizer | Shipped | View ▸ Full Screen Visualizer, ⇧⌘F / Ctrl+Shift+F, or the Full Screen control or a double-click on the visualizer. Only the visualizer shows; the pointer and controls hide when the mouse is still. Escape, the same command or a double-click puts the window back as it was. Tested on Linux under Xvfb only |
+| Run-time (WebAssembly) visualizer plug-ins | Planned | |
 | Gapless playback | Shipped | The next song is opened ahead and follows in the same output stream, switching at the exact frame it is heard. A change of sample rate or channel count restarts the output, a short gap |
 | Crossfade, Sound Check, equaliser | Planned | |
 | Up Next / play queue editing, iTunes DJ | Planned | |

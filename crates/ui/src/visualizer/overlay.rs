@@ -1,5 +1,5 @@
 //! What sits over the visualizer: the playing track's details, and (while the pointer moves)
-//! the controls for choosing a look, showing track info and leaving.
+//! the controls for choosing a look, showing track info, full screen and leaving.
 
 use crate::actions::Action;
 use crate::artwork;
@@ -25,7 +25,9 @@ pub fn show(
         controls(ui, rect, cx, looks, current, show_info);
     }
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        cx.act(Action::Run(CommandId::Visualizer));
+        // In full screen, Escape leaves full screen only, back to the window as it was.
+        let leave = if cx.view.full_screen.is_on() { CommandId::FullScreenVisualizer } else { CommandId::Visualizer };
+        cx.act(Action::Run(leave));
     }
 }
 
@@ -91,7 +93,8 @@ fn track_info(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
     );
 }
 
-/// The bar along the bottom: one chip per look, the Track Info switch and Done.
+/// The bar along the bottom: one chip per look, the Track Info and Full Screen switches, and
+/// Done (in the window only: in full screen, the Full Screen switch is the way back).
 fn controls(
     ui: &mut Ui,
     rect: Rect,
@@ -100,11 +103,15 @@ fn controls(
     current: &str,
     show_info: bool,
 ) {
-    let chips: Vec<(String, bool)> = looks
+    let full_screen = cx.view.full_screen.is_on();
+    let mut chips: Vec<(String, bool)> = looks
         .iter()
         .map(|(id, name)| ((*name).to_owned(), *id == current))
-        .chain([("Track Info".to_owned(), show_info), ("Done".to_owned(), false)])
+        .chain([("Track Info".to_owned(), show_info), ("Full Screen".to_owned(), full_screen)])
         .collect();
+    if !full_screen {
+        chips.push(("Done".to_owned(), false));
+    }
     let font = FontId::proportional(12.5);
     let widths: Vec<f32> = chips
         .iter()
@@ -143,13 +150,17 @@ fn controls(
     }
 }
 
-/// A chip was clicked: a look, then Track Info, then Done.
+/// A chip was clicked: a look, then Track Info, Full Screen and Done.
 fn choose(cx: &mut PanelContext, looks: &[(&'static str, &'static str)], index: usize) {
     let mut prefs = cx.session.preferences().clone();
-    match looks.get(index) {
-        Some((id, _)) => prefs.visualizer_style = (*id).to_owned(),
-        None if index == looks.len() => prefs.visualizer_track_info = !prefs.visualizer_track_info,
-        None => {
+    match (looks.get(index), index.saturating_sub(looks.len())) {
+        (Some((id, _)), _) => prefs.visualizer_style = (*id).to_owned(),
+        (None, 0) => prefs.visualizer_track_info = !prefs.visualizer_track_info,
+        (None, 1) => {
+            cx.act(Action::Run(CommandId::FullScreenVisualizer));
+            return;
+        }
+        (None, _) => {
             cx.act(Action::Run(CommandId::Visualizer));
             return;
         }
