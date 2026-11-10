@@ -27,6 +27,8 @@ pub enum CommandId {
     SelectAll,
     Delete,
     GetInfo,
+    ChooseArtwork,
+    RemoveArtwork,
     Preferences,
     Find,
     // View
@@ -222,6 +224,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::SelectAll, "Select All", Menu::Edit, Some(Shortcut::cmd(Key::Letter('a'))), Needs::Nothing),
     spec(CommandId::Delete, "Delete", Menu::Edit, Some(Shortcut::plain(Key::Delete)), Needs::Selection),
     spec(CommandId::GetInfo, "Get Info", Menu::Edit, Some(Shortcut::cmd(Key::Letter('i'))), Needs::Selection),
+    spec(CommandId::ChooseArtwork, "Choose Artwork…", Menu::Edit, None, Needs::Selection),
+    spec(CommandId::RemoveArtwork, "Remove Artwork", Menu::Edit, None, Needs::Selection),
     spec(CommandId::Find, "Find", Menu::Edit, Some(Shortcut::cmd(Key::Letter('f'))), Needs::Nothing),
     after_separator(spec(
         CommandId::Preferences,
@@ -296,6 +300,7 @@ impl Session {
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
             CommandId::RefreshFromFiles => self.jobs.is_running(JobKind::Refresh),
+            CommandId::ChooseArtwork | CommandId::RemoveArtwork => self.jobs.is_running(JobKind::Artwork),
             CommandId::AddToLibrary | CommandId::ScanLibraryFolders => self.jobs.is_running(JobKind::Import),
             _ => false,
         };

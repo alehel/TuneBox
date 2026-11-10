@@ -58,8 +58,9 @@ sysinfo = { version = "0.40", default-features = false, features = ["disk"] }
 egui = "0.37"
 egui_extras = { version = "0.37", default-features = false }
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "glow", "x11", "wayland", "accesskit", "clipboard", "links"] }
-# Album artwork decoding and PNG screenshots.
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Album artwork: decoding, preparing covers the listener chooses (GIF, BMP and WebP are converted
+# to JPEG or PNG), and PNG screenshots.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
 # Native open and folder dialogs (XDG portal on Linux: no GTK needed).
 rfd = "0.18"
 

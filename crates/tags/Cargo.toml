@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 tunebox-model = { workspace = true }
 lofty = { workspace = true }
+image = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

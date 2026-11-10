@@ -53,6 +53,7 @@ pub(crate) enum Outcome {
     Ripped(RipReport),
     Refreshed(crate::refresh::RefreshReport, Origin),
     LocatedOthers(Vec<(tunebox_model::TrackId, PathBuf)>),
+    ArtworkChanged(crate::artwork::ArtworkReport),
     Synced {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
@@ -79,6 +80,8 @@ pub struct Session {
     pub(crate) folder_changes: std::collections::BTreeSet<PathBuf>,
     /// Which songs' files can be found.
     pub(crate) availability: crate::availability::Availability,
+    /// Albums whose covers changed, for the frontend (see `Session::take_artwork_changes`).
+    pub(crate) artwork_changes: Vec<crate::AlbumKey>,
     /// This process's hold on the library, for as long as the session lives.
     _lock: LibraryLock,
 }
@@ -123,6 +126,7 @@ impl Session {
             protected_edit_noted: false,
             folder_changes: std::collections::BTreeSet::new(),
             availability: crate::availability::Availability::start(),
+            artwork_changes: Vec::new(),
             _lock: lock,
         };
         session.check_all_files();
@@ -215,6 +219,7 @@ impl Session {
             Outcome::Ripped(report) => self.finish_rip(report),
             Outcome::Refreshed(report, origin) => self.finish_refresh(report, origin),
             Outcome::LocatedOthers(found) => self.finish_locating_others(found),
+            Outcome::ArtworkChanged(report) => self.finish_artwork(report),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }
     }

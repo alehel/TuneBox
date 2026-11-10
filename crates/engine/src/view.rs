@@ -3,6 +3,7 @@
 //! read-only snapshot (`LibrarySnapshot::view`) answer the same questions the same way.
 
 use crate::devices::DeviceEntry;
+use crate::kept_artwork::{CoverSource, KeptArtwork};
 use crate::prefs::Preferences;
 use crate::sources::{Source, TrackQuery};
 use chrono::Utc;
@@ -17,6 +18,8 @@ pub struct LibraryView<'a> {
     pub(crate) prefs: &'a Preferences,
     /// Connected players, for `Source::Device`. A snapshot has none.
     pub(crate) devices: &'a [DeviceEntry],
+    /// Where the library is kept; TuneBox's own covers are kept beside it.
+    pub(crate) library_file: &'a std::path::Path,
 }
 
 impl<'a> LibraryView<'a> {
@@ -84,6 +87,13 @@ impl<'a> LibraryView<'a> {
         let tracks: Vec<_> =
             ids.iter().filter_map(|id| self.library.track(*id)).filter(|t| search.matches(t)).collect();
         Browser::build(&tracks, &query.browse)
+    }
+
+    /// Where the cover of `id` is read from: TuneBox's kept cover for a song in a read-only
+    /// library folder that has one, else the song's file (see `kept_artwork`).
+    pub fn cover_source(&self, id: TrackId) -> Option<CoverSource> {
+        let track = self.library.track(id)?;
+        Some(KeptArtwork::beside(self.library_file).source(self.prefs, track))
     }
 
     /// Totals for the status bar.

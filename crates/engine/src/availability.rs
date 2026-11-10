@@ -290,11 +290,24 @@ impl LibraryView<'_> {
     /// session's checks), given the network shares mounted now. Returns the songs that are
     /// missing or unavailable. For the command line, which has no session to keep this up.
     pub fn find_unplayable(&self, mounts: &[PathBuf]) -> Vec<(TrackId, FileStatus)> {
+        self.unplayable_among(self.library.tracks(), mounts)
+    }
+
+    /// [`Self::find_unplayable`] for `ids` only.
+    pub fn find_unplayable_among(&self, ids: &[TrackId], mounts: &[PathBuf]) -> Vec<(TrackId, FileStatus)> {
+        self.unplayable_among(ids.iter().filter_map(|id| self.library.track(*id)), mounts)
+    }
+
+    fn unplayable_among<'t>(
+        &self,
+        tracks: impl Iterator<Item = &'t Track>,
+        mounts: &[PathBuf],
+    ) -> Vec<(TrackId, FileStatus)> {
         let mut network = self.library.network_places().to_vec();
         network.extend(mounts.iter().cloned());
         let mut results = Vec::new();
         let mut items = Vec::new();
-        for track in self.library.tracks() {
+        for track in tracks {
             let place = place_of(&track.location, &self.prefs.library_folders, &network);
             match place {
                 Some(place) if is_unmounted(&place, Some(mounts)) => {

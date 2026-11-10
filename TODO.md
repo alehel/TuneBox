@@ -49,7 +49,10 @@ The biggest risk: these parts are built but have never run where it counts.
 
 ## Library and editing
 
-- [ ] Add and change album artwork. `tunebox_tags::write_artwork` exists but nothing uses it.
+- [x] Add and change album artwork: Get Info (choose, remove, drop an image), Edit ▸ Choose
+      Artwork…, the album grid's menu, `tunebox-cli artwork`. Tested in `tunebox-tags`
+      (FLAC, WAV, AIFF) and `crates/engine/tests/session.rs`; the file picker and dropping a
+      file have not been tried on a real desktop.
 - [ ] Undo for edits, deletes and removing songs from playlists.
 - [ ] Drag files in from Finder or Explorer.
 - [ ] Drag to reorder songs in a playlist (the engine supports it; the list does not yet).

@@ -25,6 +25,7 @@ radio and sharing are out of scope.
 | Refresh from Files | Shipped | Reads chosen songs' tags again after another program changed them (File menu, song menu, `tunebox-cli refresh`). Ratings and play counts stay; edits kept in TuneBox only are kept unless you choose otherwise |
 | Additional tag fields | Shipped | 31 more (credits, classical work and movement, release, sort names, mood and key, lyrics, encoding) under *Show all fields*; pin any to always show (Preferences ▸ Get Info). Fields a format cannot hold are not offered; dates and numbers are checked. Songs added before these fields were read get them on the next scan or import that finds them |
 | Artwork pane | Shipped | Selected item or now playing |
+| Add, change and remove album artwork | Shipped | Get Info's artwork (click, *Choose…*, *Remove*, or drop an image on it), Edit ▸ Choose Artwork… / Remove Artwork, the album grid's right-click menu, `tunebox-cli artwork set/remove/export`. One song or a whole album; written into each file atomically in the background, one failure never stops the rest. JPEG and PNG kept as they are; GIF, BMP and WebP converted; pictures over 1400 px scaled down. Songs in read-only folders keep the cover in TuneBox ([files.md](files.md)) |
 | Delete from library (and disk) | Shipped | Asks first |
 | Keep media folder organised after edits | Planned | Files are not yet renamed when tags change |
 | Consolidate library (copy every song into the media folder) | Planned | Finding missing files ships: see Missing-file marks and Locate… |

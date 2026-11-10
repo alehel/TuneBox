@@ -41,7 +41,7 @@
   songs on a NAS or drive that is not connected are marked differently and wait for it to come
   back; a share that stops answering never freezes the app.
 - **Your files are safe.** Nothing is written to your music folder unless you edit a song's
-  details or ask for a file to be deleted, and you can list any number of library folders, each strictly read-only or writable (for
+  details or artwork or ask for a file to be deleted, and you can list any number of library folders, each strictly read-only or writable (for
   example a read-only collection with a writable imports folder inside it).
   The library lives in the application data folder. See [docs/files.md](docs/files.md).
 
@@ -100,6 +100,7 @@ tunebox-cli info-fields --pin label --pin release-date          # always shown i
 tunebox-cli refresh --search "Paper Boats"                      # re-read tags another app changed
 tunebox-cli missing                                             # songs whose files are gone or offline
 tunebox-cli locate "Driftwood" ~/Music/Moved/Driftwood.flac     # point a missing song at its file
+tunebox-cli artwork set "Paper Boats" ~/Pictures/cover.jpg      # also: artwork remove, artwork export
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
 tunebox-cli folders add ~/Music/Collection                    # read only: never written to
@@ -129,7 +130,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 194
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 206
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

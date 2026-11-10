@@ -59,6 +59,18 @@ enum FolderAction {
 }
 
 #[derive(Subcommand)]
+enum ArtworkAction {
+    /// Set the cover of the songs matching a search to an image. JPEG and PNG are used as they
+    /// are; GIF, BMP and WebP are converted, and pictures over 1400 pixels scaled down. Songs in
+    /// read-only library folders keep the cover in TuneBox, their files untouched.
+    Set { search: String, image: PathBuf },
+    /// Remove the cover of the songs matching a search.
+    Remove { search: String },
+    /// Save the cover of the first song matching a search that has one to a file.
+    Export { search: String, file: PathBuf },
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Song count, total time and size.
     Stats,
@@ -104,6 +116,11 @@ enum Command {
         search: Option<String>,
         #[arg(long)]
         replace_library_edits: bool,
+    },
+    /// Set, remove or save album artwork.
+    Artwork {
+        #[command(subcommand)]
+        action: ArtworkAction,
     },
     /// List the additional fields the app's Get Info always shows, or pin and unpin them.
     InfoFields {
@@ -181,6 +198,7 @@ impl Command {
             | Command::Commands => true,
             Command::InfoFields { pin, unpin } => pin.is_empty() && unpin.is_empty(),
             Command::Folders { action } => action.is_none(),
+            Command::Artwork { action } => matches!(action, ArtworkAction::Export { .. }),
             _ => false,
         }
     }
@@ -225,6 +243,7 @@ fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
         Command::Missing => print_unplayable(view),
         Command::InfoFields { .. } => details::print_info_fields(view.preferences()),
         Command::Folders { .. } => print_folders(view.preferences()),
+        Command::Artwork { action: ArtworkAction::Export { search, file } } => export_artwork(view, &search, &file)?,
         Command::Commands => {
             for command in COMMANDS {
                 let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
@@ -261,6 +280,7 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             wait_for_jobs(session);
         }
         Command::InfoFields { pin, unpin } => details::info_fields(session, &pin, &unpin)?,
+        Command::Artwork { action } => artwork(session, action)?,
         Command::Play { search, shuffle } => play(session, search.as_deref(), shuffle),
         Command::CdInfo { virtual_disc, lookup } => {
             read_cd(session, virtual_disc, lookup)?;
@@ -329,6 +349,51 @@ fn locate(session: &mut Session, search: &str, file: PathBuf) -> Result<(), Stri
     session.locate(id, file).map_err(|e| e.to_string())?;
     wait_for_jobs(session);
     Ok(())
+}
+
+/// Sets or removes the cover of the songs matching a search, and waits for it.
+fn artwork(session: &mut Session, action: ArtworkAction) -> Result<(), String> {
+    let (search, image) = match action {
+        ArtworkAction::Set { search, image } => (search, Some(image)),
+        ArtworkAction::Remove { search } => (search, None),
+        export @ ArtworkAction::Export { .. } => {
+            return show(session.view(), Command::Artwork { action: export });
+        }
+    };
+    let ids = search_ids(session.view(), Source::Music, Some(&search));
+    if ids.is_empty() {
+        return Err(format!("no song matches “{search}”"));
+    }
+    // A fresh look, waited for, so missing songs and disconnected shares are skipped, not tried.
+    session.set_network_mounts(tunebox_platform::network_mounts());
+    session.check_files_now();
+    match image {
+        Some(image) => session.set_artwork(&ids, &image),
+        None => session.remove_artwork(&ids),
+    }
+    .map_err(|e| e.to_string())?;
+    wait_for_jobs(session);
+    Ok(())
+}
+
+/// Saves the cover of the first song matching `search` that has one. Songs whose files cannot
+/// be reached now are passed over, so a disconnected share cannot stall the command.
+fn export_artwork(view: LibraryView<'_>, search: &str, file: &std::path::Path) -> Result<(), String> {
+    let ids = search_ids(view, Source::Music, Some(search));
+    if ids.is_empty() {
+        return Err(format!("no song matches “{search}”"));
+    }
+    let unplayable: Vec<TrackId> =
+        view.find_unplayable_among(&ids, &tunebox_platform::network_mounts()).into_iter().map(|(id, _)| id).collect();
+    for id in ids.iter().filter(|id| !unplayable.contains(id)) {
+        if let Some(cover) = view.export_cover(*id, file).map_err(|e| e.to_string())? {
+            let title = view.track(*id).map(|t| t.title().to_owned()).unwrap_or_default();
+            let kind = if cover.extension() == "png" { "PNG" } else { "JPEG" };
+            println!("Saved the cover of “{title}” ({kind}) to {}.", file.display());
+            return Ok(());
+        }
+    }
+    Err(format!("none of the {} songs matching “{search}” that can be reached has a cover", ids.len()))
 }
 
 /// Songs whose files are missing, then those on each drive or share that is not connected.
@@ -567,6 +632,7 @@ mod tests {
             &["playlists"],
             &["info", "x"],
             &["info-fields"],
+            &["artwork", "export", "x", "/cover.jpg"],
             &["missing"],
             &["folders"],
             &["commands"],
@@ -582,6 +648,8 @@ mod tests {
             &["folders", "watch"],
             &["import", "/x"],
             &["refresh"],
+            &["artwork", "set", "x", "/cover.jpg"],
+            &["artwork", "remove", "x"],
             &["play"],
         ] {
             assert!(!command(changes).reads_only(), "{changes:?}");

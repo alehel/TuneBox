@@ -9,7 +9,8 @@ change a song, and never to a folder you mark read-only.
 |---|---|---|
 | Library (songs, playlists, ratings, play counts) | Application data folder: `~/.local/share/TuneBox/` (Linux), `~/Library/Application Support/TuneBox/` (macOS), `%APPDATA%\TuneBox\` (Windows) | Not in your music folder |
 | Preferences | The same folder | |
-| `TuneBox Library.lock` | Beside the library | Keeps a second TuneBox (the app or `tunebox-cli`) from opening the same library and saving over its changes. `tunebox-cli` commands that only read (`list`, `info`, `stats`, `playlists`, `folders`, `info-fields`) do not need it: they read the library as last saved, so they work while the app is open. The operating system releases it when TuneBox quits or crashes, so it never needs deleting |
+| `TuneBox Library.lock` | Beside the library | Keeps a second TuneBox (the app or `tunebox-cli`) from opening the same library and saving over its changes. `tunebox-cli` commands that only read (`list`, `info`, `stats`, `playlists`, `folders`, `info-fields`, `artwork export`) do not need it: they read the library as last saved, so they work while the app is open. The operating system releases it when TuneBox quits or crashes, so it never needs deleting |
+| `TuneBox Artwork/` | Beside the library | Covers you chose for songs in read-only folders, one picture per album (see below). Created only when needed |
 | Media folder | `~/Music/TuneBox Media` by default, changeable | **Created only when needed**: for CD imports, or if you turn on copying when adding music |
 
 Ratings, play counts, skip counts and checkboxes live only in the library file. Playing,
@@ -22,6 +23,7 @@ browsing, rating and making playlists never touch a music file.
 | Add to Library | **Nothing.** Songs are played from where they are. If you turn on *Copy files to the TuneBox Media folder*, copies are made in the media folder; the originals are not touched |
 | Get Info ▸ edit details | The details are written into the song's tags. Only fields you changed are written: the additional fields (credits, label, sort names, lyrics…) you did not touch stay exactly as they are, and a field the format has no place for is not offered. The edit is made on a hidden copy next to the file (`.tunebox-edit-…`) that replaces the original only when complete, so a crash or full disk cannot damage the song |
 | Watching library folders | **Nothing.** New songs are added to the library, changed songs are read again, a moved song is relinked (keeping its ratings and plays), and a deleted song stays in the library |
+| Choose Artwork / Remove Artwork | The cover is written into (or every picture removed from) each chosen song's tags, through the same hidden copy as Get Info edits, one song at a time in the background. A song that cannot be written is reported and left as it is; the others carry on. JPEG and PNG pictures go in byte for byte; other images are converted, and pictures over 1400 pixels scaled down, so each song grows by a few hundred kilobytes at most. Missing songs and songs on a drive or share that is not connected are skipped, untouched. Songs in a read-only folder: see below |
 | Refresh from Files | **Nothing.** The songs' tags are read again and the library takes what they say |
 | Delete from Library | Removes the song from the library. The file is deleted only if you tick *Also delete the files from disk* |
 | Import CD | New files in the media folder. A track appears only when it is complete (written as `*.part`, then renamed); a cancelled or failed track leaves nothing |
@@ -38,7 +40,12 @@ as many as you like, and each is **read only** (the default for a new folder) or
 - In a **read-only** folder TuneBox never creates, changes, moves or deletes anything. Edits
   from Get Info are kept in the library only (you are told once); *Delete from Library* removes
   songs from the library and leaves their files; copies and CD imports refuse to go there.
-- In a **writable** folder TuneBox may write edited details into songs, delete files you ask it
+- **Artwork** for songs in a read-only folder is kept by TuneBox, in `TuneBox Artwork/` beside
+  the library: one picture per album (album artist and album name), shown as the cover of the
+  album's read-only songs. Their files stay as they are. *Remove Artwork* forgets the kept
+  picture; a cover inside such a file stays, and you are told so. Songs without an album name
+  get no kept cover, since there is no album to keep it by.
+- In a **writable** folder TuneBox may write edited details and artwork into songs, delete files you ask it
   to delete, and put CD imports and copies there (*Use for Imports*).
 - **The deepest listed folder decides.** A typical setup is a curated collection that is read
   only, with a writable `Imports` folder inside it (or anywhere else) for CD rips:
@@ -110,3 +117,15 @@ those songs alone too.
 
 `tunebox-cli missing` lists missing songs, and songs on each place that is not connected;
 `tunebox-cli locate <search> <file>` links one.
+
+## Artwork from the command line
+
+```sh
+tunebox-cli artwork set "Lanterns" ~/Pictures/lanterns.jpg   # every song matching the search
+tunebox-cli artwork remove "Lanterns"
+tunebox-cli artwork export "Lanterns" ~/Desktop/cover.jpg     # reads only: works while the app is open
+```
+
+`artwork export` saves the cover as it is stored (JPEG or PNG), and refuses to write into a
+read-only folder. The test `a_cover_goes_into_every_writable_song_and_is_kept_for_read_only_ones`
+(`crates/engine/tests/session.rs`) checks the read-only folder byte for byte.

@@ -49,6 +49,11 @@ pub enum Action {
         delete_files: bool,
     },
     RefreshFromFiles(Vec<TrackId>, LibraryOnlyEdits),
+    /// Ask for a picture and make it the cover of these songs.
+    ChooseArtwork(Vec<TrackId>),
+    /// Make this image file the cover of these songs (a picture dropped on the artwork).
+    SetArtwork(Vec<TrackId>, PathBuf),
+    RemoveArtwork(Vec<TrackId>),
     /// Ask where a missing song's file is now, and link the song to it.
     Locate(TrackId),
     SetPreferences(Box<Preferences>),

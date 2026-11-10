@@ -19,6 +19,7 @@
     clippy::unreachable
 )]
 
+mod artwork;
 mod availability;
 mod cd;
 pub mod commands;
@@ -27,6 +28,7 @@ mod error;
 mod file_check;
 pub mod files;
 pub mod jobs;
+mod kept_artwork;
 mod library_ops;
 mod locate;
 mod notices;
@@ -45,6 +47,7 @@ pub use devices::DeviceEntry;
 pub use error::EngineError;
 pub use file_check::FileStatus;
 pub use jobs::{JobId, JobKind, JobStatus};
+pub use kept_artwork::{AlbumKey, CoverSource, album_key};
 pub use notices::{Notice, NoticeLevel};
 pub use places::Place;
 pub use playback::NowPlaying;
@@ -62,4 +65,4 @@ pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, VirtualDrive};
 pub use tunebox_sync::{Device, SyncMode, SyncSettings, Volume};
-pub use tunebox_tags::{Artwork, can_store, read_artwork};
+pub use tunebox_tags::{Artwork, MAX_COVER_SIDE, can_store};

@@ -20,6 +20,8 @@ pub enum EngineError {
     Busy(&'static str),
     #[error("{0}")]
     Locate(String),
+    #[error("{0}")]
+    Artwork(String),
     #[error(
         "{} is in a read-only library folder, which TuneBox does not change. Choose a media folder in a writable folder in Preferences.",
         .0.display()

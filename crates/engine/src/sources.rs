@@ -39,7 +39,12 @@ impl TrackQuery {
 impl Session {
     /// A read-only look at the library, as the track list and the command line read it.
     pub fn view(&self) -> LibraryView<'_> {
-        LibraryView { library: &self.library, prefs: &self.prefs, devices: &self.devices }
+        LibraryView {
+            library: &self.library,
+            prefs: &self.prefs,
+            devices: &self.devices,
+            library_file: &self.paths.library_file,
+        }
     }
 
     /// A source's tracks in its own order (see [`LibraryView::source_tracks`]).

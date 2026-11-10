@@ -722,3 +722,121 @@ fn locating_one_moved_song_finds_the_others_that_moved_alike() {
     let error = f.session.locate(third, renamed.join("02.flac")).unwrap_err().to_string();
     assert!(error.contains("already belongs to “Second Light”"), "{error}");
 }
+
+/// A small PNG cover in `dir`, and its bytes.
+fn cover_file(dir: &Path, name: &str, colour: [u8; 3]) -> (std::path::PathBuf, Vec<u8>) {
+    let image = image::RgbImage::from_pixel(64, 64, image::Rgb(colour));
+    let path = dir.join(name);
+    std::fs::create_dir_all(dir).unwrap();
+    image.save(&path).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    (path, bytes)
+}
+
+fn notices_text(session: &mut Session) -> String {
+    session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn a_cover_goes_into_every_writable_song_and_is_kept_for_read_only_ones() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    // A third song of the same album in a read-only collection.
+    let collection = f.dir.path().join("Collection");
+    write_song(&collection.join("c.flac"), "Third Light", "Quiet Harbour", "Lanterns", 3);
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(collection.clone(), true);
+    f.session.set_preferences(prefs);
+    f.session.import(vec![collection.clone()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+    let protected = f.session.library().track_at(&collection.join("c.flac")).unwrap();
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    let writable: Vec<_> = all.iter().copied().filter(|id| *id != protected).collect();
+    let before = snapshot(&collection);
+    f.session.take_notices();
+
+    let (picture, png) = cover_file(&f.dir.path().join("Pictures"), "cover.png", [200, 40, 90]);
+    f.session.set_artwork(&all, &picture).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notice = notices_text(&mut f.session);
+    assert!(notice.contains("Set the cover of 2 songs."), "{notice}");
+    assert!(notice.contains("1 song is in a read-only library folder: TuneBox keeps its cover itself"), "{notice}");
+    for id in &writable {
+        let track = f.session.track(*id).unwrap();
+        let cover = tunebox_tags::read_artwork(&track.location).unwrap().unwrap();
+        assert_eq!((cover.mime.as_str(), &cover.data), ("image/png", &png), "the picture as it was chosen");
+        assert_eq!(track.file.size_bytes, std::fs::metadata(&track.location).unwrap().len(), "the new size is shown");
+    }
+    assert_eq!(snapshot(&collection), before, "the read-only folder is byte-for-byte unchanged");
+    let kept = f.session.cover_source(protected).unwrap().load().unwrap().unwrap();
+    assert_eq!(kept.data, png, "the read-only song shows the cover TuneBox keeps for it");
+    assert_eq!(f.session.take_artwork_changes(), [("Quiet Harbour".to_owned(), "Lanterns".to_owned())]);
+
+    // The command line can save it, from a snapshot that takes no lock.
+    f.session.save().unwrap();
+    let out = f.dir.path().join("Exported.png");
+    let view_snapshot = LibrarySnapshot::open(&paths_in(&f.dir)).unwrap();
+    let saved = view_snapshot.view().export_cover(protected, &out).unwrap().unwrap();
+    assert_eq!((saved.extension(), std::fs::read(&out).unwrap()), ("png", png));
+    assert!(
+        view_snapshot.view().export_cover(protected, &collection.join("x.png")).is_err(),
+        "not into a read-only folder"
+    );
+
+    // Removing takes it out of the files and forgets the kept one.
+    f.session.remove_artwork(&all).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notice = notices_text(&mut f.session);
+    assert!(notice.contains("Removed the cover of 2 songs."), "{notice}");
+    assert!(notice.contains("A cover inside its file stays"), "{notice}");
+    for id in &writable {
+        assert_eq!(tunebox_tags::read_artwork(&f.session.track(*id).unwrap().location).unwrap(), None);
+    }
+    assert_eq!(f.session.cover_source(protected).unwrap().load().unwrap(), None);
+    assert_eq!(snapshot(&collection), before);
+}
+
+#[test]
+fn one_song_that_cannot_take_a_cover_does_not_stop_the_others() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let downloads = f.dir.path().join("Downloads");
+    write_song(&downloads.join("gone.flac"), "Gone", "Quiet Harbour", "Lanterns", 3);
+    f.session.import(vec![downloads.join("gone.flac")]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    // One song's file is damaged, another's has gone.
+    std::fs::write(downloads.join("b.flac"), b"no longer a song").unwrap();
+    std::fs::remove_file(downloads.join("gone.flac")).unwrap();
+    f.session.check_files_now();
+    f.session.take_notices();
+
+    let (picture, png) = cover_file(&f.dir.path().join("Pictures"), "cover.png", [10, 120, 60]);
+    f.session.set_artwork(&all, &picture).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notice = notices_text(&mut f.session);
+    assert!(notice.contains("Set the cover of 1 song."), "{notice}");
+    assert!(notice.contains("1 song was left as it is: its file is missing."), "{notice}");
+    assert!(notice.contains("The cover of “b.flac” could not be changed, so it was left as it is"), "{notice}");
+    assert_eq!(tunebox_tags::read_artwork(&downloads.join("a.flac")).unwrap().unwrap().data, png);
+    assert_eq!(std::fs::read(downloads.join("b.flac")).unwrap(), b"no longer a song");
+    assert!(!downloads.join("gone.flac").exists(), "a missing song's file is not created");
+}
+
+#[test]
+fn a_file_that_is_not_a_picture_is_refused_before_anything_changes() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let downloads = f.dir.path().join("Downloads");
+    let before = snapshot(&downloads);
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    let notes = f.dir.path().join("notes.txt");
+    std::fs::write(&notes, "not a picture").unwrap();
+    let error = f.session.set_artwork(&all, &notes).unwrap_err().to_string();
+    assert!(error.contains("not a picture"), "{error}");
+    assert!(f.session.set_artwork(&all, &f.dir.path().join("nowhere.png")).is_err());
+    // A song is not a picture either, even though it is a file TuneBox knows well.
+    assert!(f.session.set_artwork(&all, &downloads.join("a.flac")).is_err());
+    assert!(f.session.jobs().is_empty());
+    assert_eq!(snapshot(&downloads), before);
+}

@@ -24,6 +24,7 @@ pub enum JobKind {
     Sync,
     Refresh,
     Locate,
+    Artwork,
 }
 
 impl JobKind {
@@ -36,6 +37,7 @@ impl JobKind {
             JobKind::Sync => "A sync",
             JobKind::Refresh => "Refreshing from files",
             JobKind::Locate => "Looking for missing songs",
+            JobKind::Artwork => "Changing covers",
         }
     }
 }

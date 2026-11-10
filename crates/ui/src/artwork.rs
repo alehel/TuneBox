@@ -1,38 +1,35 @@
-//! Album artwork: read from the files' tags and decoded on a background thread, then kept as
+//! Album artwork: read where the engine says the cover is (the song's file, or the cover TuneBox
+//! keeps for a song in a read-only folder), decoded on a background thread, then kept as
 //! textures, one per album.
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use tunebox_engine::model::Track;
-use tunebox_engine::{FileStatus, Session};
+use tunebox_engine::{CoverSource, FileStatus, Session};
+
+pub use tunebox_engine::{AlbumKey, album_key};
 
 /// Artwork is stored at this size; tiles and panes scale it down.
 const THUMBNAIL: u32 = 300;
 
-/// Albums are identified by filing artist and title.
-pub type AlbumKey = (String, String);
-
-pub fn album_key(track: &Track) -> AlbumKey {
-    (track.meta.filing_artist().to_owned(), track.meta.album.clone())
-}
-
 pub struct ArtworkCache {
-    requests: Sender<(AlbumKey, PathBuf)>,
+    requests: Sender<(AlbumKey, CoverSource)>,
     results: Receiver<(AlbumKey, Option<ColorImage>)>,
     /// `None`: the album has no artwork.
     textures: HashMap<AlbumKey, Option<TextureHandle>>,
     pending: HashSet<AlbumKey>,
+    /// Albums forgotten while their cover was loading: what arrives is the old cover.
+    stale: HashSet<AlbumKey>,
 }
 
 impl ArtworkCache {
     pub fn new() -> Self {
-        let (requests, request_rx) = mpsc::channel::<(AlbumKey, PathBuf)>();
+        let (requests, request_rx) = mpsc::channel::<(AlbumKey, CoverSource)>();
         let (result_tx, results) = mpsc::channel();
         let spawned = std::thread::Builder::new().name("tunebox-artwork".into()).spawn(move || {
-            for (key, path) in request_rx {
-                if result_tx.send((key, load(&path))).is_err() {
+            for (key, source) in request_rx {
+                if result_tx.send((key, load(&source))).is_err() {
                     break;
                 }
             }
@@ -40,29 +37,28 @@ impl ArtworkCache {
         if let Err(e) = spawned {
             log::warn!("artwork will not be shown: {e}");
         }
-        Self { requests, results, textures: HashMap::new(), pending: HashSet::new() }
+        Self { requests, results, textures: HashMap::new(), pending: HashSet::new(), stale: HashSet::new() }
     }
 
-    /// The artwork of `track`'s album, loading it in the background the first time.
     /// The cover of `track`'s album. It is read from a song of the album whose file is there:
     /// covers are kept one per album, so reading it from a missing or unreachable song would
     /// leave the whole album without one.
     pub fn cover(&mut self, session: &Session, track: &Track) -> Option<TextureHandle> {
         let present = |t: &Track| *session.file_status(t.id) == FileStatus::Present;
-        if present(track) {
-            return self.get(track);
-        }
-        let key = album_key(track);
-        let source = session.library().tracks().find(|t| present(t) && album_key(t) == key)?;
-        self.get(source)
-    }
-
-    fn get(&mut self, track: &Track) -> Option<TextureHandle> {
         let key = album_key(track);
         if let Some(texture) = self.textures.get(&key) {
             return texture.clone();
         }
-        if self.pending.insert(key.clone()) && self.requests.send((key, track.location.clone())).is_err() {
+        if self.pending.contains(&key) {
+            return None;
+        }
+        let source = if present(track) {
+            track
+        } else {
+            session.library().tracks().find(|t| present(t) && album_key(t) == key)?
+        };
+        let source = session.cover_source(source.id)?;
+        if self.pending.insert(key.clone()) && self.requests.send((key, source)).is_err() {
             log::debug!("artwork loader has stopped");
         }
         None
@@ -73,6 +69,10 @@ impl ArtworkCache {
         let mut arrived = false;
         while let Ok((key, image)) = self.results.try_recv() {
             self.pending.remove(&key);
+            if self.stale.remove(&key) {
+                arrived = true;
+                continue;
+            }
             let name = format!("artwork:{}:{}", key.0, key.1);
             let texture = image.map(|image| ctx.load_texture(name, image, TextureOptions::LINEAR));
             self.textures.insert(key, texture);
@@ -89,12 +89,21 @@ impl ArtworkCache {
     /// Forgets everything (after artwork changed on disk).
     pub fn clear(&mut self) {
         self.textures.clear();
+        self.stale.extend(self.pending.iter().cloned());
+    }
+
+    /// Forgets one album's cover, after it changed.
+    pub fn forget(&mut self, album: &AlbumKey) {
+        self.textures.remove(album);
+        if self.pending.contains(album) {
+            self.stale.insert(album.clone());
+        }
     }
 }
 
-/// Reads and decodes a file's cover. Any failure just means "no artwork".
-fn load(path: &std::path::Path) -> Option<ColorImage> {
-    let artwork = tunebox_engine::read_artwork(path).ok()??;
+/// Reads and decodes a cover. Any failure just means "no artwork".
+fn load(source: &CoverSource) -> Option<ColorImage> {
+    let artwork = source.load().ok()??;
     let image = image::load_from_memory(&artwork.data).ok()?;
     let thumbnail = image.thumbnail(THUMBNAIL, THUMBNAIL).to_rgba8();
     let size = [thumbnail.width() as usize, thumbnail.height() as usize];

@@ -271,6 +271,10 @@ fn context_menu(response: &egui::Response, cx: &mut PanelContext, id: TrackId) {
             cx.act(Action::Run(CommandId::GetInfo));
             ui.close();
         }
+        if ui.button("Choose Artwork…").clicked() {
+            cx.act(Action::Run(CommandId::ChooseArtwork));
+            ui.close();
+        }
         ui.menu_button("Rating", |ui| {
             for stars in (0..=Rating::MAX_STARS).rev() {
                 if widgets::rating_menu_item(ui, stars).clicked() {

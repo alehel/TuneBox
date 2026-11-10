@@ -1,5 +1,6 @@
 //! The album grid: one tile per album. Covers sit on soft shadows with a faint reflection
-//! below, a nod to the classic Cover Flow; hovering lifts a cover and offers to play it.
+//! below, a nod to the classic Cover Flow; hovering lifts a cover and offers to play it, and a
+//! right-click offers Get Info and the album's artwork.
 
 use crate::actions::Action;
 use crate::artwork::{self, AlbumKey, album_key};
@@ -8,6 +9,7 @@ use crate::panels::PanelContext;
 use crate::theme;
 use egui::epaint::{Mesh, Vertex};
 use egui::{Color32, FontId, Rect, Sense, Stroke, TextureHandle, Ui, pos2, vec2};
+use tunebox_engine::commands::{CommandId, Context, spec_of};
 use tunebox_engine::model::TrackId;
 
 const TILE: f32 = 164.0;
@@ -97,8 +99,22 @@ fn tile(ui: &mut Ui, cx: &mut PanelContext, album: &Album, slot: Rect) {
     let play_clicked = hovered && play_button(ui, art, album);
     if play_clicked || response.double_clicked() {
         cx.act(Action::PlayTracks { tracks: album.tracks.clone(), start: 0 });
-    } else if response.clicked() {
+    } else if response.clicked() || response.secondary_clicked() {
         cx.view.selection.set(album.tracks.iter().copied());
+    }
+    response.context_menu(|ui| album_menu(ui, cx, album));
+}
+
+/// The right-click menu of a tile. The album is the selection by then, so the commands act on it.
+fn album_menu(ui: &mut Ui, cx: &mut PanelContext, album: &Album) {
+    let context = Context { selected_tracks: album.tracks.len(), ..Context::default() };
+    for id in [CommandId::GetInfo, CommandId::ChooseArtwork, CommandId::RemoveArtwork] {
+        let label = spec_of(id).map_or("", |spec| spec.label);
+        let enabled = cx.session.is_enabled(id, context);
+        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+            cx.act(Action::Run(id));
+            ui.close();
+        }
     }
 }
 

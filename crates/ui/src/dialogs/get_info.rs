@@ -2,6 +2,10 @@
 //! style of Preferences: Summary (artwork, rating, play history, the file) and Details (the tags,
 //! in cards). The everyday fields are always on Details; the additional ones are in
 //! `extra_fields`.
+//!
+//! The artwork on Summary is a well: click it (or "Choose…") to pick a picture, "Remove" to
+//! take the cover away, or drop an image file onto it. Each applies to every song the dialog
+//! shows, straight away, as the rating does; the engine does the writing in the background.
 
 use crate::actions::Action;
 use crate::artwork::{self, ArtworkCache};
@@ -11,12 +15,12 @@ use crate::dialogs::window;
 use crate::glyphs::Glyph;
 use crate::panels::widgets;
 use crate::theme;
-use egui::{Color32, RichText, Sense, Ui, vec2};
+use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
 use std::collections::BTreeMap;
-use tunebox_engine::Session;
 use tunebox_engine::model::{
     Column, Rating, TagField, Track, TrackId, TrackMeta, format_bytes, format_clock, format_total_time,
 };
+use tunebox_engine::{JobKind, Session};
 
 const WIDTH: f32 = 600.0;
 
@@ -250,10 +254,7 @@ fn header(
     actions: &mut Vec<Action>,
 ) {
     ui.horizontal_top(|ui| {
-        let (art, _) = ui.allocate_exact_size(vec2(140.0, 140.0), Sense::hover());
-        theme::soft_shadow(ui.painter(), art, 6.0, 10);
-        let texture = artwork.cover(session, first);
-        artwork::paint(ui, art, texture.as_ref());
+        artwork_well(ui, session, tracks, first, artwork, actions);
         ui.add_space(16.0);
         ui.vertical(|ui| {
             ui.add_space(4.0);
@@ -273,6 +274,70 @@ fn header(
             }
         });
     });
+}
+
+/// The cover, which takes a new picture by click, button or drop, with Choose… and Remove below.
+fn artwork_well(
+    ui: &mut Ui,
+    session: &Session,
+    tracks: &[&Track],
+    first: &Track,
+    artwork: &mut ArtworkCache,
+    actions: &mut Vec<Action>,
+) {
+    const SIZE: f32 = 140.0;
+    let ids: Vec<TrackId> = tracks.iter().map(|t| t.id).collect();
+    let busy = session.is_busy(JobKind::Artwork);
+    ui.vertical(|ui| {
+        ui.set_width(SIZE);
+        let sense = if busy { Sense::hover() } else { Sense::click() };
+        let (art, response) = ui.allocate_exact_size(vec2(SIZE, SIZE), sense);
+        theme::soft_shadow(ui.painter(), art, 6.0, 10);
+        let texture = artwork.cover(session, first);
+        artwork::paint(ui, art, texture.as_ref());
+        let dragging = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
+        if !busy && (dragging || response.hovered()) {
+            ui.painter().rect_stroke(art, 6.0, Stroke::new(2.0, theme::ACCENT), StrokeKind::Inside);
+        }
+        if !busy && dragging {
+            drop_hint(ui, art);
+        }
+        if response.on_hover_text("Choose artwork…").clicked() {
+            actions.push(Action::ChooseArtwork(ids.clone()));
+        }
+        if !busy && let Some(image) = dropped_on(ui, art) {
+            actions.push(Action::SetArtwork(ids.clone(), image));
+        }
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            if ui.add_enabled(!busy, egui::Button::new("Choose…")).clicked() {
+                actions.push(Action::ChooseArtwork(ids.clone()));
+            }
+            let has_cover = texture.is_some();
+            if ui.add_enabled(!busy && has_cover, egui::Button::new("Remove")).clicked() {
+                actions.push(Action::RemoveArtwork(ids.clone()));
+            }
+        });
+    });
+}
+
+/// Over the well while a file is dragged above the window: where to let go.
+fn drop_hint(ui: &Ui, art: Rect) {
+    let painter = ui.painter();
+    painter.rect_filled(art.shrink(2.0), 5.0, Color32::from_black_alpha(110));
+    painter.text(art.center(), Align2::CENTER_CENTER, "Drop to use", FontId::proportional(13.0), Color32::WHITE);
+}
+
+/// The file dropped onto `art` this frame. Some systems do not say where the pointer is while
+/// a file is dragged from another program; then a drop anywhere counts, since the dialog is
+/// the only thing that can take it.
+fn dropped_on(ui: &Ui, art: Rect) -> Option<std::path::PathBuf> {
+    ui.ctx().input(|i| {
+        let file = i.raw.dropped_files.first()?.path().to_path_buf();
+        let over = i.pointer.latest_pos().is_none_or(|p| art.expand(12.0).contains(p));
+        over.then_some(file)
+    })
 }
 
 /// `pick` of every track if they all agree, else "Various".

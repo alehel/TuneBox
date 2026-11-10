@@ -112,6 +112,9 @@ impl TuneBoxApp {
         for notice in self.session.take_notices() {
             self.toasts.push(notice);
         }
+        for album in self.session.take_artwork_changes() {
+            self.artwork.forget(&album);
+        }
         if self.artwork.poll(&self.ctx) {
             self.ctx.request_repaint();
         }
@@ -171,6 +174,21 @@ impl TuneBoxApp {
         }
     }
 
+    /// Asks for a picture and makes it the cover of `tracks`. The engine does the work, in the
+    /// background; the covers are shown anew when it is done.
+    fn choose_artwork(&mut self, tracks: Vec<TrackId>) {
+        if tracks.is_empty() {
+            return;
+        }
+        let picked = rfd::FileDialog::new()
+            .set_title("Choose Artwork")
+            .add_filter("Images", &["jpg", "jpeg", "png", "gif", "bmp", "webp"])
+            .pick_file();
+        if let Some(image) = picked {
+            self.apply(Action::SetArtwork(tracks, image));
+        }
+    }
+
     fn command_context(&self) -> Context {
         let selected = self.view.selected_tracks();
         Context {
@@ -209,6 +227,15 @@ impl TuneBoxApp {
                 }
             }
             Action::Locate(id) => self.locate(id),
+            Action::ChooseArtwork(tracks) => self.choose_artwork(tracks),
+            Action::SetArtwork(tracks, image) => {
+                let result = self.session.set_artwork(&tracks, &image);
+                self.report(result);
+            }
+            Action::RemoveArtwork(tracks) => {
+                let result = self.session.remove_artwork(&tracks);
+                self.report(result);
+            }
             Action::SetRating(ids, rating) => self.session.set_rating(&ids, rating),
             Action::SetChecked(ids, checked) => self.session.set_checked(&ids, checked),
             Action::SortBy(column) => self.view.sort_by(column),
@@ -324,6 +351,8 @@ impl TuneBoxApp {
                 self.view.selection.select_all(&rows);
             }
             CommandId::Delete => self.delete_selection(),
+            CommandId::ChooseArtwork => self.choose_artwork(self.view.selected_tracks()),
+            CommandId::RemoveArtwork => self.apply(Action::RemoveArtwork(self.view.selected_tracks())),
             CommandId::GetInfo => {
                 let tracks = self.view.selected_tracks();
                 self.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&self.session, tracks))));

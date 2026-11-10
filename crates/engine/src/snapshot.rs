@@ -16,6 +16,7 @@ use tunebox_library::store::{self, StoreError};
 pub struct LibrarySnapshot {
     library: Library,
     prefs: Preferences,
+    library_file: std::path::PathBuf,
 }
 
 impl LibrarySnapshot {
@@ -29,10 +30,10 @@ impl LibrarySnapshot {
             ))),
             other => other.into(),
         })?;
-        Ok(LibrarySnapshot { library, prefs })
+        Ok(LibrarySnapshot { library, prefs, library_file: paths.library_file.clone() })
     }
 
     pub fn view(&self) -> LibraryView<'_> {
-        LibraryView { library: &self.library, prefs: &self.prefs, devices: &[] }
+        LibraryView { library: &self.library, prefs: &self.prefs, devices: &[], library_file: &self.library_file }
     }
 }

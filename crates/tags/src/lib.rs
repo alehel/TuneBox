@@ -1,9 +1,10 @@
 //! tunebox-tags — metadata in and out of audio files.
 //!
 //! [`read`] turns a file into a [`TrackMeta`] and [`FileInfo`]; [`write`] puts edited metadata
-//! back, and [`read_artwork`] / [`write_artwork`] handle the cover picture. The tag formats
-//! (ID3v2, MP4 atoms, Vorbis comments, RIFF INFO…) are lofty's business; this crate maps them
-//! onto TuneBox's model and nothing else.
+//! back. The cover picture is `artwork`'s ([`read_artwork`], [`write_artwork`],
+//! [`remove_artwork`]), and `picture` turns an image the listener chose into one fit to be a
+//! cover. The tag formats (ID3v2, MP4 atoms, Vorbis comments, RIFF INFO…) are lofty's business;
+//! this crate maps them onto TuneBox's model and nothing else.
 
 #![deny(
     clippy::unwrap_used,
@@ -14,13 +15,16 @@
     clippy::unreachable
 )]
 
+mod artwork;
 mod fields;
+mod picture;
 
+pub use artwork::{Artwork, read_artwork, remove_artwork, write_artwork};
 pub use fields::can_store;
+pub use picture::{MAX_COVER_SIDE, PictureError, looks_like_image, prepare_cover};
 
 use lofty::config::WriteOptions;
 use lofty::file::FileType;
-use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::{Accessor, AudioFile, ItemKey, TagExt, TaggedFileExt};
 use lofty::tag::Tag;
 use std::path::Path;
@@ -44,14 +48,6 @@ pub enum TagError {
 pub struct ReadTags {
     pub meta: TrackMeta,
     pub file: FileInfo,
-}
-
-/// A cover picture.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Artwork {
-    /// "image/jpeg" or "image/png".
-    pub mime: String,
-    pub data: Vec<u8>,
 }
 
 /// Reads a file's metadata and audio properties.
@@ -126,7 +122,10 @@ pub fn write(path: &Path, meta: &TrackMeta) -> Result<(), TagError> {
 
 /// Runs `edit` on a copy of `path` and moves the copy over the original only when it succeeds.
 /// The copy is removed on failure, so nothing is left behind.
-fn rewrite_atomically(path: &Path, edit: impl FnOnce(&Path) -> Result<(), TagError>) -> Result<(), TagError> {
+pub(crate) fn rewrite_atomically(
+    path: &Path,
+    edit: impl FnOnce(&Path) -> Result<(), TagError>,
+) -> Result<(), TagError> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     // Hidden, and keeping the extension: lofty recognises the format by it.
     let copy = path.with_file_name(format!(".tunebox-edit-{name}"));
@@ -142,7 +141,7 @@ fn rewrite_atomically(path: &Path, edit: impl FnOnce(&Path) -> Result<(), TagErr
     result
 }
 
-fn load_primary_tag(path: &Path) -> Result<Tag, TagError> {
+pub(crate) fn load_primary_tag(path: &Path) -> Result<Tag, TagError> {
     let tagged = lofty::read_from_path(path)?;
     let tag_type = tagged.primary_tag_type();
     Ok(tagged.primary_tag().cloned().unwrap_or_else(|| Tag::new(tag_type)))
@@ -190,44 +189,6 @@ fn set_bpm(tag: &mut Tag, bpm: Option<u32>) {
     {
         tag.insert_text(ItemKey::Bpm, bpm.to_string());
     }
-}
-
-/// The file's front cover, or its first picture of any kind.
-pub fn read_artwork(path: &Path) -> Result<Option<Artwork>, TagError> {
-    let tagged = lofty::read_from_path(path)?;
-    let pictures = tagged.tags().iter().flat_map(|t| t.pictures());
-    let mut best: Option<&Picture> = None;
-    for picture in pictures {
-        if picture.pic_type() == PictureType::CoverFront {
-            best = Some(picture);
-            break;
-        }
-        best = best.or(Some(picture));
-    }
-    Ok(best.map(|p| Artwork {
-        mime: p.mime_type().map(|m| m.as_str().to_owned()).unwrap_or_else(|| sniff_mime(p.data()).to_owned()),
-        data: p.data().to_vec(),
-    }))
-}
-
-/// Sets the file's front cover, replacing any existing one.
-pub fn write_artwork(path: &Path, artwork: &Artwork) -> Result<(), TagError> {
-    rewrite_atomically(path, |copy| {
-        let mut tag = load_primary_tag(copy)?;
-        tag.remove_picture_type(PictureType::CoverFront);
-        let picture = Picture::unchecked(artwork.data.clone())
-            .pic_type(PictureType::CoverFront)
-            .mime_type(MimeType::from_str(&artwork.mime))
-            .build();
-        tag.push_picture(picture);
-        tag.save_to_path(copy, WriteOptions::default())?;
-        Ok(())
-    })
-}
-
-/// The image type from its first bytes, for pictures stored without one.
-fn sniff_mime(data: &[u8]) -> &'static str {
-    if data.starts_with(&[0x89, b'P', b'N', b'G']) { "image/png" } else { "image/jpeg" }
 }
 
 #[cfg(test)]
@@ -346,16 +307,6 @@ mod tests {
         write(&path, &TrackMeta { title: "A".into(), genre: "Rock".into(), ..TrackMeta::default() }).unwrap();
         write(&path, &TrackMeta { title: "A".into(), ..TrackMeta::default() }).unwrap();
         assert_eq!(read(&path).unwrap().meta.genre, "");
-    }
-
-    #[test]
-    fn artwork_round_trips() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = flac_file(dir.path());
-        assert_eq!(read_artwork(&path).unwrap(), None);
-        let art = Artwork { mime: "image/png".into(), data: vec![0x89, b'P', b'N', b'G', 1, 2, 3] };
-        write_artwork(&path, &art).unwrap();
-        assert_eq!(read_artwork(&path).unwrap(), Some(art));
     }
 
     #[test]
