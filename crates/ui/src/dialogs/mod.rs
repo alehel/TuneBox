@@ -1,6 +1,7 @@
 //! Dialogs. One is open at a time; each edits a draft and turns it into actions on OK.
 
 mod extra_fields;
+mod find_artwork;
 mod get_info;
 mod layout;
 mod preferences;
@@ -8,6 +9,7 @@ mod rename_files;
 mod simple;
 mod smart_playlist;
 
+pub use find_artwork::FindArtworkDialog;
 pub use get_info::GetInfoDialog;
 pub use preferences::{PreferencesDialog, Tab as PreferencesTab};
 pub use rename_files::RenameFilesDialog;
@@ -22,6 +24,7 @@ use tunebox_engine::model::PlaylistId;
 #[derive(Clone, Debug)]
 pub enum Dialog {
     GetInfo(Box<GetInfoDialog>),
+    FindArtwork(Box<FindArtworkDialog>),
     Preferences(Box<PreferencesDialog>),
     SmartPlaylist(Box<SmartPlaylistDialog>),
     RenameFiles(Box<RenameFilesDialog>),
@@ -47,6 +50,7 @@ impl Dialog {
     ) -> bool {
         match self {
             Dialog::GetInfo(dialog) => dialog.show(ctx, session, artwork, actions),
+            Dialog::FindArtwork(dialog) => dialog.show(ctx, session, artwork, actions),
             Dialog::Preferences(dialog) => dialog.show(ctx, actions),
             Dialog::SmartPlaylist(dialog) => dialog.show(ctx, actions),
             Dialog::RenameFiles(dialog) => dialog.show(ctx, session, actions),

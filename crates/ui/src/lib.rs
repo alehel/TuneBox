@@ -20,6 +20,7 @@ mod actions;
 mod app;
 mod artwork;
 mod demo;
+mod demo_web;
 mod dialogs;
 mod fonts;
 mod glyphs;

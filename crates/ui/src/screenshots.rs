@@ -22,7 +22,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 23] = [
+const SCENES: [Scene; 25] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-unplayable", setup: unplayable },
@@ -34,10 +34,12 @@ const SCENES: [Scene; 23] = [
     Scene { name: "tunebox-get-info-several", setup: get_info_several },
     Scene { name: "tunebox-get-info-pinned", setup: get_info_pinned },
     Scene { name: "tunebox-get-info-all-fields", setup: get_info_all_fields },
+    Scene { name: "tunebox-find-artwork", setup: find_artwork },
     Scene { name: "tunebox-refresh-from-files", setup: refresh_from_files },
     Scene { name: "tunebox-rename-files", setup: rename_files },
     Scene { name: "tunebox-rename-files-conflicts", setup: rename_files_conflicts },
     Scene { name: "tunebox-cd-import", setup: cd },
+    Scene { name: "tunebox-cd-cover", setup: cd_cover },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
     Scene { name: "tunebox-preferences-importing", setup: preferences_importing },
@@ -174,6 +176,51 @@ fn get_info(app: &mut TuneBoxApp) {
 
 fn cd(app: &mut TuneBoxApp) {
     app.view.select_source(SourceItem::Cd);
+}
+
+/// Lets the session finish its background work (the demo's pretend web answers at once).
+fn finish_jobs(app: &mut TuneBoxApp) {
+    let start = std::time::Instant::now();
+    while start.elapsed() < Duration::from_secs(10) {
+        app.session.tick();
+        if app.session.jobs().is_empty() {
+            app.session.tick();
+            if app.session.jobs().is_empty() {
+                return;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// The disc after Get Track Names and Get CD Cover, from the demo's pretend MusicBrainz.
+fn cd_cover(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Cd);
+    if app.session.lookup_disc_names().is_ok() {
+        finish_jobs(app);
+    }
+    if app.session.fetch_disc_cover().is_ok() {
+        finish_jobs(app);
+    }
+}
+
+/// Find Album Artwork… on "Paper Boats", with the editions the demo's pretend MusicBrainz
+/// knows and the CD edition picked.
+fn find_artwork(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    let album: Vec<TrackId> = app
+        .session
+        .query(&TrackQuery::new(Source::Music))
+        .into_iter()
+        .filter(|id| app.session.track(*id).is_some_and(|t| t.meta.album == "Paper Boats"))
+        .collect();
+    app.view.selection.set(album.iter().copied());
+    app.find_artwork(album);
+    finish_jobs(app);
+    if let Some(Dialog::FindArtwork(dialog)) = app.dialog.take() {
+        let dialog = dialog.with_choice(crate::demo_web::PAPER_BOATS_CD);
+        app.dialog = Some(Dialog::FindArtwork(Box::new(dialog)));
+    }
 }
 
 fn device(app: &mut TuneBoxApp) {

@@ -1,6 +1,7 @@
 //! Album artwork: read where the engine says the cover is (the song's file, or the cover TuneBox
 //! keeps for a song in a read-only folder), decoded on a background thread, then kept as
-//! textures, one per album.
+//! textures, one per album. Pictures fetched from the Cover Art Archive (the CD's cover, the
+//! picker's thumbnails) arrive as bytes and are kept by a name of their own.
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use std::collections::{HashMap, HashSet};
@@ -21,6 +22,8 @@ pub struct ArtworkCache {
     pending: HashSet<AlbumKey>,
     /// Albums forgotten while their cover was loading: what arrives is the old cover.
     stale: HashSet<AlbumKey>,
+    /// Fetched pictures by name; `None`: they could not be decoded.
+    pictures: HashMap<String, Option<TextureHandle>>,
 }
 
 impl ArtworkCache {
@@ -37,7 +40,26 @@ impl ArtworkCache {
         if let Err(e) = spawned {
             log::warn!("artwork will not be shown: {e}");
         }
-        Self { requests, results, textures: HashMap::new(), pending: HashSet::new(), stale: HashSet::new() }
+        Self {
+            requests,
+            results,
+            textures: HashMap::new(),
+            pending: HashSet::new(),
+            stale: HashSet::new(),
+            pictures: HashMap::new(),
+        }
+    }
+
+    /// `data` (a fetched JPEG or PNG) as a texture, decoded the first time it is asked for by
+    /// `name`. They are small (a 250-pixel thumbnail, one CD cover), so decoding here is quick.
+    pub fn picture(&mut self, ctx: &egui::Context, name: &str, data: &[u8]) -> Option<TextureHandle> {
+        if let Some(texture) = self.pictures.get(name) {
+            return texture.clone();
+        }
+        let texture =
+            decode(data).map(|image| ctx.load_texture(format!("picture:{name}"), image, TextureOptions::LINEAR));
+        self.pictures.insert(name.to_owned(), texture.clone());
+        texture
     }
 
     /// The cover of `track`'s album. It is read from a song of the album whose file is there:
@@ -104,7 +126,12 @@ impl ArtworkCache {
 /// Reads and decodes a cover. Any failure just means "no artwork".
 fn load(source: &CoverSource) -> Option<ColorImage> {
     let artwork = source.load().ok()??;
-    let image = image::load_from_memory(&artwork.data).ok()?;
+    decode(&artwork.data)
+}
+
+/// Decodes a picture at the size artwork is kept. Any failure just means "no picture".
+fn decode(data: &[u8]) -> Option<ColorImage> {
+    let image = image::load_from_memory(data).ok()?;
     let thumbnail = image.thumbnail(THUMBNAIL, THUMBNAIL).to_rgba8();
     let size = [thumbnail.width() as usize, thumbnail.height() as usize];
     Some(ColorImage::from_rgba_unmultiplied(size, thumbnail.as_raw()))

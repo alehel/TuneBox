@@ -1,14 +1,16 @@
-//! The audio CD page: the disc's tracks, their names, and importing them.
+//! The audio CD page: the disc's tracks, their names, its cover once fetched from the Cover
+//! Art Archive (shown in place of the disc), and importing them.
 
 use crate::actions::Action;
 use crate::panels::{PanelContext, widgets};
 use crate::theme;
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
-use tunebox_engine::JobKind;
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::format_clock;
+use tunebox_engine::{DiscCover, JobKind};
 
-const HEADER_HEIGHT: f32 = 118.0;
+const HEADER_HEIGHT: f32 = 140.0;
+const ART: f32 = 108.0;
 
 pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     let Some(cd) = cx.session.cd() else {
@@ -33,10 +35,26 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
         Color32::from_rgb(0xEC, 0xEE, 0xF1),
     );
     ui.painter().hline(header.x_range(), header.bottom() - 0.5, Stroke::new(1.0, theme::BORDER));
-    paint_disc(ui.painter(), Rect::from_min_size(header.min + vec2(22.0, 14.0), vec2(90.0, 90.0)));
+    let art = Rect::from_min_size(header.min + vec2(20.0, 16.0), vec2(ART, ART));
+    let cover = cd.cover.clone();
+    let release = cd.info.release_id.clone().unwrap_or_default();
+    match &cover {
+        DiscCover::Found { artwork, .. } => {
+            let texture = cx.artwork.picture(ui.ctx(), &format!("cd:{release}"), &artwork.data);
+            theme::soft_shadow(ui.painter(), art, 6.0, 10);
+            crate::artwork::paint(ui, art, texture.as_ref());
+            ui.painter().rect_stroke(
+                art,
+                6.0,
+                Stroke::new(1.0, Color32::from_black_alpha(25)),
+                egui::StrokeKind::Inside,
+            );
+        }
+        _ => paint_disc(ui.painter(), art),
+    }
     let mut changed = false;
     let fields =
-        Rect::from_min_max(header.min + vec2(124.0, 14.0), pos2(header.right() - 210.0, header.bottom() - 10.0));
+        Rect::from_min_max(header.min + vec2(146.0, 16.0), pos2(header.right() - 210.0, header.bottom() - 10.0));
     ui.scope_builder(egui::UiBuilder::new().max_rect(fields), |ui| {
         ui.spacing_mut().item_spacing.y = 7.0;
         let wide = (fields.width() - 70.0).clamp(160.0, 420.0);
@@ -53,6 +71,17 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
             }
             changed |= ui.checkbox(&mut info.compilation, "Compilation").changed();
         });
+        let note = match &cover {
+            DiscCover::NotAsked | DiscCover::Found { from: tunebox_engine::CoverOf::Release, .. } => None,
+            DiscCover::Found { .. } => Some("Cover from another edition of this album".to_owned()),
+            DiscCover::Fetching => Some("Getting the cover from the Cover Art Archive…".to_owned()),
+            DiscCover::NoneFound => Some("The Cover Art Archive has no cover for this release.".to_owned()),
+            DiscCover::Failed(reason) => Some(format!("The cover could not be fetched: {reason}.")),
+        };
+        if let Some(note) = note {
+            ui.add_space(2.0);
+            ui.add(egui::Label::new(RichText::new(note).size(11.0).color(theme::TEXT_MUTED)).truncate());
+        }
     });
 
     let buttons = Rect::from_min_max(
@@ -68,6 +97,15 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
         let looking = cx.session.is_busy(JobKind::LookupNames);
         if ui.add_enabled(!looking, egui::Button::new("Get Track Names").min_size(vec2(150.0, 24.0))).clicked() {
             cx.act(Action::Run(CommandId::GetTrackNames));
+        }
+        let can_fetch = cx.session.is_enabled(CommandId::GetCdCover, Default::default());
+        let button = ui
+            .add_enabled(can_fetch, egui::Button::new("Get CD Cover").min_size(vec2(150.0, 24.0)))
+            .on_disabled_hover_text(
+                "Get Track Names first: the cover is found by the MusicBrainz release they come from.",
+            );
+        if button.clicked() {
+            cx.act(Action::Run(CommandId::GetCdCover));
         }
         let format = cx.session.preferences().rip_format.encoder_name();
         ui.label(RichText::new(format!("Imports with the {format}")).size(10.5).color(theme::TEXT_MUTED));

@@ -274,6 +274,13 @@ fn importing(ui: &mut Ui, prefs: &mut Preferences) {
             "From MusicBrainz. Only the disc's identifier is sent, and only when this is on or you choose Get Track Names.",
             &mut prefs.lookup_cd_names_automatically,
         );
+        ui.add_space(8.0);
+        switch_row(
+            ui,
+            "Get the cover when track names are found",
+            "From the Cover Art Archive. Only the MusicBrainz release's identifier is sent, and only when this is on or you choose Get CD Cover.",
+            &mut prefs.fetch_cd_covers_automatically,
+        );
     });
 }
 

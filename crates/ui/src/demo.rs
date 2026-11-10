@@ -1,6 +1,7 @@
 //! Demo mode (`tunebox --demo <folder>`): the library made by `cargo xtask demo`, a virtual CD
-//! in a virtual drive and a virtual player, so every part of TuneBox can be tried, and
-//! screenshotted, without hardware.
+//! in a virtual drive, a virtual player, and a pretend MusicBrainz and Cover Art Archive
+//! (`demo_web`), so every part of TuneBox can be tried, and screenshotted, without hardware or
+//! the network.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,8 +28,20 @@ const DISC_TRACKS: [(&str, u32); 9] = [
 ];
 
 impl Demo {
-    /// Inserts the virtual disc.
+    /// Inserts the virtual disc, and answers web requests from the pretend services.
     pub fn start(dir: &Path, session: &mut Session) -> Self {
+        let cover = |album: &str| {
+            let track = session.library().tracks().find(|t| t.meta.album == album)?;
+            session.cover_source(track.id)?.load().ok()?.map(|artwork| artwork.data)
+        };
+        let titles = DISC_TRACKS.iter().map(|(title, _)| (*title).to_owned()).collect();
+        let web = crate::demo_web::DemoWeb::new(
+            (DISC_ALBUM.into(), DISC_ARTIST.into(), titles),
+            cover("Paper Boats").unwrap_or_default(),
+            cover("Glass Garden").unwrap_or_default(),
+            cover("Low Tide Sessions").unwrap_or_default(),
+        );
+        session.use_web_client(Arc::new(web));
         let lengths = DISC_TRACKS.iter().map(|(_, seconds)| *seconds).collect();
         session.read_disc(Arc::new(VirtualDrive::new("Virtual Drive", lengths)));
         Self { dir: dir.to_path_buf(), disc_named: false }

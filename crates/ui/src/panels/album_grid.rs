@@ -1,6 +1,6 @@
 //! The album grid: one tile per album. Covers sit on soft shadows with a faint reflection
 //! below, a nod to the classic Cover Flow; hovering lifts a cover and offers to play it, and a
-//! right-click offers Get Info and the album's artwork.
+//! right-click offers Get Info and the album's artwork (chosen, found online, or removed).
 
 use crate::actions::Action;
 use crate::artwork::{self, AlbumKey, album_key};
@@ -108,7 +108,7 @@ fn tile(ui: &mut Ui, cx: &mut PanelContext, album: &Album, slot: Rect) {
 /// The right-click menu of a tile. The album is the selection by then, so the commands act on it.
 fn album_menu(ui: &mut Ui, cx: &mut PanelContext, album: &Album) {
     let context = Context { selected_tracks: album.tracks.len(), ..Context::default() };
-    for id in [CommandId::GetInfo, CommandId::ChooseArtwork, CommandId::RemoveArtwork] {
+    for id in [CommandId::GetInfo, CommandId::ChooseArtwork, CommandId::FindAlbumArtwork, CommandId::RemoveArtwork] {
         let label = spec_of(id).map_or("", |spec| spec.label);
         let enabled = cx.session.is_enabled(id, context);
         if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
