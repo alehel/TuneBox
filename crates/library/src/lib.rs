@@ -17,10 +17,12 @@
 mod browse;
 mod error;
 mod library;
+mod moves;
 pub mod store;
 mod summary;
 
 pub use browse::{BrowseFilter, Browser};
 pub use error::LibraryError;
 pub use library::{Library, NewTrack};
+pub use moves::MovedSongs;
 pub use summary::Summary;

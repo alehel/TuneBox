@@ -23,6 +23,7 @@ mod demo;
 mod dialogs;
 mod fonts;
 mod glyphs;
+mod library_watch;
 mod panels;
 mod screenshots;
 mod shortcuts;

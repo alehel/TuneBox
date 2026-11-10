@@ -8,7 +8,7 @@
 use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
-use crate::session::{Outcome, Session};
+use crate::session::{Origin, Outcome, Session};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use tunebox_model::{TrackId, TrackMeta};
@@ -51,6 +51,15 @@ impl Session {
     /// Reads the tags of `ids` from their files again and updates the library with them.
     /// Ratings, play counts and playlists are TuneBox's own and are kept. Nothing is written.
     pub fn refresh_from_files(&mut self, ids: &[TrackId], edits: LibraryOnlyEdits) -> Result<JobId, EngineError> {
+        self.start_refresh(ids, edits, Origin::Listener)
+    }
+
+    pub(crate) fn start_refresh(
+        &mut self,
+        ids: &[TrackId],
+        edits: LibraryOnlyEdits,
+        origin: Origin,
+    ) -> Result<JobId, EngineError> {
         if self.jobs.is_running(JobKind::Refresh) {
             return Err(EngineError::Busy(JobKind::Refresh.noun()));
         }
@@ -77,11 +86,11 @@ impl Session {
                 let result = tunebox_tags::read(&location).map_err(|e| e.to_string());
                 files.push(ReadAgain { id, location, before, result });
             }
-            Outcome::Refreshed(RefreshReport { files, kept })
+            Outcome::Refreshed(RefreshReport { files, kept }, origin)
         }))
     }
 
-    pub(crate) fn finish_refresh(&mut self, report: RefreshReport) {
+    pub(crate) fn finish_refresh(&mut self, report: RefreshReport, origin: Origin) {
         let (mut refreshed, mut changed) = (0, 0);
         let mut failures: Vec<(PathBuf, String)> = Vec::new();
         for file in report.files {
@@ -107,7 +116,19 @@ impl Session {
         if refreshed > 0 {
             self.library_changed();
         }
-        self.notices.push(Notice::info(summary(refreshed, changed, report.kept)));
+        match origin {
+            Origin::Listener => self.notices.push(Notice::info(summary(refreshed, changed, report.kept))),
+            // The watcher reads every song it sees change, TuneBox's own edits included: only
+            // songs that really changed are worth a word.
+            Origin::Watcher if changed > 0 => {
+                let text = match changed {
+                    1 => "Updated 1 song changed by another program.".to_owned(),
+                    n => format!("Updated {n} songs changed by another program."),
+                };
+                self.notices.push(Notice::info(text));
+            }
+            Origin::Watcher => {}
+        }
         if let Some((path, reason)) = failures.first() {
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let text = match failures.len() {

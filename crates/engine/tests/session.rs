@@ -405,3 +405,63 @@ fn refresh_from_files_picks_up_changes_made_by_other_programs() {
     assert_eq!(f.session.track(first).unwrap().title(), "First Light (Remastered)");
     assert!(notice.contains("could not be read"), "{notice}");
 }
+
+#[test]
+fn watched_folder_changes_add_read_and_relink_songs_without_losing_any() {
+    let mut f = fixture(1.0);
+    let music = f.dir.path().join("Music");
+    std::fs::create_dir_all(&music).unwrap();
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(music.clone(), false);
+    f.session.set_preferences(prefs);
+    let settle = |session: &mut Session, paths: Vec<std::path::PathBuf>| {
+        session.folders_changed(paths);
+        tick_until(session, |s| s.jobs().is_empty());
+        session.tick();
+        tick_until(session, |s| s.jobs().is_empty());
+        session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ")
+    };
+
+    // A song appears.
+    let album = music.join("Lanterns");
+    let path = album.join("first.flac");
+    write_song(&path, "First Light", "Quiet Harbour", "Lanterns", 1);
+    let notice = settle(&mut f.session, vec![album.clone(), path.clone()]);
+    assert_eq!(f.session.library().len(), 1);
+    assert_eq!(notice, "Added 1 song that appeared in your library folders.");
+    let id = f.session.query(&TrackQuery::new(Source::Music))[0];
+    f.session.set_rating(&[id], Rating::from_stars(5));
+
+    // TuneBox's own edit comes back as a change: read, and nothing said.
+    let mut meta = f.session.track(id).unwrap().meta.clone();
+    meta.genre = "Dream Pop".into();
+    f.session.edit_track(id, meta).unwrap();
+    f.session.take_notices();
+    assert_eq!(settle(&mut f.session, vec![path.clone()]), "");
+
+    // Another program retags it.
+    let mut retagged = tunebox_tags::read(&path).unwrap().meta;
+    retagged.title = "First Light (Live)".into();
+    tunebox_tags::write(&path, &retagged).unwrap();
+    assert_eq!(settle(&mut f.session, vec![path.clone()]), "Updated 1 song changed by another program.");
+    assert_eq!(f.session.track(id).unwrap().title(), "First Light (Live)");
+
+    // The album folder is renamed: the song is relinked, not duplicated.
+    let renamed = music.join("Lanterns (1997)");
+    std::fs::rename(&album, &renamed).unwrap();
+    let notice = settle(&mut f.session, vec![album.clone(), renamed.clone(), path.clone()]);
+    assert_eq!(f.session.library().len(), 1, "{notice}");
+    let track = f.session.track(id).unwrap();
+    assert_eq!(track.location, renamed.join("first.flac"));
+    assert_eq!(track.stats.rating, Rating::from_stars(5));
+    assert!(notice.contains("Found 1 song that had moved"), "{notice}");
+
+    // TuneBox's temporary files are not songs; a deleted song keeps its place and history.
+    let temp = renamed.join(".tunebox-edit-first.flac");
+    std::fs::copy(renamed.join("first.flac"), &temp).unwrap();
+    assert_eq!(settle(&mut f.session, vec![temp]), "");
+    std::fs::remove_file(renamed.join("first.flac")).unwrap();
+    assert_eq!(settle(&mut f.session, vec![renamed.join("first.flac")]), "");
+    assert_eq!(f.session.library().len(), 1);
+    assert_eq!(f.session.track(id).unwrap().stats.rating, Rating::from_stars(5));
+}

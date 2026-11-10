@@ -5,6 +5,7 @@ use crate::actions::Action;
 use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
 use crate::dialogs::{ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
+use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
 use crate::panels::{
     PanelContext, album_grid, browser, cd_view, device_view, menu_bar, sidebar, status_bar, toolbar, track_list,
@@ -60,6 +61,7 @@ pub struct TuneBoxApp {
     ctx: egui::Context,
     toasts: Toasts,
     screenshots: Option<ScreenshotRunner>,
+    library_watch: LibraryWatch,
     last_device_scan: Option<Instant>,
     #[cfg(feature = "drives")]
     last_disc_scan: Option<Instant>,
@@ -85,6 +87,7 @@ impl TuneBoxApp {
             ctx: cc.egui_ctx.clone(),
             toasts: Toasts::default(),
             screenshots,
+            library_watch: LibraryWatch::default(),
             last_device_scan: None,
             #[cfg(feature = "drives")]
             last_disc_scan: None,
@@ -93,6 +96,9 @@ impl TuneBoxApp {
 
     /// Engine bookkeeping that happens every frame.
     fn housekeeping(&mut self) {
+        for notice in self.library_watch.update(&mut self.session, &self.ctx) {
+            self.toasts.push(notice);
+        }
         self.session.tick();
         for notice in self.session.take_notices() {
             self.toasts.push(notice);

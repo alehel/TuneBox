@@ -47,6 +47,9 @@ enum FolderAction {
     Remove { path: PathBuf },
     /// Add songs that appeared in the folders since they were last scanned.
     Scan,
+    /// Watch the folders and keep the library up to date as songs appear or change, until
+    /// stopped with Ctrl-C.
+    Watch,
     /// Put CD imports and copies in this folder (it must not be read only).
     Imports { path: PathBuf },
 }
@@ -386,6 +389,7 @@ fn folders(session: &mut Session, action: Option<FolderAction>) -> Result<(), St
             prefs.media_folder = path;
             session.set_preferences(prefs);
         }
+        Some(FolderAction::Watch) => watch(session)?,
         Some(FolderAction::Scan) => {
             session.scan_library_folders().map_err(|e| e.to_string())?;
             wait_for_jobs(session);
@@ -407,4 +411,31 @@ fn folders(session: &mut Session, action: Option<FolderAction>) -> Result<(), St
     };
     println!("CD imports and copies go to {}{imports}", prefs.media_folder.display());
     Ok(())
+}
+
+/// Feeds the folder watcher's changes to the session until the process is stopped. The library
+/// is saved after every change, since Ctrl-C ends the process without a chance to save.
+fn watch(session: &mut Session) -> Result<(), String> {
+    let folders: Vec<PathBuf> = session.preferences().library_folders.iter().map(|f| f.path.clone()).collect();
+    if folders.is_empty() {
+        return Err("there are no library folders to watch; add one with `tunebox-cli folders add`".into());
+    }
+    let mut watcher = tunebox_platform::FolderWatcher::start(&folders, tunebox_platform::QUIET, || {})?;
+    for (folder, reason) in watcher.failures() {
+        eprintln!("cannot watch {}: {reason}", folder.display());
+    }
+    println!("Watching {} folders. Press Ctrl-C to stop.", folders.len());
+    loop {
+        let changed = watcher.settled();
+        if !changed.is_empty() {
+            session.folders_changed(changed);
+        }
+        let was_busy = !session.jobs().is_empty();
+        session.tick();
+        print_notices(session);
+        if was_busy && session.jobs().is_empty() {
+            session.save().map_err(|e| e.to_string())?;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }

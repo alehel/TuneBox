@@ -43,6 +43,9 @@ pub struct Preferences {
     /// Additional tag fields Get Info always shows, beside the everyday ones. The rest are a
     /// click away under "Show all fields".
     pub info_fields: Vec<TagField>,
+    /// Watch the library folders: add songs that appear in them and read songs other programs
+    /// change, as it happens. Watching only reads.
+    pub watch_library_folders: bool,
 }
 
 impl Preferences {
@@ -118,6 +121,7 @@ impl Default for Preferences {
             visualizer_style: String::new(),
             visualizer_track_info: true,
             info_fields: Vec::new(),
+            watch_library_folders: true,
         }
     }
 }

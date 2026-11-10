@@ -80,6 +80,13 @@ fn library(ui: &mut Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
     card(ui, "Adding music", "", |ui| {
         switch_row(
             ui,
+            "Watch library folders for changes",
+            "Songs that appear in these folders are added, and songs another program changes are read again, as it happens. Watching only reads; deleted songs stay in the library.",
+            &mut prefs.watch_library_folders,
+        );
+        ui.add_space(10.0);
+        switch_row(
+            ui,
             "Copy files to the media folder when adding to the library",
             "Off: songs play from where they are and nothing is added to your folders. On: copies are filed by artist and album in the imports folder.",
             &mut prefs.copy_to_media_folder,

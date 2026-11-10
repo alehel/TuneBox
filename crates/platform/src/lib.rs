@@ -1,8 +1,8 @@
 //! tunebox-platform — the operating system, behind small functions.
 //!
 //! Where TuneBox keeps its files ([`default_paths`]), which volumes are mounted ([`volumes`]),
-//! showing a file in the file manager ([`reveal`]) and ejecting a player or disc ([`eject`]).
-//! Nothing here holds state; the engine is told the results.
+//! showing a file in the file manager ([`reveal`]), ejecting a player or disc ([`eject`]) and
+//! watching the library folders ([`FolderWatcher`]). The engine is told the results.
 
 #![deny(
     clippy::unwrap_used,
@@ -12,6 +12,10 @@
     clippy::todo,
     clippy::unreachable
 )]
+
+mod watch;
+
+pub use watch::{FolderWatcher, QUIET};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

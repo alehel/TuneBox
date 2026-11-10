@@ -14,4 +14,8 @@ workspace = true
 tunebox-engine = { workspace = true }
 dirs = { workspace = true }
 sysinfo = { workspace = true }
+notify = { workspace = true }
 log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

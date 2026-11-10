@@ -212,7 +212,8 @@ impl Library {
         Ok(())
     }
 
-    /// Records that a track's file moved (for example when the media folder is reorganised).
+    /// Records that a track's file moved (for example when the media folder is reorganised, or a
+    /// folder was renamed outside TuneBox: see `MovedSongs`).
     pub fn relocate(&mut self, id: TrackId, location: PathBuf) -> Result<(), LibraryError> {
         let track = self.tracks.get_mut(&id).ok_or(LibraryError::NoSuchTrack(id))?;
         self.by_location.remove(&track.location);

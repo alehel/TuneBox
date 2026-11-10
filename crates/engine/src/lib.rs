@@ -32,6 +32,7 @@ mod prefs;
 mod refresh;
 mod session;
 mod sources;
+mod watch;
 
 pub use cd::CdState;
 pub use devices::DeviceEntry;

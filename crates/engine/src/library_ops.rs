@@ -3,10 +3,11 @@
 use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
 use crate::notices::Notice;
-use crate::session::{Outcome, Session};
+use crate::session::{Origin, Outcome, Session};
 use chrono::Utc;
 use std::path::PathBuf;
 use tunebox_import::{ImportOptions, ImportReport, KnownFiles};
+use tunebox_library::MovedSongs;
 use tunebox_model::{PlaylistId, Rating, SmartRules, Track, TrackId, TrackMeta};
 
 impl Session {
@@ -16,6 +17,10 @@ impl Session {
 
     /// Adds files and folders to the library in the background ("Add to Library…").
     pub fn import(&mut self, paths: Vec<PathBuf>) -> Result<JobId, EngineError> {
+        self.start_import(paths, Origin::Listener)
+    }
+
+    pub(crate) fn start_import(&mut self, paths: Vec<PathBuf>, origin: Origin) -> Result<JobId, EngineError> {
         if self.jobs.is_running(JobKind::Import) {
             return Err(EngineError::Busy("An import"));
         }
@@ -42,14 +47,22 @@ impl Session {
                 let name = p.current.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 ctx.progress(p.done as f32 / p.total.max(1) as f32, name);
             });
-            Outcome::Imported(report)
+            Outcome::Imported(report, origin)
         }))
     }
 
-    pub(crate) fn finish_import(&mut self, report: ImportReport) {
-        let added = report.tracks.len();
+    pub(crate) fn finish_import(&mut self, report: ImportReport, origin: Origin) {
+        // A new file may be a known song that moved; relink it rather than add a duplicate.
+        let moved_songs = MovedSongs::index(&self.library);
+        let (mut added, mut moved) = (0, 0);
         for track in report.tracks {
-            self.library.add_track(track);
+            match moved_songs.find(&self.library, &track, |old| !old.exists()) {
+                Some(id) if self.library.relocate(id, track.location.clone()).is_ok() => moved += 1,
+                _ => {
+                    self.library.add_track(track);
+                    added += 1;
+                }
+            }
         }
         let mut refreshed = 0;
         for (location, extra) in report.extra_fields {
@@ -59,23 +72,34 @@ impl Session {
                 refreshed += 1;
             }
         }
-        if added + refreshed > 0 {
+        if added + moved + refreshed > 0 {
             self.library_changed();
         }
-        let mut text = match added {
-            0 => "No new music was found.".to_owned(),
-            1 => "Added 1 song to the library.".to_owned(),
-            n => format!("Added {n} songs to the library."),
-        };
-        if report.already_in_library > 0 {
-            text.push_str(&format!(" {} were already in the library.", report.already_in_library));
+        let mut parts = Vec::new();
+        match (added, origin) {
+            (0, Origin::Listener) => parts.push("No new music was found.".to_owned()),
+            (0, Origin::Watcher) => {}
+            (1, Origin::Listener) => parts.push("Added 1 song to the library.".to_owned()),
+            (n, Origin::Listener) => parts.push(format!("Added {n} songs to the library.")),
+            (1, Origin::Watcher) => parts.push("Added 1 song that appeared in your library folders.".to_owned()),
+            (n, Origin::Watcher) => parts.push(format!("Added {n} songs that appeared in your library folders.")),
+        }
+        if report.already_in_library > 0 && origin == Origin::Listener {
+            parts.push(format!("{} were already in the library.", report.already_in_library));
+        }
+        match moved {
+            0 => {}
+            1 => parts.push("Found 1 song that had moved; its ratings and plays are kept.".to_owned()),
+            n => parts.push(format!("Found {n} songs that had moved; their ratings and plays are kept.")),
         }
         match refreshed {
             0 => {}
-            1 => text.push_str(" Read the additional details of 1 song from its file."),
-            n => text.push_str(&format!(" Read the additional details of {n} songs from their files.")),
+            1 => parts.push("Read the additional details of 1 song from its file.".to_owned()),
+            n => parts.push(format!("Read the additional details of {n} songs from their files.")),
         }
-        self.notices.push(Notice::info(text));
+        if !parts.is_empty() {
+            self.notices.push(Notice::info(parts.join(" ")));
+        }
         if let Some((path, reason)) = report.failures.first() {
             let others = report.failures.len() - 1;
             let more = if others > 0 { format!(" (and {others} more)") } else { String::new() };

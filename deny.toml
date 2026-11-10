@@ -25,6 +25,8 @@ allow = [
     "BSL-1.0",
     # webpki-roots (the CA list rustls uses for the MusicBrainz lookup): permissive data licence.
     "CDLA-Permissive-2.0",
+    # notify (watching library folders): a public-domain dedication, more permissive than MIT.
+    "CC0-1.0",
 ]
 confidence-threshold = 0.9
 

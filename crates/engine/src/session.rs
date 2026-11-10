@@ -25,6 +25,14 @@ use tunebox_sync::{Device, SyncReport};
 const AUTOSAVE_DELAY: Duration = Duration::from_secs(2);
 
 /// Where the session keeps its files.
+/// Who started an import or refresh. The folder watcher's work reports only what changed, so
+/// it never chatters about songs that were already up to date.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Origin {
+    Listener,
+    Watcher,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionPaths {
     pub library_file: PathBuf,
@@ -35,7 +43,7 @@ pub struct SessionPaths {
 
 /// What a finished job hands back.
 pub(crate) enum Outcome {
-    Imported(ImportReport),
+    Imported(ImportReport, Origin),
     DiscRead(Result<Option<CdState>, String>),
     #[cfg(feature = "musicbrainz")]
     NamesFound {
@@ -43,7 +51,7 @@ pub(crate) enum Outcome {
         result: Result<Vec<DiscInfo>, String>,
     },
     Ripped(RipReport),
-    Refreshed(crate::refresh::RefreshReport),
+    Refreshed(crate::refresh::RefreshReport, Origin),
     Synced {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
@@ -66,6 +74,8 @@ pub struct Session {
     revision: u64,
     /// Whether the listener has been told edits to protected songs stay in the library.
     pub(crate) protected_edit_noted: bool,
+    /// Paths the folder watcher reported, waiting for the running import or refresh to end.
+    pub(crate) folder_changes: std::collections::BTreeSet<PathBuf>,
 }
 
 impl Session {
@@ -102,6 +112,7 @@ impl Session {
             unsaved_since: None,
             revision: 0,
             protected_edit_noted: false,
+            folder_changes: std::collections::BTreeSet::new(),
         })
     }
 
@@ -164,6 +175,7 @@ impl Session {
                 Err(message) => self.notices.push(Notice::error(format!("{} failed. {message}", finished.kind.noun()))),
             }
         }
+        self.act_on_folder_changes();
         self.follow_player();
         if self.unsaved_since.is_some_and(|since| since.elapsed() >= AUTOSAVE_DELAY)
             && let Err(e) = self.save()
@@ -177,12 +189,12 @@ impl Session {
     fn apply_outcome(&mut self, outcome: Outcome) {
         self.content_changed();
         match outcome {
-            Outcome::Imported(report) => self.finish_import(report),
+            Outcome::Imported(report, origin) => self.finish_import(report, origin),
             Outcome::DiscRead(result) => self.finish_disc_read(result),
             #[cfg(feature = "musicbrainz")]
             Outcome::NamesFound { disc_id, result } => self.finish_lookup(&disc_id, result),
             Outcome::Ripped(report) => self.finish_rip(report),
-            Outcome::Refreshed(report) => self.finish_refresh(report),
+            Outcome::Refreshed(report, origin) => self.finish_refresh(report, origin),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }
     }
