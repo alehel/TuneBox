@@ -1,0 +1,21 @@
+[package]
+name = "tunebox-import"
+description = "TuneBox import: finds audio files, reads their tags and files them into the media folder."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tunebox-model = { workspace = true }
+tunebox-library = { workspace = true }
+tunebox-tags = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tunebox-audio = { workspace = true }
+tempfile = { workspace = true }

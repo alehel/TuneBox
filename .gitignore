@@ -1,0 +1,6 @@
+/target
+/plan
+/demo
+/screenshots-out
+*.swp
+.DS_Store

@@ -1,0 +1,90 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/alehel/tunebox"
+
+[workspace.dependencies]
+# internal (layer order: see docs/architecture.md and `cargo xtask layers`)
+tunebox-model = { path = "crates/model", version = "0.1.0" }
+tunebox-library = { path = "crates/library", version = "0.1.0" }
+tunebox-tags = { path = "crates/tags", version = "0.1.0" }
+tunebox-audio = { path = "crates/audio", version = "0.1.0" }
+tunebox-import = { path = "crates/import", version = "0.1.0" }
+tunebox-playback = { path = "crates/playback", version = "0.1.0" }
+tunebox-rip = { path = "crates/rip", version = "0.1.0" }
+tunebox-sync = { path = "crates/sync", version = "0.1.0" }
+tunebox-engine = { path = "crates/engine", version = "0.1.0" }
+tunebox-platform = { path = "crates/platform", version = "0.1.0" }
+tunebox-ui = { path = "crates/ui", version = "0.1.0" }
+
+# Shared Craft libraries. craft-audio decodes every format we play (natively, or through
+# symphonia for MP3, FLAC, ALAC and Vorbis) and encodes the lossless rip formats. craft-atomic
+# makes every library, preference and device-manifest save crash-safe.
+craft-audio = { git = "https://github.com/storytold/craft-libs", rev = "0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d", features = ["decode", "encode"] }
+craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d" }
+
+# audio
+lofty = "0.25"
+cpal = "0.18"
+# Lock-free single-producer/single-consumer ring between the decoder thread and the audio callback.
+rtrb = "0.3"
+# Audio CD access on macOS, Windows and Linux, in user space.
+cd-da-reader = "1"
+
+# foundation
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+# All date/time handling goes through chrono (AGENTS.md).
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+sha1 = "0.10"
+base64 = "0.22"
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+dirs = "6"
+
+# ui
+egui = "0.37"
+egui_extras = { version = "0.37", default-features = false }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "glow", "x11", "wayland", "accesskit", "clipboard", "links"] }
+png = "0.18"
+
+# tooling
+clap = { version = "4", features = ["derive"] }
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+cognitive_complexity = "deny"
+too_many_arguments = "deny"
+wildcard_imports = "deny"
+dbg_macro = "warn"
+todo = "warn"
+
+# Dependencies build optimised even in dev builds: decoding and the UI stay smooth while our own
+# crates keep fast incremental builds and line tables for backtraces.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+# craft-audio README: symphonia-bundle-flac overflows an i32 add on 32-bit LPC FLAC; the wrapped
+# value is correct, but debug builds would report the file as malformed.
+[profile.dev.package.symphonia-bundle-flac]
+overflow-checks = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

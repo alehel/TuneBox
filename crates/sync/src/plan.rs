@@ -1,0 +1,193 @@
+//! Deciding what a sync will do. Pure: no file system access.
+
+use crate::device::DeviceManifest;
+use std::collections::{BTreeMap, HashSet};
+use std::path::PathBuf;
+use std::time::Duration;
+use tunebox_model::{Track, TrackId, organize};
+
+/// A library track that should be on the device.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyncItem {
+    pub id: TrackId,
+    pub source: PathBuf,
+    /// Where it goes on the device, relative to the device root, with `/` separators.
+    pub device_path: String,
+    pub size: u64,
+    /// Modification time of the source file, in seconds since the Unix epoch.
+    pub modified: u64,
+    /// For playlist files: "Artist - Title" and the length.
+    pub label: String,
+    pub duration: Duration,
+}
+
+impl SyncItem {
+    /// Describes `track` for syncing into `music_folder`; `modified` is its file's
+    /// modification time (the caller reads it, keeping this function pure).
+    pub fn from_track(track: &Track, music_folder: &str, modified: u64) -> Self {
+        let extension = track.location.extension().and_then(|e| e.to_str()).unwrap_or(track.file.format.extension());
+        let relative = organize::relative_path(&track.meta, track.title(), &extension.to_lowercase());
+        let mut device_path = music_folder.trim_matches('/').to_owned();
+        for part in relative.iter() {
+            device_path.push('/');
+            device_path.push_str(&part.to_string_lossy());
+        }
+        let label = if track.meta.artist.is_empty() {
+            track.title().to_owned()
+        } else {
+            format!("{} - {}", track.meta.artist, track.title())
+        };
+        Self {
+            id: track.id,
+            source: track.location.clone(),
+            device_path,
+            size: track.file.size_bytes,
+            modified,
+            label,
+            duration: track.file.duration,
+        }
+    }
+}
+
+/// Copy a library file to the device.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CopyOp {
+    pub item: SyncItem,
+}
+
+/// Remove a file TuneBox put on the device earlier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeleteOp {
+    pub id: TrackId,
+    pub device_path: String,
+}
+
+/// A playlist to write to the device.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaylistFile {
+    pub name: String,
+    pub tracks: Vec<TrackId>,
+}
+
+/// What a sync will do.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SyncPlan {
+    pub copies: Vec<CopyOp>,
+    pub deletes: Vec<DeleteOp>,
+    /// Tracks already on the device and up to date.
+    pub unchanged: usize,
+    pub playlists: Vec<PlaylistFile>,
+    /// Everything that will be on the device afterwards, for writing playlists.
+    pub final_paths: BTreeMap<TrackId, SyncItem>,
+    pub bytes_to_copy: u64,
+    pub bytes_to_free: u64,
+}
+
+impl SyncPlan {
+    /// Whether the plan fits in `free_bytes` once its deletions have made room.
+    pub fn fits(&self, free_bytes: u64) -> bool {
+        self.bytes_to_copy <= free_bytes.saturating_add(self.bytes_to_free)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.copies.is_empty() && self.deletes.is_empty()
+    }
+}
+
+/// Plans a sync of `wanted` onto a device whose manifest is `manifest`.
+///
+/// A track is copied when it is not on the device, or when its file changed (size or
+/// modification time) or its place on the device did (its tags changed). Files TuneBox put on
+/// the device that are no longer wanted are deleted. Files TuneBox did not put there are never
+/// touched.
+pub fn plan(wanted: &[SyncItem], playlists: Vec<PlaylistFile>, manifest: &DeviceManifest) -> SyncPlan {
+    let mut result = SyncPlan { playlists, ..SyncPlan::default() };
+    let mut seen = HashSet::new();
+    for item in wanted {
+        if !seen.insert(item.id) {
+            continue;
+        }
+        result.final_paths.insert(item.id, item.clone());
+        match manifest.files.get(&item.id) {
+            Some(synced) if synced.path == item.device_path && synced.source_size == item.size && synced.source_modified == item.modified => {
+                result.unchanged += 1;
+            }
+            Some(synced) => {
+                if synced.path != item.device_path {
+                    result.deletes.push(DeleteOp { id: item.id, device_path: synced.path.clone() });
+                }
+                result.bytes_to_free = result.bytes_to_free.saturating_add(synced.source_size);
+                result.bytes_to_copy = result.bytes_to_copy.saturating_add(item.size);
+                result.copies.push(CopyOp { item: item.clone() });
+            }
+            None => {
+                result.bytes_to_copy = result.bytes_to_copy.saturating_add(item.size);
+                result.copies.push(CopyOp { item: item.clone() });
+            }
+        }
+    }
+    for (id, synced) in &manifest.files {
+        if !seen.contains(id) {
+            result.bytes_to_free = result.bytes_to_free.saturating_add(synced.source_size);
+            result.deletes.push(DeleteOp { id: *id, device_path: synced.path.clone() });
+        }
+    }
+    result.playlists.iter_mut().for_each(|p| p.tracks.retain(|id| seen.contains(id)));
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device::{Device, SyncedFile};
+
+    fn item(id: u64, path: &str, size: u64) -> SyncItem {
+        SyncItem {
+            id: TrackId(id),
+            source: PathBuf::from(format!("/lib/{id}.flac")),
+            device_path: path.into(),
+            size,
+            modified: 100,
+            label: String::new(),
+            duration: Duration::from_secs(1),
+        }
+    }
+
+    fn manifest(entries: &[(u64, &str, u64)]) -> DeviceManifest {
+        let dir = tempfile::tempdir().unwrap();
+        let mut manifest = Device::register(dir.path(), "Test").unwrap().manifest;
+        for (id, path, size) in entries {
+            manifest.files.insert(TrackId(*id), SyncedFile { path: (*path).into(), source_size: *size, source_modified: 100 });
+        }
+        manifest
+    }
+
+    #[test]
+    fn copies_new_keeps_current_deletes_unwanted() {
+        let m = manifest(&[(1, "Music/a.flac", 10), (2, "Music/b.flac", 20)]);
+        let p = plan(&[item(1, "Music/a.flac", 10), item(3, "Music/c.flac", 30)], Vec::new(), &m);
+        assert_eq!(p.unchanged, 1);
+        assert_eq!(p.copies.iter().map(|c| c.item.id).collect::<Vec<_>>(), [TrackId(3)]);
+        assert_eq!(p.deletes, [DeleteOp { id: TrackId(2), device_path: "Music/b.flac".into() }]);
+        assert_eq!((p.bytes_to_copy, p.bytes_to_free), (30, 20));
+        assert!(p.fits(10));
+        assert!(!p.fits(9));
+    }
+
+    #[test]
+    fn changed_files_and_moved_tracks_are_recopied() {
+        let m = manifest(&[(1, "Music/a.flac", 10), (2, "Music/old name.flac", 20)]);
+        let p = plan(&[item(1, "Music/a.flac", 11), item(2, "Music/new name.flac", 20)], Vec::new(), &m);
+        assert_eq!(p.copies.len(), 2);
+        assert_eq!(p.deletes, [DeleteOp { id: TrackId(2), device_path: "Music/old name.flac".into() }]);
+    }
+
+    #[test]
+    fn playlists_only_name_synced_tracks() {
+        let m = manifest(&[]);
+        let playlist = PlaylistFile { name: "Mix".into(), tracks: vec![TrackId(1), TrackId(9)] };
+        let p = plan(&[item(1, "Music/a.flac", 1), item(1, "Music/a.flac", 1)], vec![playlist], &m);
+        assert_eq!(p.copies.len(), 1, "duplicates are copied once");
+        assert_eq!(p.playlists[0].tracks, [TrackId(1)]);
+    }
+}

@@ -1,0 +1,37 @@
+[package]
+name = "tunebox-rip"
+description = "TuneBox CD import: drives, tables of contents, disc ids, MusicBrainz track names and ripping to lossless files."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["drives", "musicbrainz"]
+# Physical CD drives through cd-da-reader. Without it only `VirtualDrive` exists.
+drives = ["dep:cd-da-reader"]
+# Track-name lookup on musicbrainz.org (only ever when the listener asks for it).
+musicbrainz = ["dep:ureq"]
+
+[dependencies]
+tunebox-model = { workspace = true }
+tunebox-library = { workspace = true }
+tunebox-tags = { workspace = true }
+tunebox-audio = { workspace = true }
+# Sideways (same layer): ripped files are named like imported ones, never overwriting.
+tunebox-import = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+base64 = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+cd-da-reader = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

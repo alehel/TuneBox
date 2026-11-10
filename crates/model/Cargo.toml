@@ -1,0 +1,17 @@
+[package]
+name = "tunebox-model"
+description = "TuneBox domain model: tracks, playlists, smart playlist rules, sorting and search. Pure, no I/O."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
