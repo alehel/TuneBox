@@ -16,6 +16,7 @@ pub enum CommandId {
     NewSmartPlaylist,
     AddToLibrary,
     ScanLibraryFolders,
+    RefreshFromFiles,
     ImportCd,
     GetTrackNames,
     SyncDevice,
@@ -201,6 +202,7 @@ pub const COMMANDS: &[CommandSpec] = &[
         Needs::Nothing,
     )),
     spec(CommandId::ScanLibraryFolders, "Scan Library Folders", Menu::File, None, Needs::LibraryFolders),
+    spec(CommandId::RefreshFromFiles, "Refresh from Files", Menu::File, None, Needs::Selection),
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
@@ -286,6 +288,7 @@ impl Session {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
+            CommandId::RefreshFromFiles => self.jobs.is_running(JobKind::Refresh),
             CommandId::AddToLibrary | CommandId::ScanLibraryFolders => self.jobs.is_running(JobKind::Import),
             _ => false,
         };

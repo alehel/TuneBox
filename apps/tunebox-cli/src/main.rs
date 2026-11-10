@@ -84,6 +84,15 @@ enum Command {
         #[arg(long = "set", value_name = "FIELD=VALUE", required = true)]
         assignments: Vec<String>,
     },
+    /// Read the details of songs from their files again, after another program changed them
+    /// (all songs without --search). Songs with changes kept in TuneBox only are left as they
+    /// are unless --replace-library-edits is given.
+    Refresh {
+        #[arg(long)]
+        search: Option<String>,
+        #[arg(long)]
+        replace_library_edits: bool,
+    },
     /// List the additional fields the app's Get Info always shows, or pin and unpin them.
     InfoFields {
         #[arg(long, value_name = "FIELD")]
@@ -186,6 +195,10 @@ fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Info { search } => details::show(&session, &search)?,
         Command::Edit { search, assignments } => details::edit(&mut session, &search, &assignments)?,
+        Command::Refresh { search, replace_library_edits } => {
+            details::refresh(&mut session, search.as_deref(), replace_library_edits)?;
+            wait_for_jobs(&mut session);
+        }
         Command::InfoFields { pin, unpin } => details::info_fields(&mut session, &pin, &unpin)?,
         Command::Play { search, shuffle } => play(&mut session, search.as_deref(), shuffle),
         Command::CdInfo { virtual_disc, lookup } => {

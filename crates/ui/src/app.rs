@@ -4,7 +4,7 @@ use crate::LaunchOptions;
 use crate::actions::Action;
 use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
-use crate::dialogs::{ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
+use crate::dialogs::{ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
 use crate::panels::toasts::Toasts;
 use crate::panels::{
     PanelContext, album_grid, browser, cd_view, device_view, menu_bar, sidebar, status_bar, toolbar, track_list,
@@ -17,7 +17,7 @@ use egui::{Frame, Rect, pos2};
 use std::time::{Duration, Instant};
 use tunebox_engine::commands::{CommandId, Context};
 use tunebox_engine::model::{PlaylistKind, TrackId};
-use tunebox_engine::{EngineError, Notice, Player, Session, Volume};
+use tunebox_engine::{EngineError, LibraryOnlyEdits, Notice, Player, Session, Volume};
 
 /// How often mounted volumes are checked for players.
 const DEVICE_SCAN: Duration = Duration::from_secs(3);
@@ -200,6 +200,12 @@ impl TuneBoxApp {
                 self.session.remove_tracks(&tracks, delete_files);
                 self.view.selection.clear();
             }
+            Action::RefreshFromFiles(tracks, edits) => {
+                let result = self.session.refresh_from_files(&tracks, edits);
+                self.report(result);
+                // Covers are read from the files when shown, so forgetting them is the refresh.
+                self.artwork.clear();
+            }
             Action::SetPreferences(prefs) => self.session.set_preferences(*prefs),
             Action::AddToLibrary(paths) => {
                 let result = self.session.import(paths);
@@ -224,6 +230,16 @@ impl TuneBoxApp {
             CommandId::ScanLibraryFolders => {
                 let result = self.session.scan_library_folders();
                 self.report(result);
+            }
+            CommandId::RefreshFromFiles => {
+                let tracks = self.view.selected_tracks();
+                match self.session.library_only_edits(&tracks) {
+                    0 => self.apply(Action::RefreshFromFiles(tracks, LibraryOnlyEdits::Keep)),
+                    with_edits => {
+                        let dialog = ConfirmRefresh { tracks, with_edits, replace_edits: false };
+                        self.dialog = Some(Dialog::ConfirmRefresh(dialog));
+                    }
+                }
             }
             CommandId::ImportCd => {
                 let result = self.session.import_cd();

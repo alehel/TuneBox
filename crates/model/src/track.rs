@@ -48,6 +48,11 @@ pub struct Track {
     /// file reads them (see `TrackMeta::fill_unread_extra`).
     #[serde(default)]
     pub extra_fields_read: bool,
+    /// The details were edited in TuneBox but not written to the file: it is in a read-only
+    /// library folder, or writing failed. Refreshing from the file would undo those edits, so
+    /// it asks first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub library_only_edits: bool,
 }
 
 fn checked_default() -> bool {
@@ -117,6 +122,7 @@ pub(crate) mod fixtures {
             date_added: Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).single().unwrap_or_default(),
             checked: true,
             extra_fields_read: true,
+            library_only_edits: false,
         }
     }
 }

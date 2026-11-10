@@ -103,18 +103,27 @@ impl Session {
         // A value the file has no place for, or that does not suit its field, would show in
         // TuneBox but never reach the file; the frontends do not offer them, and this keeps it so.
         meta.extra.retain(|field, value| tunebox_tags::can_store(format, *field) && field.accepts(value));
-        if crate::files::may_write(&self.prefs, &location) {
-            if let Err(e) = tunebox_tags::write(&location, &meta) {
+        let in_file = if crate::files::may_write(&self.prefs, &location) {
+            let written = tunebox_tags::write(&location, &meta);
+            if let Err(e) = &written {
                 self.notices
                     .push(Notice::warning(format!("The details were saved in the library but not in the file: {e}")));
             }
-        } else if !self.protected_edit_noted {
-            self.notices.push(Notice::info(
-                "The song is in a read-only library folder, so the change is kept in TuneBox's library only.",
-            ));
-            self.protected_edit_noted = true;
+            written.is_ok()
+        } else {
+            if !self.protected_edit_noted {
+                self.notices.push(Notice::info(
+                    "The song is in a read-only library folder, so the change is kept in TuneBox's library only.",
+                ));
+                self.protected_edit_noted = true;
+            }
+            false
+        };
+        self.library.set_meta(id, meta, in_file)?;
+        if in_file && let Ok(written) = std::fs::metadata(&location) {
+            // New tags change the file's size; the Size column should say so.
+            self.library.set_file_size(id, written.len())?;
         }
-        self.library.set_meta(id, meta)?;
         self.library_changed();
         Ok(())
     }

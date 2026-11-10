@@ -9,7 +9,7 @@ mod smart_playlist;
 
 pub use get_info::GetInfoDialog;
 pub use preferences::{PreferencesDialog, Tab as PreferencesTab};
-pub use simple::{ConfirmRemove, RenamePlaylist};
+pub use simple::{ConfirmRefresh, ConfirmRemove, RenamePlaylist};
 pub use smart_playlist::SmartPlaylistDialog;
 
 use crate::actions::Action;
@@ -24,6 +24,7 @@ pub enum Dialog {
     SmartPlaylist(Box<SmartPlaylistDialog>),
     RenamePlaylist(RenamePlaylist),
     ConfirmRemove(ConfirmRemove),
+    ConfirmRefresh(ConfirmRefresh),
     About,
 }
 
@@ -46,6 +47,7 @@ impl Dialog {
             Dialog::SmartPlaylist(dialog) => dialog.show(ctx, actions),
             Dialog::RenamePlaylist(dialog) => dialog.show(ctx, actions),
             Dialog::ConfirmRemove(dialog) => dialog.show(ctx, actions),
+            Dialog::ConfirmRefresh(dialog) => dialog.show(ctx, actions),
             Dialog::About => simple::about(ctx),
         }
     }

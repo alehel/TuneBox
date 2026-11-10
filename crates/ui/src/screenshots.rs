@@ -2,7 +2,7 @@
 //! captures the window and saves it as a PNG, then quits. The README's pictures come from here.
 
 use crate::app::TuneBoxApp;
-use crate::dialogs::{Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, SmartPlaylistDialog};
+use crate::dialogs::{ConfirmRefresh, Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, SmartPlaylistDialog};
 use crate::state::{SourceItem, ViewMode};
 use egui::ColorImage;
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 18] = [
+const SCENES: [Scene; 19] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
@@ -29,6 +29,7 @@ const SCENES: [Scene; 18] = [
     Scene { name: "tunebox-get-info-several", setup: get_info_several },
     Scene { name: "tunebox-get-info-pinned", setup: get_info_pinned },
     Scene { name: "tunebox-get-info-all-fields", setup: get_info_all_fields },
+    Scene { name: "tunebox-refresh-from-files", setup: refresh_from_files },
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
@@ -263,4 +264,11 @@ fn preferences_get_info(app: &mut TuneBoxApp) {
     preferences(app);
     let prefs = app.session.preferences().clone();
     app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::GetInfo))));
+}
+
+/// Refresh from Files on an album, two of whose songs have edits kept in TuneBox only.
+fn refresh_from_files(app: &mut TuneBoxApp) {
+    get_info_several(app);
+    let tracks = app.view.selected_tracks();
+    app.dialog = Some(Dialog::ConfirmRefresh(ConfirmRefresh { tracks, with_edits: 2, replace_edits: false }));
 }

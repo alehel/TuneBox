@@ -29,6 +29,7 @@ mod library_ops;
 mod notices;
 mod playback;
 mod prefs;
+mod refresh;
 mod session;
 mod sources;
 
@@ -39,6 +40,7 @@ pub use jobs::{JobId, JobKind, JobStatus};
 pub use notices::{Notice, NoticeLevel};
 pub use playback::NowPlaying;
 pub use prefs::{LibraryFolder, Preferences};
+pub use refresh::LibraryOnlyEdits;
 pub use session::{Session, SessionPaths};
 pub use sources::{Source, TrackQuery};
 

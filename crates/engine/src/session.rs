@@ -43,6 +43,7 @@ pub(crate) enum Outcome {
         result: Result<Vec<DiscInfo>, String>,
     },
     Ripped(RipReport),
+    Refreshed(crate::refresh::RefreshReport),
     Synced {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
@@ -181,6 +182,7 @@ impl Session {
             #[cfg(feature = "musicbrainz")]
             Outcome::NamesFound { disc_id, result } => self.finish_lookup(&disc_id, result),
             Outcome::Ripped(report) => self.finish_rip(report),
+            Outcome::Refreshed(report) => self.finish_refresh(report),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
         }
     }

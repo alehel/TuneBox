@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
+    LibraryOnlyEdits, NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery,
+    VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -344,4 +345,63 @@ fn a_scan_reads_the_additional_fields_of_songs_added_before_they_were_read() {
     // Read once: the next scan leaves it alone.
     let second = scan(&mut session);
     assert!(!second.contains("details"), "{second}");
+}
+
+#[test]
+fn refresh_from_files_picks_up_changes_made_by_other_programs() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let ids = f.session.query(&TrackQuery::new(Source::Music));
+    let (first, second) = (ids[0], ids[1]);
+    f.session.set_rating(&[first], Rating::from_stars(4));
+    f.session.take_notices();
+    let refresh = |session: &mut Session, ids: &[_], edits| {
+        session.refresh_from_files(ids, edits).unwrap();
+        tick_until(session, |s| s.jobs().is_empty());
+        session.take_notices().into_iter().map(|n| n.text).collect::<Vec<_>>().join(" ")
+    };
+
+    // After an edit TuneBox wrote itself, file and library agree.
+    let mut meta = f.session.track(first).unwrap().meta.clone();
+    meta.genre = "Dream Pop".into();
+    f.session.edit_track(first, meta).unwrap();
+    let path = f.session.track(first).unwrap().location.clone();
+    assert_eq!(f.session.track(first).unwrap().file.size_bytes, std::fs::metadata(&path).unwrap().len());
+    let notice = refresh(&mut f.session, &[first], LibraryOnlyEdits::Keep);
+    assert_eq!(notice, "The song already matched its file.");
+
+    // Another program retags the first song.
+    let mut retagged = tunebox_tags::read(&path).unwrap().meta;
+    retagged.title = "First Light (Remastered)".into();
+    retagged.extra.insert(TagField::Conductor, "C. Baton".into());
+    tunebox_tags::write(&path, &retagged).unwrap();
+    let before = snapshot(&f.dir.path().join("Downloads"));
+    let notice = refresh(&mut f.session, &ids, LibraryOnlyEdits::Keep);
+    let track = f.session.track(first).unwrap();
+    assert_eq!(track.title(), "First Light (Remastered)");
+    assert_eq!(track.meta.extra(TagField::Conductor), "C. Baton");
+    assert_eq!(track.stats.rating, Rating::from_stars(4), "TuneBox's own data is kept");
+    assert!(notice.starts_with("Updated 1 of 2 songs"), "{notice}");
+    assert_eq!(snapshot(&f.dir.path().join("Downloads")), before, "refreshing only reads");
+
+    // An edit kept in TuneBox only (read-only folder) is kept unless the listener says otherwise.
+    let mut prefs = f.session.preferences().clone();
+    prefs.add_library_folder(f.dir.path().join("Downloads"), true);
+    f.session.set_preferences(prefs);
+    let mut meta = f.session.track(second).unwrap().meta.clone();
+    meta.title = "Renamed in TuneBox".into();
+    f.session.edit_track(second, meta).unwrap();
+    assert_eq!(f.session.library_only_edits(&ids), 1);
+    let notice = refresh(&mut f.session, &ids, LibraryOnlyEdits::Keep);
+    assert_eq!(f.session.track(second).unwrap().title(), "Renamed in TuneBox");
+    assert!(notice.contains("1 song with changes kept in TuneBox only"), "{notice}");
+    refresh(&mut f.session, &ids, LibraryOnlyEdits::Replace);
+    assert_eq!(f.session.track(second).unwrap().title(), "Second Light");
+    assert_eq!(f.session.library_only_edits(&ids), 0);
+
+    // A missing file leaves the song as it is, with a warning.
+    std::fs::rename(&path, path.with_extension("moved")).unwrap();
+    let notice = refresh(&mut f.session, &[first], LibraryOnlyEdits::Keep);
+    assert_eq!(f.session.track(first).unwrap().title(), "First Light (Remastered)");
+    assert!(notice.contains("could not be read"), "{notice}");
 }

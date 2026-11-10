@@ -126,6 +126,7 @@ impl Library {
             checked: true,
             // New tracks come from reading the file (or writing it, for CD imports).
             extra_fields_read: true,
+            library_only_edits: false,
         };
         self.tracks.insert(id, track);
         id
@@ -150,8 +151,31 @@ impl Library {
         self.tracks.get_mut(&id).ok_or(LibraryError::NoSuchTrack(id))
     }
 
-    pub fn set_meta(&mut self, id: TrackId, meta: TrackMeta) -> Result<(), LibraryError> {
-        self.track_mut(id)?.meta = meta;
+    /// Changes a track's details. `in_file` says whether the change reached the file too; when
+    /// it did not, the track is marked as having edits kept in the library only.
+    pub fn set_meta(&mut self, id: TrackId, meta: TrackMeta, in_file: bool) -> Result<(), LibraryError> {
+        let track = self.track_mut(id)?;
+        track.meta = meta;
+        // A successful write puts every field the library has into the file, earlier
+        // library-only edits included, so file and library agree again.
+        track.library_only_edits = !in_file;
+        Ok(())
+    }
+
+    /// Records the file's new size, after TuneBox rewrote its tags.
+    pub fn set_file_size(&mut self, id: TrackId, size_bytes: u64) -> Result<(), LibraryError> {
+        self.track_mut(id)?.file.size_bytes = size_bytes;
+        Ok(())
+    }
+
+    /// Replaces a track's details and file facts with what its file says now. Ratings, play
+    /// counts and playlists are TuneBox's own and stay.
+    pub fn refresh_from_file(&mut self, id: TrackId, meta: TrackMeta, file: FileInfo) -> Result<(), LibraryError> {
+        let track = self.track_mut(id)?;
+        track.meta = meta;
+        track.file = file;
+        track.extra_fields_read = true;
+        track.library_only_edits = false;
         Ok(())
     }
 

@@ -89,6 +89,7 @@ tunebox-cli list --search "harbour"
 tunebox-cli new-playlist "Evening" --search jazz
 tunebox-cli edit "Paper Boats" --set label="Lanternlight Records" --set release-date=1997-01-01
 tunebox-cli info-fields --pin label --pin release-date          # always shown in Get Info
+tunebox-cli refresh --search "Paper Boats"                      # re-read tags another app changed
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
 tunebox-cli folders add ~/Music/Collection                    # read only: never written to
@@ -117,7 +118,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 150
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 152
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

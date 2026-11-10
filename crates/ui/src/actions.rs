@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::{Column, PlaylistId, Rating, SmartRules, TrackId, TrackMeta};
-use tunebox_engine::{DiscInfo, JobId, Preferences, SyncSettings};
+use tunebox_engine::{DiscInfo, JobId, LibraryOnlyEdits, Preferences, SyncSettings};
 
 #[derive(Clone, Debug)]
 pub enum Action {
@@ -48,6 +48,7 @@ pub enum Action {
         tracks: Vec<TrackId>,
         delete_files: bool,
     },
+    RefreshFromFiles(Vec<TrackId>, LibraryOnlyEdits),
     SetPreferences(Box<Preferences>),
     /// Import these files and folders.
     AddToLibrary(Vec<PathBuf>),

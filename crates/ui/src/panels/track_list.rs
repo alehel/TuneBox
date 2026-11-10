@@ -286,6 +286,14 @@ fn context_menu(response: &egui::Response, cx: &mut PanelContext, id: TrackId) {
             cx.act(Action::ShowInFolder(id));
             ui.close();
         }
+        if ui
+            .button("Refresh from Files")
+            .on_hover_text("Read the details again, after another program changed them")
+            .clicked()
+        {
+            cx.act(Action::Run(CommandId::RefreshFromFiles));
+            ui.close();
+        }
         ui.separator();
         let label = if matches!(cx.view.source, SourceItem::Playlist(_)) {
             "Remove from Playlist"

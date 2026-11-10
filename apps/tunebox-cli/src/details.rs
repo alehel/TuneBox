@@ -1,9 +1,9 @@
-//! Song details from the command line: show every field, edit any of them, and choose which
-//! additional fields the app's Get Info always shows.
+//! Song details from the command line: show every field, edit any of them, read them again
+//! from the files, and choose which additional fields the app's Get Info always shows.
 
 use crate::search_ids;
 use tunebox_engine::model::{FieldGroup, TagField, TrackId, TrackMeta};
-use tunebox_engine::{Session, Source};
+use tunebox_engine::{LibraryOnlyEdits, Session, Source};
 
 /// Prints every field that has a value, everyday and additional, for each matching song.
 pub fn show(session: &Session, search: &str) -> Result<(), String> {
@@ -53,6 +53,17 @@ pub fn edit(session: &mut Session, search: &str, assignments: &[String]) -> Resu
         edited += 1;
     }
     println!("Edited {edited} songs.");
+    Ok(())
+}
+
+/// Starts reading the matching songs (all without a search) from their files again.
+pub fn refresh(session: &mut Session, search: Option<&str>, replace_library_edits: bool) -> Result<(), String> {
+    let ids = match search {
+        Some(search) => matching(session, search)?,
+        None => search_ids(session, Source::Music, None),
+    };
+    let edits = if replace_library_edits { LibraryOnlyEdits::Replace } else { LibraryOnlyEdits::Keep };
+    session.refresh_from_files(&ids, edits).map_err(|e| e.to_string())?;
     Ok(())
 }
 
