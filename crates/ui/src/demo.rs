@@ -42,6 +42,7 @@ impl Demo {
             total_bytes: 15_900_000_000,
             free_bytes: 15_210_000_000,
             removable: true,
+            access: tunebox_engine::Access::Folder,
         }
     }
 

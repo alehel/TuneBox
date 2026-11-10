@@ -88,6 +88,20 @@ What the listener's system must allow:
 - **macOS:** no permission is needed to open a USB device without a kernel driver. Untested
   here.
 
+### Permission
+
+Where the system does not give the listener access to a player (TuneBox then says "The system
+does not let TuneBox open the player"), a udev rule grants it. Find the player's vendor and
+product ids with `lsusb` (e.g. `054c:0d00`), then, as root, create
+`/etc/udev/rules.d/70-music-player.rules` (the number must sort before `73-seat-late.rules`,
+which applies `uaccess`):
+
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0d00", TAG+="uaccess"
+```
+
+and plug the player in again (or run `udevadm control --reload` and `udevadm trigger`).
+
 ### Windows: Windows Portable Devices, not raw USB
 
 On Windows the system's MTP class driver (`WpdMtp.inf`, a user-mode driver with `WinUsb.sys`
@@ -211,7 +225,7 @@ tunebox-sync (L2)    Storage trait: put_file, write_file, remove_file, read/writ
                      FolderStorage (today's behaviour), MtpStorage (paths → handles, journal)
                      plan (unchanged, pure), execute_on(&mut dyn Storage) (shared)
 tunebox-engine (L6)  devices: MTP players next to mass-storage volumes, same job, same notices
-tunebox-platform(L7) MtpWatcher: lists USB ports and probes new ones on its own thread
+tunebox-platform(L7) MtpPlayers: lists USB devices and probes new ones on its own thread
 ```
 
 - `tunebox-mtp` is L1, like `rip`'s CD access through `cd-da-reader` at L2: OS device access
@@ -250,3 +264,37 @@ small and fully specified in public documents. Windows needs the WPD API; the on
 crate, `winmtp`, is permissively licensed and passes `cargo deny` but cannot be built or tested
 here and is thinly maintained, so it waits until it can be tried on Windows. The storage
 abstraction makes adding it a matter of one more `Storage` implementation.
+
+## What was built (phase 2)
+
+As recommended, for Linux and macOS:
+
+- **`crates/mtp` (`tunebox-mtp`, L1).** `codes`, `container`, `dataset`: the protocol's bytes,
+  pure, tested on hand-built packets and against hostile input (short datasets, arrays longer
+  than their data). `Session`: the eleven operations, blocking, one at a time; a connection
+  failure marks it broken so later operations fail at once; `send_file` deletes the object
+  when a transfer fails and the device still answers, and refuses to send a file that shrinks
+  part way. `usb`: `nusb` bulk endpoints with 30-second timeouts and 256 KiB transfers;
+  devices found by interface class (06/01/01, or vendor-specific named "MTP"); a busy, denied
+  or vanished device is an `io::Error` of the matching kind. `simulator`: the in-memory device.
+- **`crates/sync`.** `Storage` with `FolderStorage` (today's behaviour, unchanged) and
+  `MtpStorage`; `execute_on` shared by both, with the *pending* journal; `mtp::probe` (each
+  writable storage a player, cameras left out, a busy or locked device listed with what to do).
+  A folder player also reads a numbered manifest, so a player synced over MTP and later mounted
+  as a drive is still recognised.
+- **Engine, platform, CLI, UI.** `Volume::access` (`Folder` or `Mtp`); the same sync job, with
+  free space read from the device; `Session::refresh_mtp_devices`, fed by
+  `tunebox_platform::MtpPlayers` (a thread that opens each new device once, and busy ones
+  again every few seconds) in the app and by `find_mtp_players` in `tunebox-cli devices`,
+  `setup-device` and `sync` (players named by their `mtp:` id). The device page says where an
+  MTP player is ("Internal storage, over USB (MTP)"), shows the problem instead of the set-up
+  form when it cannot be used, and Eject just says it can be unplugged.
+
+**Tested** against the simulated device: copies, re-syncs, deletes of only TuneBox's files (the
+listener's own file stays), empty folders removed, a transfer cut half way (the partial file
+reports its full size, is not recorded, is listed as pending, and the next sync removes it and
+copies the song whole), an unplug between songs (every song the manifest lists is complete),
+out of space (that song fails, nothing of it is left), a manifest write cut off (the previous
+manifest is used, the broken copy tidied away), folders in another case reused, a busy device,
+a locked phone, two storages; and through `Session` end to end. **Not tested:** any real
+device, macOS, and the USB transport itself (nothing to plug in here).

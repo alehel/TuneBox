@@ -32,9 +32,11 @@
   ([docs/visualizers.md](docs/visualizers.md)).
 - **CDs.** See the disc, fetch its track names from MusicBrainz (only when you ask), edit them
   and import to FLAC, WAV or AIFF.
-- **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…): pick the
-  whole library or chosen playlists, see what fits, and sync. Only changes are copied, playlists
-  are written as M3U8, and only files TuneBox put there are ever removed.
+- **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…), and on Linux
+  and macOS players that connect over MTP (Android-based players and phones, recent Walkmans;
+  so far tested only against a simulated device): pick the whole library or chosen playlists,
+  see what fits, and sync. Only changes are copied, playlists are written as M3U8, and only
+  files TuneBox put there are ever removed.
 - **Library folders stay in step.** Songs copied into a library folder appear in the library,
   tags changed by another program are read again, and a renamed folder keeps its songs'
   ratings and play counts. Watching only reads. Songs whose files are gone are marked, and
@@ -103,6 +105,7 @@ tunebox-cli locate "Driftwood" ~/Music/Moved/Driftwood.flac     # point a missin
 tunebox-cli artwork set "Paper Boats" ~/Pictures/cover.jpg      # also: artwork remove, artwork export
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
+tunebox-cli devices                                             # mounted and MTP players
 tunebox-cli folders add ~/Music/Collection                    # read only: never written to
 tunebox-cli folders add ~/Music/Collection/Imports --writable
 tunebox-cli folders imports ~/Music/Collection/Imports        # CD rips go here
@@ -124,13 +127,14 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-import` | Finding music and filing copies |
 | `tunebox-playback` | Play queue, player thread, sound output (cpal), spectrum analysis |
 | `tunebox-rip` | CD drives (cd-da-reader), disc ids, MusicBrainz, ripping |
-| `tunebox-sync` | Recognising players, planning and carrying out syncs |
+| `tunebox-mtp` | The MTP protocol (written from the public specification) over pure-Rust USB (nusb) |
+| `tunebox-sync` | Recognising players, planning and carrying out syncs, on folders or over MTP |
 | `tunebox-engine` | The `Session` façade, background jobs, preferences, command registry |
 | `tunebox-platform` | Folders, mounted volumes, reveal and eject |
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 206
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 237
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

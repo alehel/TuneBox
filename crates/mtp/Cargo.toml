@@ -1,0 +1,22 @@
+[package]
+name = "tunebox-mtp"
+description = "TuneBox's Media Transfer Protocol client: the protocol from the public MTP 1.1 and PTP specifications, over pure-Rust USB."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# An in-memory MTP device for tests (see src/simulator.rs).
+simulator = []
+
+[dependencies]
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+nusb = { workspace = true }

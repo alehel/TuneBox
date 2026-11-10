@@ -1,7 +1,7 @@
 //! tunebox-platform — the operating system, behind small functions.
 //!
 //! Where TuneBox keeps its files ([`default_paths`]), which volumes are mounted ([`volumes`]),
-//! showing a file in the file manager ([`reveal`]), ejecting a player or disc ([`eject`]) and
+//! which MTP players are connected ([`MtpPlayers`]), showing a file in the file manager ([`reveal`]), ejecting a player or disc ([`eject`]) and
 //! watching the library folders ([`FolderWatcher`]). The engine is told the results.
 
 #![deny(
@@ -14,14 +14,16 @@
 )]
 
 mod mounts;
+mod mtp_watch;
 mod watch;
 
 pub use mounts::{NetworkMounts, mapped_drives_in, network_mounts, network_mounts_in};
+pub use mtp_watch::MtpPlayers;
 pub use watch::{FolderWatcher, QUIET};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tunebox_engine::{SessionPaths, Volume};
+use tunebox_engine::{Access, SessionPaths, Volume};
 
 /// Where TuneBox keeps its own files, out of the listener's music: the platform's application
 /// data folder (`~/.local/share/TuneBox`, `~/Library/Application Support/TuneBox`,
@@ -71,6 +73,7 @@ pub fn volumes() -> Vec<Volume> {
             total_bytes: disk.total_space(),
             free_bytes: disk.available_space(),
             removable: disk.is_removable() || is_removable_mount(disk.mount_point()),
+            access: Access::Folder,
         })
         .collect()
 }

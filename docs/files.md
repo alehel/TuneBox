@@ -27,7 +27,7 @@ browsing, rating and making playlists never touch a music file.
 | Refresh from Files | **Nothing.** The songs' tags are read again and the library takes what they say |
 | Delete from Library | Removes the song from the library. The file is deleted only if you tick *Also delete the files from disk* |
 | Import CD | New files in the media folder. A track appears only when it is complete (written as `*.part`, then renamed); a cancelled or failed track leaves nothing |
-| Sync a player | Writes only to the player: music under `Music/`, playlists under `Playlists/`, and `.tunebox/device.json`, which records what TuneBox put there. Sync deletes only files it put there itself |
+| Sync a player | Writes only to the player: music under `Music/`, playlists under `Playlists/`, and `.tunebox/device.json`, which records what TuneBox put there (on MTP players, which cannot replace a file in one step, `.tunebox/device-<n>.json`: the new copy is written before the old is removed). Sync deletes only files it put there itself, and a song cut off by an unplugged player is listed as unfinished and removed by the next sync, never taken for a synced song |
 
 Temporary files (`*.part`, `.tunebox-edit-*`) are removed when an operation fails or is
 cancelled.

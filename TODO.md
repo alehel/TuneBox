@@ -8,7 +8,7 @@ What TuneBox lacks or has not proven yet. What already works is described featur
 1. CI on Linux, macOS and Windows.
 2. Japanese, Chinese and Korean text (a system font as fallback).
 3. Adding and changing album artwork.
-4. MTP players.
+4. MTP players: try real devices; Windows.
 5. Volume levelling.
 6. Installers.
 7. Undo.
@@ -21,8 +21,8 @@ The biggest risk: these parts are built but have never run where it counts.
       (and passes Clippy) for the Windows target, but has never run.
 - [ ] Set up CI (`.github/workflows`) building and testing on all three systems, so a broken
       Windows or macOS build is caught when it happens.
-- [ ] Try real hardware: a CD drive, a portable player, a sound card, a NAS. All of these have
-      only been simulated.
+- [ ] Try real hardware: a CD drive, a portable player (mass storage and MTP), a sound card, a
+      NAS. All of these have only been simulated.
 - [ ] Open the native file dialogs (Add Folder, Locate…, the startup error box). They have never
       been opened.
 - [ ] Measure large libraries (tens of thousands of songs): the library is one JSON file,
@@ -81,8 +81,18 @@ The biggest risk: these parts are built but have never run where it counts.
 
 ## Portable players
 
-- [ ] MTP players. Many newer players (Android-based ones, recent Sony Walkmans) only connect
-      this way; TuneBox syncs mass-storage players only.
+- [x] MTP players on Linux and macOS (docs/mtp.md). Built and tested against a simulated
+      device only.
+- [ ] Sync a real MTP player: an Android phone (including its "Allow access" prompt and an SD
+      card), an Android-based player, a Walkman. Check that songs and M3U8 playlists show up in
+      the player's library, the speed, and what each does with a transfer cut off half way.
+- [ ] MTP on a Linux desktop: check the "another program is using the player" advice with GNOME
+      Files and KDE Dolphin, and the udev permission on a few distributions.
+- [ ] MTP on macOS: never run on a Mac (Image Capture, Android File Transfer).
+- [ ] MTP on Windows, through Windows Portable Devices (`winmtp` is the candidate; see
+      docs/mtp.md).
+- [ ] MTP playlist objects and metadata properties, for older non-Android MTP players that
+      ignore M3U8 files and do not read tags.
 - [ ] Convert songs to a smaller format for the player.
 - [ ] Manage songs on the player by hand (today it is sync only).
 

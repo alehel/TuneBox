@@ -7,8 +7,8 @@ use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, PlayState, Player, RepeatMode, Session, SessionPaths,
-    Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
+    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, PlayState, Player, RepeatMode, Session,
+    SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -267,6 +267,7 @@ fn syncs_a_player() {
         total_bytes: 1 << 30,
         free_bytes: 1 << 30,
         removable: true,
+        access: Access::Folder,
     };
     f.session.refresh_devices(&[volume]);
     assert_eq!(f.session.devices().len(), 1);
@@ -283,6 +284,51 @@ fn syncs_a_player() {
     assert!(!player_root.join("Music/Quiet Harbour/Lanterns/02 Second Light.flac").exists());
     assert!(player_root.join("Playlists/Commute.m3u8").exists());
     assert_eq!(f.session.query(&TrackQuery::new(Source::Device(player_root))), [all[0]]);
+}
+
+#[test]
+fn syncs_an_mtp_player() {
+    use tunebox_mtp::simulator::SimulatedDevice;
+    use tunebox_sync::mtp::{MtpLink, probe};
+
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let player = SimulatedDevice::new("NW-A306", 1 << 30);
+    let found = probe(&MtpLink::Simulated(player.clone()));
+    f.session.refresh_mtp_devices(&found);
+    // Mounted volumes coming and going leave MTP players alone.
+    f.session.refresh_devices(&[]);
+    assert_eq!(f.session.devices().len(), 1);
+    let root = f.session.devices()[0].volume.root.clone();
+    assert_eq!(f.session.devices()[0].name(), "Simulated NW-A306");
+    f.session.register_device(&root, "Walkman").unwrap();
+    // The watcher keeps reporting what it found at plug-in; the session keeps what it knows.
+    f.session.refresh_mtp_devices(&found);
+    assert_eq!(f.session.devices()[0].name(), "Walkman");
+
+    f.session.sync_device(&root).unwrap();
+    // The sync holds the player: changing its settings waits (instead of calling it busy).
+    let busy = f.session.rename_device(&root, "Later").unwrap_err().to_string();
+    assert_eq!(busy, "A sync is already in progress");
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let files = player.files();
+    assert!(files.contains(&"Music/Quiet Harbour/Lanterns/01 First Light.flac".to_string()), "{files:?}");
+    assert!(files.contains(&"Music/Quiet Harbour/Lanterns/02 Second Light.flac".to_string()));
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    assert_eq!(f.session.query(&TrackQuery::new(Source::Device(root.clone()))).len(), all.len());
+    let free = f.session.devices()[0].volume.free_bytes;
+    assert!(free < 1 << 30, "free space is updated from the player");
+
+    // Held by another program: the next sync ends with an error saying what to do.
+    player.hold(true);
+    f.session.sync_device(&root).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notices: Vec<String> = f.session.take_notices().into_iter().map(|n| n.text).collect();
+    assert!(notices.iter().any(|n| n.contains("Another program is using the player")), "{notices:?}");
+
+    // Unplugged for good: the player leaves the list.
+    f.session.refresh_mtp_devices(&[]);
+    assert!(f.session.devices().is_empty());
 }
 
 /// Every file in `dir`, with its bytes, for before/after comparisons.

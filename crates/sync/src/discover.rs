@@ -1,9 +1,21 @@
 //! Spotting players among the mounted volumes.
 
 use crate::device::Device;
+use crate::mtp::MtpAddress;
+use crate::storage::{FolderStorage, Storage};
 use std::path::{Path, PathBuf};
 
-/// A mounted volume, as the platform reports it.
+/// How TuneBox reaches a player's files.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Access {
+    /// Mounted as a folder at the volume's root (USB mass storage, an SD card).
+    #[default]
+    Folder,
+    /// Over MTP; the volume's root is then only its identity in the device list.
+    Mtp(MtpAddress),
+}
+
+/// A mounted volume, as the platform reports it, or a storage of an MTP player.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Volume {
     pub root: PathBuf,
@@ -13,6 +25,21 @@ pub struct Volume {
     pub free_bytes: u64,
     /// Whether the system marks it removable (USB, SD card).
     pub removable: bool,
+    pub access: Access,
+}
+
+impl Volume {
+    pub fn is_mtp(&self) -> bool {
+        matches!(self.access, Access::Mtp(_))
+    }
+
+    /// Opens the player's files for reading and writing (for MTP, a connection to it).
+    pub fn storage(&self) -> Result<Box<dyn Storage>, crate::DeviceError> {
+        match &self.access {
+            Access::Folder => Ok(Box::new(FolderStorage::new(&self.root))),
+            Access::Mtp(address) => Ok(Box::new(crate::mtp::connect(address)?)),
+        }
+    }
 }
 
 /// A volume that is, or might be, a player.
@@ -21,6 +48,8 @@ pub struct Candidate {
     pub volume: Volume,
     /// Set when TuneBox already manages it.
     pub device: Option<Device>,
+    /// Why it cannot be used now, and what to do (an MTP player another program holds).
+    pub problem: Option<String>,
 }
 
 /// Folders and files that mark a volume as a music player.
@@ -44,7 +73,7 @@ pub fn scan(volumes: &[Volume]) -> Vec<Candidate> {
                 None
             });
             let offer = device.is_some() || (volume.removable && looks_like_player(&volume.root));
-            offer.then(|| Candidate { volume: volume.clone(), device })
+            offer.then(|| Candidate { volume: volume.clone(), device, problem: None })
         })
         .collect()
 }
@@ -54,7 +83,14 @@ mod tests {
     use super::*;
 
     fn volume(root: &Path, removable: bool) -> Volume {
-        Volume { root: root.to_path_buf(), label: "X".into(), total_bytes: 1, free_bytes: 1, removable }
+        Volume {
+            root: root.to_path_buf(),
+            label: "X".into(),
+            total_bytes: 1,
+            free_bytes: 1,
+            removable,
+            access: Access::Folder,
+        }
     }
 
     #[test]

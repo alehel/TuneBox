@@ -66,6 +66,8 @@ pub struct TuneBoxApp {
     screenshots: Option<ScreenshotRunner>,
     library_watch: LibraryWatch,
     network_mounts: tunebox_platform::NetworkMounts,
+    /// MTP players, found on a thread of their own. None in the demo, which has its own player.
+    mtp_players: Option<tunebox_platform::MtpPlayers>,
     last_device_scan: Option<Instant>,
     #[cfg(feature = "drives")]
     last_disc_scan: Option<Instant>,
@@ -81,6 +83,7 @@ impl TuneBoxApp {
         theme::install(&cc.egui_ctx);
         let demo = options.demo.as_deref().map(|dir| Demo::start(dir, &mut session));
         let screenshots = options.screenshots.clone().map(ScreenshotRunner::new);
+        let mtp_players = demo.is_none().then(tunebox_platform::MtpPlayers::start);
         Self {
             session,
             view: ViewState::new(),
@@ -93,6 +96,7 @@ impl TuneBoxApp {
             screenshots,
             library_watch: LibraryWatch::default(),
             network_mounts: tunebox_platform::NetworkMounts::start(),
+            mtp_players,
             last_device_scan: None,
             #[cfg(feature = "drives")]
             last_disc_scan: None,
@@ -125,6 +129,9 @@ impl TuneBoxApp {
             }
             self.session.refresh_devices(&volumes);
             self.last_device_scan = Some(Instant::now());
+        }
+        if let Some(found) = self.mtp_players.as_mut().and_then(|players| players.changed()) {
+            self.session.refresh_mtp_devices(&found);
         }
         #[cfg(feature = "drives")]
         if self.demo.is_none() && self.last_disc_scan.is_none_or(|t| t.elapsed() >= DISC_SCAN) {
@@ -465,6 +472,12 @@ impl TuneBoxApp {
                 self.session.eject_disc();
             }
             SourceItem::Device(root) => {
+                // TuneBox lets go of an MTP player after every sync: there is nothing to unmount.
+                let is_mtp = self.session.device(&root).is_some_and(|d| d.volume.is_mtp());
+                if is_mtp {
+                    self.toasts.push(Notice::info("You can unplug the player: TuneBox is not using it."));
+                    return;
+                }
                 let ejected = if self.demo.is_some() { Ok(()) } else { tunebox_platform::eject(&root) };
                 match ejected {
                     Ok(()) => self.session.forget_device(&root),

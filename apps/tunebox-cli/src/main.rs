@@ -154,11 +154,11 @@ enum Command {
         #[arg(long)]
         lookup: bool,
     },
-    /// List connected players.
+    /// List connected players: mounted ones by folder, MTP ones by an id starting "mtp:".
     Devices,
-    /// Set up the player mounted at ROOT for syncing.
+    /// Set up the player at ROOT (its folder, or its "mtp:" id from `devices`) for syncing.
     SetupDevice { root: PathBuf, name: String },
-    /// Sync the player mounted at ROOT (optionally only these playlists).
+    /// Sync the player at ROOT (its folder or "mtp:" id; optionally only these playlists).
     Sync {
         root: PathBuf,
         #[arg(long = "playlist")]
@@ -293,15 +293,24 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             wait_for_jobs(session);
         }
         Command::Devices => {
-            session.refresh_devices(&tunebox_platform::volumes());
+            refresh_all_devices(session);
             for device in session.devices() {
-                let managed = if device.device.is_some() { "set up" } else { "not set up" };
-                println!("{:<24} {}  ({managed})", device.name(), device.volume.root.display());
+                let state = match (&device.problem, &device.device) {
+                    (Some(problem), _) => problem.as_str(),
+                    (None, Some(_)) => "set up",
+                    (None, None) => "not set up",
+                };
+                println!("{:<24} {}  ({state})", device.name(), device.volume.root.display());
             }
         }
         Command::SetupDevice { root, name } => {
-            session.refresh_devices(&tunebox_platform::volumes());
-            tunebox_engine::Device::register(&root, &name).map_err(|e| e.to_string())?;
+            refresh_all_devices(session);
+            if session.device(&root).is_some() {
+                session.register_device(&root, &name).map_err(|e| e.to_string())?;
+            } else {
+                // Not a volume the platform reports (a folder, for example): set it up anyway.
+                tunebox_engine::Device::register(&root, &name).map_err(|e| e.to_string())?;
+            }
             println!("“{name}” is ready to sync.");
         }
         Command::Sync { root, playlists } => sync(session, &root, &playlists)?,
@@ -509,8 +518,18 @@ fn print_cd(session: &Session) {
     }
 }
 
-fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> Result<(), String> {
+/// Mounted players and MTP players, as the app's source list shows them. MTP players are
+/// opened to be read, which takes a moment.
+fn refresh_all_devices(session: &mut Session) {
     session.refresh_devices(&tunebox_platform::volumes());
+    session.refresh_mtp_devices(&tunebox_engine::find_mtp_players());
+}
+
+fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> Result<(), String> {
+    refresh_all_devices(session);
+    if session.device(root).is_none() && root.to_string_lossy().starts_with("mtp:") {
+        return Err("No MTP player with that id is connected. `tunebox-cli devices` lists them.".into());
+    }
     if session.device(root).is_none() {
         // Not a removable volume the platform reports (a folder, for example): sync it anyway.
         let volume = tunebox_engine::Volume {
@@ -519,6 +538,7 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
             total_bytes: u64::MAX,
             free_bytes: u64::MAX,
             removable: true,
+            access: tunebox_engine::Access::Folder,
         };
         session.refresh_devices(&[volume]);
     }

@@ -1,4 +1,7 @@
-//! Players: finding them, setting them up, and syncing them.
+//! Players: finding them, setting them up, and syncing them. Mass-storage players come from
+//! the mounted volumes the frontend passes to [`Session::refresh_devices`]; MTP players from
+//! [`find_mtp_players`] (slow: it opens each device), which the app runs on a thread of its
+//! own and passes to [`Session::refresh_mtp_devices`]. Both then work the same way.
 
 use crate::EngineError;
 use crate::jobs::{JobId, JobKind};
@@ -8,7 +11,9 @@ use chrono::Utc;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 use tunebox_model::{Track, format_bytes};
-use tunebox_sync::{Device, PlaylistFile, SyncItem, SyncMode, SyncReport, SyncSettings, Volume};
+use tunebox_sync::{
+    Candidate, Device, DeviceError, PlaylistFile, SyncItem, SyncMode, SyncReport, SyncSettings, Volume,
+};
 
 /// A player in the source list.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,6 +21,29 @@ pub struct DeviceEntry {
     pub volume: Volume,
     /// Set once TuneBox manages the player.
     pub device: Option<Device>,
+    /// Why it cannot be used now and what to do (an MTP player another program holds).
+    pub problem: Option<String>,
+}
+
+impl From<Candidate> for DeviceEntry {
+    fn from(c: Candidate) -> Self {
+        DeviceEntry { volume: c.volume, device: c.device, problem: c.problem }
+    }
+}
+
+/// The MTP players connected now, each storage as a player of its own. Opens every MTP device,
+/// so it takes a moment: call it off the interface's thread.
+pub fn find_mtp_players() -> Vec<Candidate> {
+    tunebox_sync::mtp::mtp_links().iter().flat_map(tunebox_sync::mtp::probe).collect()
+}
+
+/// A device error as the listener should read it: for MTP players, what happened to the
+/// connection and what to do.
+fn device_message(volume: &Volume, error: DeviceError) -> String {
+    match error {
+        DeviceError::Io(e) if volume.is_mtp() => tunebox_sync::mtp::explain(&e),
+        other => other.to_string(),
+    }
 }
 
 impl DeviceEntry {
@@ -38,12 +66,27 @@ impl Session {
         self.devices.iter().find(|d| d.volume.root == root)
     }
 
-    /// Updates the device list from the volumes currently mounted (the frontend asks the
-    /// platform for them every few seconds).
+    /// Updates the mass-storage players from the volumes currently mounted (the frontend asks
+    /// the platform for them every few seconds). MTP players are left as they are.
     pub fn refresh_devices(&mut self, volumes: &[Volume]) {
-        let found = tunebox_sync::scan(volumes);
-        let devices: Vec<DeviceEntry> =
-            found.into_iter().map(|c| DeviceEntry { volume: c.volume, device: c.device }).collect();
+        let mut devices: Vec<DeviceEntry> = tunebox_sync::scan(volumes).into_iter().map(DeviceEntry::from).collect();
+        devices.extend(self.devices.iter().filter(|d| d.volume.is_mtp()).cloned());
+        self.set_devices(devices);
+    }
+
+    /// Updates the MTP players from what [`find_mtp_players`] found. A player already listed
+    /// keeps what this session knows of it (it may have been set up or synced since it was
+    /// found); players no longer found are dropped.
+    pub fn refresh_mtp_devices(&mut self, found: &[Candidate]) {
+        let mut devices: Vec<DeviceEntry> = self.devices.iter().filter(|d| !d.volume.is_mtp()).cloned().collect();
+        for candidate in found {
+            let known = self.devices.iter().find(|d| d.volume.root == candidate.volume.root);
+            devices.push(known.cloned().unwrap_or_else(|| DeviceEntry::from(candidate.clone())));
+        }
+        self.set_devices(devices);
+    }
+
+    fn set_devices(&mut self, devices: Vec<DeviceEntry>) {
         if devices != self.devices {
             self.devices = devices;
             self.content_changed();
@@ -52,7 +95,9 @@ impl Session {
 
     /// Sets up the player at `root` for syncing under `name` ("Set up as a TuneBox device").
     pub fn register_device(&mut self, root: &Path, name: &str) -> Result<(), EngineError> {
-        let device = Device::register(root, name).map_err(|e| EngineError::Device(e.to_string()))?;
+        let volume = self.connected_volume(root)?;
+        let registered = volume.storage().and_then(|mut storage| Device::register_on(&mut *storage, root, name));
+        let device = registered.map_err(|e| EngineError::Device(device_message(&volume, e)))?;
         if let Some(entry) = self.devices.iter_mut().find(|d| d.volume.root == root) {
             entry.device = Some(device);
         }
@@ -62,19 +107,37 @@ impl Session {
 
     /// Changes a managed player's sync settings and saves them on the player.
     pub fn set_device_settings(&mut self, root: &Path, settings: SyncSettings) -> Result<(), EngineError> {
+        self.change_device(root, |device| device.manifest.settings = settings)
+    }
+
+    pub fn rename_device(&mut self, root: &Path, name: &str) -> Result<(), EngineError> {
+        self.change_device(root, |device| device.manifest.name = name.trim().to_owned())
+    }
+
+    /// Changes a managed player's manifest and saves it on the player.
+    fn change_device(&mut self, root: &Path, change: impl FnOnce(&mut Device)) -> Result<(), EngineError> {
+        let volume = self.connected_volume(root)?;
         let device = self.managed_device_mut(root)?;
-        device.manifest.settings = settings;
-        let saved = device.save().map_err(|e| EngineError::Device(e.to_string()));
+        change(device);
+        let saved = volume
+            .storage()
+            .and_then(|mut storage| device.save_to(&mut *storage))
+            .map_err(|e| EngineError::Device(device_message(&volume, e)));
         self.content_changed();
         saved
     }
 
-    pub fn rename_device(&mut self, root: &Path, name: &str) -> Result<(), EngineError> {
-        let device = self.managed_device_mut(root)?;
-        device.manifest.name = name.trim().to_owned();
-        let saved = device.save().map_err(|e| EngineError::Device(e.to_string()));
-        self.content_changed();
-        saved
+    /// The volume of a connected player, ready to be written. An MTP player is held by a sync
+    /// while one runs, so it cannot be opened again until that ends.
+    fn connected_volume(&self, root: &Path) -> Result<Volume, EngineError> {
+        let volume = self
+            .device(root)
+            .map(|entry| entry.volume.clone())
+            .ok_or_else(|| EngineError::Device("The player is no longer connected.".into()))?;
+        if volume.is_mtp() && self.jobs.is_running(JobKind::Sync) {
+            return Err(EngineError::Busy("A sync"));
+        }
+        Ok(volume)
     }
 
     /// Drops a player from the list (after the frontend has ejected it).
@@ -102,7 +165,10 @@ impl Session {
             .device
             .clone()
             .ok_or_else(|| EngineError::Device("This player is not set up for syncing yet.".into()))?;
-        let free_bytes = entry.volume.free_bytes;
+        if let Some(problem) = &entry.problem {
+            return Err(EngineError::Device(problem.clone()));
+        }
+        let volume = entry.volume.clone();
         let settings = device.manifest.settings.clone();
         let (tracks, playlists) = self.sync_selection(&settings);
         // Songs known to be missing or out of reach are not even looked at: a share that is not
@@ -121,13 +187,19 @@ impl Session {
                     SyncItem::from_track(t, &settings.music_folder, modified)
                 })
                 .collect();
+            let mut storage = match volume.storage() {
+                Ok(storage) => storage,
+                Err(e) => return Outcome::Synced { root, result: Err(device_message(&volume, e)) },
+            };
+            // An MTP player says how much room it has; a mounted one was measured when listed.
+            let free_bytes = storage.free_bytes().ok().flatten().unwrap_or(volume.free_bytes);
             let plan = tunebox_sync::plan(&items, playlists, &device.manifest);
             let result = if plan.fits(free_bytes) {
-                tunebox_sync::execute(&mut device, &plan, ctx.cancel_flag(), &mut |p| {
+                tunebox_sync::execute_on(&mut device, &mut *storage, &plan, ctx.cancel_flag(), &mut |p| {
                     ctx.progress(p.done as f32 / p.total.max(1) as f32, p.message);
                 })
                 .map(|report| (device, report))
-                .map_err(|e| e.to_string())
+                .map_err(|e| device_message(&volume, e))
             } else {
                 Err(format!(
                     "There is not enough free space on the player: the sync needs {} more than the {} available.",
@@ -173,6 +245,9 @@ impl Session {
                 let name = device.manifest.name.clone();
                 if let Some(entry) = self.devices.iter_mut().find(|d| d.volume.root == root) {
                     entry.device = Some(device);
+                    if let Some(free) = report.free_bytes {
+                        entry.volume.free_bytes = free;
+                    }
                 }
                 let text = if report.cancelled {
                     format!("Sync of “{name}” stopped. {} songs copied, {} removed.", report.copied, report.deleted)

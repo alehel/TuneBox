@@ -80,4 +80,4 @@ radio and sharing are out of scope.
 | Eject | Shipped | macOS (diskutil), Linux (gio); Windows asks you to use Safely Remove Hardware |
 | Transcode for the player | Planned | |
 | Manually manage music on the device | Planned | |
-| MTP players | Planned | Mass-storage players only |
+| MTP players | Built (Linux, macOS) | Android-based players and phones, recent Walkmans: found over USB, set up and synced like mass-storage players, each storage (internal, SD card) a player of its own. Built and tested against a simulated device; not yet run with real hardware. Windows needs Windows Portable Devices: not yet ([docs/mtp.md](mtp.md)) |

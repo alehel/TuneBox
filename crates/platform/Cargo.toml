@@ -19,3 +19,5 @@ log = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tunebox-sync = { workspace = true, features = ["simulator"] }
+tunebox-mtp = { workspace = true, features = ["simulator"] }

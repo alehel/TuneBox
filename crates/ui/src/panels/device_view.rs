@@ -7,7 +7,7 @@ use crate::theme;
 use egui::{Align2, Color32, FontId, Rect, RichText, Stroke, Ui, pos2, vec2};
 use std::path::Path;
 use tunebox_engine::model::{PlaylistId, format_bytes};
-use tunebox_engine::{DeviceEntry, JobKind, SyncMode, SyncSettings};
+use tunebox_engine::{Access, DeviceEntry, JobKind, SyncMode, SyncSettings, Volume};
 
 pub fn show(ui: &mut Ui, cx: &mut PanelContext, root: &Path) {
     let Some(entry) = cx.session.device(root).cloned() else {
@@ -30,6 +30,14 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext, root: &Path) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(content), |ui| {
         summary(ui, &entry);
         ui.add_space(14.0);
+        if let Some(problem) = &entry.problem {
+            group(ui, "Cannot Use the Player", |ui| {
+                ui.label(problem.as_str());
+                ui.add_space(4.0);
+                ui.label(RichText::new("TuneBox tries again every few seconds.").color(theme::TEXT_MUTED));
+            });
+            return;
+        }
         match &entry.device {
             Some(device) => {
                 sync_settings(ui, cx, root, &device.manifest.settings);
@@ -61,7 +69,7 @@ fn summary(ui: &mut Ui, entry: &DeviceEntry) {
     let lines = [
         ("Capacity:", format_bytes(entry.volume.total_bytes)),
         ("Available:", format_bytes(entry.volume.free_bytes)),
-        ("Location:", tunebox_platform::display_path(&entry.volume.root)),
+        ("Location:", location(&entry.volume)),
         (
             "Kind:",
             if entry.device.is_some() { "Music player, synced by TuneBox".into() } else { "Music player".into() },
@@ -71,6 +79,15 @@ fn summary(ui: &mut Ui, entry: &DeviceEntry) {
         let y = rect.top() + 52.0 + i as f32 * 17.0;
         painter.text(pos2(left + 70.0, y), Align2::RIGHT_CENTER, *label, FontId::proportional(12.0), theme::TEXT_MUTED);
         painter.text(pos2(left + 78.0, y), Align2::LEFT_CENTER, value, FontId::proportional(12.0), theme::TEXT);
+    }
+}
+
+/// Where the player is: its folder, or for an MTP player its storage.
+fn location(volume: &Volume) -> String {
+    match &volume.access {
+        Access::Folder => tunebox_platform::display_path(&volume.root),
+        Access::Mtp(address) if address.description.is_empty() => "USB (MTP)".into(),
+        Access::Mtp(address) => format!("{}, over USB (MTP)", address.description),
     }
 }
 

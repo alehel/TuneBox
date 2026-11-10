@@ -18,7 +18,7 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
                                   │
    L2   import ◀── rip      playback       sync
           │         │          │             │
-   L1   library    tags      audio ──▶ craft-audio (symphonia, FLAC/WAV/AIFF)
+   L1   library    tags      audio ──▶ craft-audio     mtp ──▶ nusb (USB)
           │         │          │
    L0     └──── tunebox-model ─┘
 ```
@@ -32,9 +32,10 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
 | `tunebox-import` | Finds audio files, reads tags, copies into `Artist/Album/NN Title.ext` |
 | `tunebox-playback` | The play queue (shuffle, repeat), and a player thread feeding a lock-free ring to a cpal callback |
 | `tunebox-rip` | CD drives (cd-da-reader, or a virtual drive), tables of contents, MusicBrainz disc ids and lookup, ripping |
-| `tunebox-sync` | Recognises players, plans a sync as a diff against the device manifest, executes it, writes M3U8 |
+| `tunebox-mtp` | The MTP protocol from the public specification: containers, datasets, a blocking session over a `Transport`; USB through nusb (Linux, macOS); a simulated device for tests ([mtp.md](mtp.md)) |
+| `tunebox-sync` | Recognises players (mounted, or over MTP), plans a sync as a diff against the device manifest, executes it through a `Storage` (folder or MTP), writes M3U8 |
 | `tunebox-engine` | The `Session` façade, background jobs, preferences, notices, the command registry |
-| `tunebox-platform` | App folders, mounted volumes (sysinfo), reveal in file manager, eject |
+| `tunebox-platform` | App folders, mounted volumes (sysinfo), MTP players found on a thread of their own, reveal in file manager, eject |
 | `tunebox-visualizer` | The `Visualizer` trait, the meter that turns the audio tap into smoothed bands, and the built-in looks ([visualizers.md](visualizers.md)) |
 | `tunebox-ui` | The egui desktop interface |
 
@@ -97,7 +98,7 @@ What may touch the listener's own files, and the read-only music folder, are des
 | Library | `<app data>/TuneBox/TuneBox Library.json` | `{format: "tunebox-library", version, next_id, tracks, playlists}`; unknown newer versions are refused, damaged files moved aside |
 | Preferences | `<app data>/TuneBox/Preferences.json` | Preferences; unreadable files fall back to defaults |
 | Media | `~/Music/TuneBox Media/Artist/Album/NN Title.ext` | Copies and CD imports only; created when first needed |
-| Device manifest | `<player>/.tunebox/device.json` | Name, sync settings, every file TuneBox copied (with source size and time), playlists written |
+| Device manifest | `<player>/.tunebox/device.json` (MTP players: `device-<n>.json`, the newest that reads wins) | Name, sync settings, every file TuneBox copied (with source size and time), playlists written, files begun but not yet finished |
 | Playlists on players | `<player>/Playlists/*.m3u8` | Extended M3U, UTF-8, paths relative to the playlist |
 
 ## Adding a feature

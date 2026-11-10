@@ -1,8 +1,16 @@
-//! Carrying out a sync plan on the device.
+//! Carrying out a sync plan on the device, through its [`Storage`].
+//!
+//! The order keeps the listener's music safe whatever happens part way (a full disk, a cable
+//! pulled): deletions first, to make room; copies in batches, with the manifest saved between
+//! batches; playlists last. Before each batch the manifest lists the batch's files as
+//! *pending*, and each leaves that list only once its copy is complete. MTP players cannot
+//! rename, so a song cut off mid-transfer sits under its final name; being pending, it is never
+//! taken for a synced song, and the next sync removes it (TuneBox put it there) before anything
+//! else. On folders the `*.part` copies already guarantee this, and the journal costs nothing.
 
 use crate::device::{Device, DeviceError, SyncedFile};
-use crate::plan::{SyncItem, SyncPlan};
-use std::path::{Path, PathBuf};
+use crate::plan::SyncPlan;
+use crate::storage::{FolderStorage, Storage};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Where a sync has got to.
@@ -24,15 +32,30 @@ pub struct SyncReport {
     pub cancelled: bool,
     /// Wanted songs whose files could not be read (see `SyncPlan::unavailable`).
     pub unavailable: usize,
+    /// Free space afterwards, where the device reports it (MTP).
+    pub free_bytes: Option<u64>,
 }
 
 /// How many copies happen between manifest saves, so an unplugged player loses little.
 const SAVE_EVERY: usize = 20;
 
-/// Carries out `plan` on `device`, updating and saving its manifest. Individual files that fail
-/// are reported and skipped; the manifest always reflects what is really on the device.
+/// Carries out `plan` on the folder player `device`, updating and saving its manifest.
 pub fn execute(
     device: &mut Device,
+    plan: &SyncPlan,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(SyncProgress),
+) -> Result<SyncReport, DeviceError> {
+    let mut storage = FolderStorage::new(&device.root);
+    execute_on(device, &mut storage, plan, cancel, progress)
+}
+
+/// Carries out `plan` on `device` through `storage`, updating and saving its manifest.
+/// Individual files that fail are reported and skipped; the manifest always reflects what is
+/// really on the device. An error means the manifest could not be saved (the player is gone).
+pub fn execute_on(
+    device: &mut Device,
+    storage: &mut dyn Storage,
     plan: &SyncPlan,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(SyncProgress),
@@ -41,96 +64,116 @@ pub fn execute(
     let total = plan.deletes.len() + plan.copies.len();
     let mut done = 0;
 
+    remove_leftovers(device, storage, &mut report.failures);
     for delete in &plan.deletes {
         progress(SyncProgress { done, total, message: format!("Removing {}", delete.device_path) });
-        let path = device_path(&device.root, &delete.device_path);
-        match std::fs::remove_file(&path) {
-            Ok(()) => report.deleted += 1,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        match storage.remove_file(&delete.device_path) {
+            Ok(true) => report.deleted += 1,
+            Ok(false) => {}
             Err(e) => report.failures.push(format!("Could not remove {}: {e}", delete.device_path)),
         }
-        remove_empty_parents(&device.root, &path);
         device.manifest.files.remove(&delete.id);
         done += 1;
     }
-    device.save()?;
+    device.save_to(storage)?;
 
-    for (index, copy) in plan.copies.iter().enumerate() {
+    for batch in plan.copies.chunks(SAVE_EVERY) {
         if cancel.load(Ordering::Relaxed) {
             report.cancelled = true;
             break;
         }
-        progress(SyncProgress { done, total, message: format!("Copying {}", copy.item.label) });
-        match copy_file(&device.root, &copy.item) {
-            Ok(()) => {
-                device.manifest.files.insert(
-                    copy.item.id,
-                    SyncedFile {
-                        path: copy.item.device_path.clone(),
-                        source_size: copy.item.size,
-                        source_modified: copy.item.modified,
-                    },
-                );
-                report.copied += 1;
-            }
-            Err(e) => report.failures.push(format!("Could not copy {}: {e}", copy.item.label)),
+        for copy in batch {
+            // A song copied again to the same place loses its record first: until the new copy
+            // is complete, the file there is not a synced song.
+            device.manifest.files.remove(&copy.item.id);
+            add_pending(device, &copy.item.device_path);
         }
-        done += 1;
-        if (index + 1) % SAVE_EVERY == 0 {
-            device.save()?;
+        device.save_to(storage)?;
+        for copy in batch {
+            if cancel.load(Ordering::Relaxed) {
+                report.cancelled = true;
+                break;
+            }
+            progress(SyncProgress { done, total, message: format!("Copying {}", copy.item.label) });
+            match storage.put_file(&copy.item.source, &copy.item.device_path) {
+                Ok(()) => {
+                    device.manifest.pending.retain(|p| *p != copy.item.device_path);
+                    device.manifest.files.insert(
+                        copy.item.id,
+                        SyncedFile {
+                            path: copy.item.device_path.clone(),
+                            source_size: copy.item.size,
+                            source_modified: copy.item.modified,
+                        },
+                    );
+                    report.copied += 1;
+                }
+                // It stays pending: whatever the failure left behind is removed next time.
+                Err(e) => report.failures.push(format!("Could not copy {}: {e}", copy.item.label)),
+            }
+            done += 1;
         }
     }
 
     if device.manifest.settings.write_playlists && !report.cancelled {
-        report.playlists_written = write_playlists(device, plan, &mut report.failures);
+        report.playlists_written = write_playlists(device, storage, plan, &mut report.failures)?;
     }
-    device.save()?;
+    device.save_to(storage)?;
+    report.free_bytes = storage.free_bytes().ok().flatten();
     progress(SyncProgress { done, total, message: "Sync complete".into() });
     Ok(report)
 }
 
-fn device_path(root: &Path, relative: &str) -> PathBuf {
-    relative
-        .split('/')
-        .filter(|part| !part.is_empty() && *part != "..")
-        .fold(root.to_path_buf(), |path, part| path.join(part))
+fn add_pending(device: &mut Device, path: &str) {
+    if !device.manifest.pending.iter().any(|p| p == path) {
+        device.manifest.pending.push(path.to_owned());
+    }
 }
 
-/// Copies through a `.part` file, renamed only once complete.
-fn copy_file(root: &Path, item: &SyncItem) -> std::io::Result<()> {
-    let target = device_path(root, &item.device_path);
-    if let Some(parent) = target.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut part_name = target.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-    part_name.push(".part");
-    let part = target.with_file_name(part_name);
-    let result = std::fs::copy(&item.source, &part).and_then(|_| std::fs::rename(&part, &target));
-    if result.is_err() {
-        let _ = std::fs::remove_file(&part);
-    }
-    result
-}
-
-/// Removes folders emptied by a deletion, up to (not including) the device root.
-fn remove_empty_parents(root: &Path, file: &Path) {
-    let mut dir = file.parent();
-    while let Some(current) = dir {
-        if current == root || !current.starts_with(root) || std::fs::remove_dir(current).is_err() {
-            break;
+/// Removes what an interrupted sync left half written. These are files TuneBox started
+/// writing itself, so removing them takes nothing of the listener's.
+fn remove_leftovers(device: &mut Device, storage: &mut dyn Storage, failures: &mut Vec<String>) {
+    let pending = std::mem::take(&mut device.manifest.pending);
+    for path in pending {
+        let synced =
+            device.manifest.files.values().any(|f| f.path == path) || device.manifest.playlists.contains(&path);
+        if synced {
+            continue; // Finished after all (recorded before the journal was saved).
         }
-        dir = current.parent();
+        if let Err(e) = storage.remove_file(&path) {
+            failures.push(format!("Could not remove the unfinished {path}: {e}"));
+            device.manifest.pending.push(path);
+        }
     }
 }
 
 /// Writes one M3U8 per playlist, with paths relative to the playlist folder, and removes
 /// playlist files from earlier syncs that are no longer wanted.
-fn write_playlists(device: &mut Device, plan: &SyncPlan, failures: &mut Vec<String>) -> usize {
+fn write_playlists(
+    device: &mut Device,
+    storage: &mut dyn Storage,
+    plan: &SyncPlan,
+    failures: &mut Vec<String>,
+) -> Result<usize, DeviceError> {
     let folder = device.manifest.settings.playlist_folder.trim_matches('/').to_owned();
     let depth = folder.split('/').filter(|p| !p.is_empty()).count();
     let up = "../".repeat(depth);
+    let files: Vec<(String, String)> = plan
+        .playlists
+        .iter()
+        .map(|playlist| {
+            let name = tunebox_model::organize::component(&playlist.name, "Playlist");
+            (playlist.name.clone(), format!("{folder}/{name}.m3u8"))
+        })
+        .collect();
+    // Journalled like songs: a player that cannot replace a file in one step could be left
+    // with a half-written playlist.
+    files.iter().for_each(|(_, relative)| add_pending(device, relative));
+    if !files.is_empty() {
+        device.save_to(storage)?;
+    }
     let mut written = Vec::new();
-    for playlist in &plan.playlists {
+    for (playlist, (name, relative)) in plan.playlists.iter().zip(&files) {
         let mut text = String::from("#EXTM3U\n");
         for id in &playlist.tracks {
             let Some(item) = plan.final_paths.get(id) else { continue };
@@ -139,30 +182,27 @@ fn write_playlists(device: &mut Device, plan: &SyncPlan, failures: &mut Vec<Stri
             }
             text.push_str(&format!("#EXTINF:{},{}\n{up}{}\n", item.duration.as_secs(), item.label, item.device_path));
         }
-        let name = tunebox_model::organize::component(&playlist.name, "Playlist");
-        let relative = format!("{folder}/{name}.m3u8");
-        let path = device_path(&device.root, &relative);
-        let result = path
-            .parent()
-            .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| craft_atomic::atomic_write(&path, text.as_bytes()));
-        match result {
-            Ok(()) => written.push(relative),
-            Err(e) => failures.push(format!("Could not write playlist {}: {e}", playlist.name)),
+        match storage.write_file(relative, text.as_bytes()) {
+            Ok(()) => {
+                device.manifest.pending.retain(|p| p != relative);
+                written.push(relative.clone());
+            }
+            Err(e) => failures.push(format!("Could not write playlist {name}: {e}")),
         }
     }
     for stale in device.manifest.playlists.iter().filter(|p| !written.contains(p)) {
-        let _ = std::fs::remove_file(device_path(&device.root, stale));
+        let _ = storage.remove_file(stale);
     }
     let count = written.len();
     device.manifest.playlists = written;
-    count
+    Ok(count)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{PlaylistFile, plan};
+    use crate::plan::{PlaylistFile, SyncItem, plan};
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
     use tunebox_model::TrackId;
 
@@ -222,6 +262,10 @@ mod tests {
         assert_eq!(report.failures.len(), 1);
         assert!(device.manifest.files.is_empty());
         assert!(!player.path().join("Music/Artist/Gone.flac.part").exists());
+    }
+
+    fn device_path(root: &Path, relative: &str) -> PathBuf {
+        FolderStorage::new(root).path(relative)
     }
 
     #[test]

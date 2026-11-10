@@ -1,13 +1,12 @@
 //! A player TuneBox manages, and the manifest it keeps on it.
 
+use crate::storage::{FolderStorage, Storage};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tunebox_model::{PlaylistId, TrackId};
 
-const MANIFEST_DIR: &str = ".tunebox";
-const MANIFEST_FILE: &str = "device.json";
 const FORMAT: &str = "tunebox-device";
 const VERSION: u32 = 1;
 
@@ -20,6 +19,9 @@ pub enum DeviceError {
     Damaged(String),
     #[error("the device was set up by a newer TuneBox (manifest version {0})")]
     TooNew(u32),
+    /// The player could not be reached; the message says why and what to do.
+    #[error("{0}")]
+    Unavailable(String),
 }
 
 /// What goes onto the device.
@@ -85,6 +87,10 @@ pub struct DeviceManifest {
     /// Playlist files TuneBox wrote, relative to the device root, so stale ones can be removed.
     #[serde(default)]
     pub playlists: Vec<String>,
+    /// Files TuneBox started writing and has not seen finish (a journal, see `execute`): the
+    /// next sync removes them first. Empty, and left out of the file, after a clean sync.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending: Vec<String>,
 }
 
 /// A player with a TuneBox manifest.
@@ -95,17 +101,15 @@ pub struct Device {
 }
 
 impl Device {
-    fn manifest_path(root: &Path) -> PathBuf {
-        root.join(MANIFEST_DIR).join(MANIFEST_FILE)
-    }
-
     /// The device at `root`, or `None` if TuneBox has not set it up.
     pub fn open(root: &Path) -> Result<Option<Device>, DeviceError> {
-        let bytes = match std::fs::read(Self::manifest_path(root)) {
-            Ok(bytes) => bytes,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e.into()),
-        };
+        Self::read_from(&mut FolderStorage::new(root), root)
+    }
+
+    /// The device whose files are in `storage` (known as `root`), or `None` if TuneBox has not
+    /// set it up.
+    pub fn read_from(storage: &mut dyn Storage, root: &Path) -> Result<Option<Device>, DeviceError> {
+        let Some(bytes) = storage.read_manifest()? else { return Ok(None) };
         let manifest: DeviceManifest =
             serde_json::from_slice(&bytes).map_err(|e| DeviceError::Damaged(e.to_string()))?;
         if manifest.format != FORMAT {
@@ -120,9 +124,14 @@ impl Device {
     /// Sets up the player at `root` for syncing, under `name`. An existing manifest is kept
     /// (only renamed), so its record of synced files survives.
     pub fn register(root: &Path, name: &str) -> Result<Device, DeviceError> {
-        if let Some(mut device) = Self::open(root)? {
+        Self::register_on(&mut FolderStorage::new(root), root, name)
+    }
+
+    /// [`Device::register`] for a player reached through `storage`.
+    pub fn register_on(storage: &mut dyn Storage, root: &Path, name: &str) -> Result<Device, DeviceError> {
+        if let Some(mut device) = Self::read_from(storage, root)? {
             device.manifest.name = name.to_owned();
-            device.save()?;
+            device.save_to(storage)?;
             return Ok(device);
         }
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
@@ -134,20 +143,22 @@ impl Device {
             settings: SyncSettings::default(),
             files: BTreeMap::new(),
             playlists: Vec::new(),
+            pending: Vec::new(),
         };
         let device = Device { root: root.to_path_buf(), manifest };
-        device.save()?;
+        device.save_to(storage)?;
         Ok(device)
     }
 
-    /// Writes the manifest atomically.
+    /// Writes the manifest atomically to a folder player.
     pub fn save(&self) -> Result<(), DeviceError> {
-        let path = Self::manifest_path(&self.root);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        self.save_to(&mut FolderStorage::new(&self.root))
+    }
+
+    /// Writes the manifest to `storage`, so a complete one exists at every moment.
+    pub fn save_to(&self, storage: &mut dyn Storage) -> Result<(), DeviceError> {
         let bytes = serde_json::to_vec_pretty(&self.manifest).map_err(|e| DeviceError::Damaged(e.to_string()))?;
-        craft_atomic::atomic_write(&path, &bytes)?;
+        storage.write_manifest(&bytes)?;
         Ok(())
     }
 
@@ -160,6 +171,13 @@ impl Device {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::{MANIFEST_DIR, MANIFEST_FILE};
+
+    impl Device {
+        fn manifest_path(root: &Path) -> PathBuf {
+            root.join(MANIFEST_DIR).join(MANIFEST_FILE)
+        }
+    }
 
     #[test]
     fn register_open_and_rename() {

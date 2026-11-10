@@ -10,8 +10,13 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+# MTP players simulated in memory, for tests of the crates above.
+simulator = ["tunebox-mtp/simulator"]
+
 [dependencies]
 tunebox-model = { workspace = true }
+tunebox-mtp = { workspace = true }
 craft-atomic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -20,3 +25,4 @@ log = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tunebox-mtp = { workspace = true, features = ["simulator"] }
