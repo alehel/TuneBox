@@ -49,6 +49,130 @@ pub fn paint_primary(ui: &Ui, rect: Rect, label: &str, enabled: bool, response: 
     painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, crate::fonts::bold(13.0), Color32::WHITE);
 }
 
+/// Room at the start of a menu item for a painted mark (a tick, stars).
+const MENU_GUTTER: &str = "      ";
+
+/// A menu item with a gutter on the left, where a tick is painted when `checked`. Every item
+/// gets the gutter so labels line up, as in a classic menu.
+pub fn menu_item(ui: &mut Ui, label: &str, shortcut: &str, checked: bool, enabled: bool) -> Response {
+    let button = egui::Button::new(format!("{MENU_GUTTER}{label}")).shortcut_text(shortcut.to_owned());
+    let response = ui.add_enabled(enabled, button);
+    if checked {
+        let mark = egui::pos2(response.rect.left() + 13.0, response.rect.center().y);
+        let color = if enabled { theme::TEXT } else { theme::TEXT_MUTED };
+        let stroke = Stroke::new(1.8, color);
+        ui.painter().line_segment([mark + vec2(-4.0, 0.0), mark + vec2(-1.2, 3.0)], stroke);
+        ui.painter().line_segment([mark + vec2(-1.2, 3.0), mark + vec2(4.5, -3.5)], stroke);
+    }
+    response
+}
+
+/// A menu item showing `stars` of five painted stars (or "None" for none).
+pub fn rating_menu_item(ui: &mut Ui, stars: u8) -> Response {
+    if stars == 0 {
+        return ui.button(format!("{MENU_GUTTER}None"));
+    }
+    let response = ui.button(format!("{MENU_GUTTER}{MENU_GUTTER}{MENU_GUTTER}"));
+    for i in 0..Rating::MAX_STARS {
+        let center = egui::pos2(response.rect.left() + 12.0 + f32::from(i) * 13.0, response.rect.center().y);
+        let color = if i < stars { theme::TEXT } else { Color32::from_gray(0xC8) };
+        paint_star(ui.painter(), center, 5.0, color);
+    }
+    response
+}
+
+/// An on/off switch, the modern stand-in for a checkbox on a settings page. Returns whether it
+/// was flipped this frame.
+pub fn switch(ui: &mut Ui, on: &mut bool, enabled: bool) -> bool {
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(38.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
+    if response.clicked() {
+        *on = !*on;
+    }
+    let t = ui.ctx().animate_bool(response.id, *on);
+    let painter = ui.painter();
+    let off = Color32::from_rgb(0xD3, 0xD6, 0xDB);
+    let track = lerp(off, theme::ACCENT, t);
+    let track = if enabled { track } else { track.gamma_multiply(0.5) };
+    painter.rect_filled(rect, 11.0, track);
+    let knob = egui::pos2(rect.left() + 11.0 + t * (rect.width() - 22.0), rect.center().y);
+    painter.circle_filled(knob + vec2(0.0, 1.0), 9.0, Color32::from_black_alpha(35));
+    painter.circle_filled(knob, 9.0, Color32::WHITE);
+    response.clicked()
+}
+
+fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
+    let mix = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() as u8;
+    Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
+/// A row of mutually exclusive choices in one rounded control. Returns whether the choice
+/// changed this frame.
+pub fn segmented(
+    ui: &mut Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    options: &[&str],
+    selected: &mut usize,
+) -> bool {
+    let font = egui::FontId::proportional(12.0);
+    let widths: Vec<f32> = options
+        .iter()
+        .map(|o| ui.painter().layout_no_wrap((*o).to_owned(), font.clone(), theme::TEXT).size().x + 22.0)
+        .collect();
+    let (rect, _) = ui.allocate_exact_size(vec2(widths.iter().sum(), 24.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 7.0, Color32::from_rgb(0xE6, 0xE8, 0xEB));
+    let mut changed = false;
+    let mut x = rect.left();
+    for (i, (option, width)) in options.iter().zip(&widths).enumerate() {
+        let segment = Rect::from_min_size(egui::pos2(x, rect.top()), vec2(*width, rect.height()));
+        let response = ui.interact(segment, ui.scope_id().with(("segment", &id, i)), Sense::click());
+        if i == *selected {
+            let chosen = segment.shrink(2.0);
+            theme::soft_shadow(ui.painter(), chosen, 5.0, 3);
+            ui.painter().rect_filled(chosen, 5.0, Color32::WHITE);
+        }
+        let color = if i == *selected { theme::TEXT } else { theme::TEXT_MUTED };
+        ui.painter().text(segment.center(), egui::Align2::CENTER_CENTER, *option, font.clone(), color);
+        if response.clicked() && i != *selected {
+            *selected = i;
+            changed = true;
+        }
+        x += width;
+    }
+    changed
+}
+
+/// A pill that is on or off, for choosing several things from a set (like columns).
+pub fn chip(ui: &mut Ui, label: &str, on: &mut bool, enabled: bool) -> bool {
+    let font = egui::FontId::proportional(12.5);
+    let text = ui.painter().layout_no_wrap(label.to_owned(), font.clone(), theme::TEXT);
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(text.size().x + 34.0, 28.0), if enabled { Sense::click() } else { Sense::hover() });
+    if response.clicked() {
+        *on = !*on;
+    }
+    let painter = ui.painter();
+    let (fill, border, color) = match (*on, response.hovered()) {
+        (true, _) => (theme::ACCENT.gamma_multiply(0.12), theme::ACCENT.gamma_multiply(0.6), theme::ACCENT),
+        (false, true) => (Color32::from_rgb(0xF3, 0xF4, 0xF6), Color32::from_gray(0xA8), theme::TEXT),
+        (false, false) => (Color32::WHITE, Color32::from_rgb(0xCC, 0xCF, 0xD4), theme::TEXT_MUTED),
+    };
+    painter.rect_filled(rect, 14.0, fill);
+    painter.rect_stroke(rect, 14.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
+    let mark = egui::pos2(rect.left() + 14.0, rect.center().y);
+    if *on {
+        let stroke = Stroke::new(1.8, color);
+        painter.line_segment([mark + vec2(-3.5, 0.0), mark + vec2(-1.0, 2.8)], stroke);
+        painter.line_segment([mark + vec2(-1.0, 2.8), mark + vec2(3.8, -2.8)], stroke);
+    } else {
+        painter.circle_stroke(mark, 3.5, Stroke::new(1.2, color));
+    }
+    let color = if enabled { color } else { color.gamma_multiply(0.6) };
+    painter.text(egui::pos2(rect.left() + 24.0, rect.center().y), egui::Align2::LEFT_CENTER, label, font, color);
+    response.clicked()
+}
+
 /// Five stars; clicking a star sets the rating, clicking the current one clears it.
 /// Returns the new rating when clicked.
 pub fn rating(ui: &mut Ui, rect: Rect, rating: Rating, interactive: bool, on_selected_row: bool) -> Option<Rating> {
@@ -76,7 +200,7 @@ pub fn rating(ui: &mut Ui, rect: Rect, rating: Rating, interactive: bool, on_sel
     Some(if stars == rating.stars() { Rating::UNRATED } else { Rating::from_stars(stars) })
 }
 
-fn paint_star(painter: &egui::Painter, center: egui::Pos2, radius: f32, color: Color32) {
+pub fn paint_star(painter: &egui::Painter, center: egui::Pos2, radius: f32, color: Color32) {
     let points: Vec<egui::Pos2> = (0..10)
         .map(|i| {
             let r = if i % 2 == 0 { radius } else { radius * 0.45 };

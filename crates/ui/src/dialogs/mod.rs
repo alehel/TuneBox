@@ -6,7 +6,7 @@ mod simple;
 mod smart_playlist;
 
 pub use get_info::GetInfoDialog;
-pub use preferences::PreferencesDialog;
+pub use preferences::{PreferencesDialog, Tab as PreferencesTab};
 pub use simple::{ConfirmRemove, RenamePlaylist};
 pub use smart_playlist::SmartPlaylistDialog;
 

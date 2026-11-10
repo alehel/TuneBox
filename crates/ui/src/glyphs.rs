@@ -29,6 +29,8 @@ pub enum Glyph {
     GridView,
     NowPlaying,
     Visualizer,
+    Folder,
+    Lock,
 }
 
 /// Paints `glyph` into `rect`.
@@ -110,6 +112,29 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
             }
         }
         Glyph::NowPlaying => speaker(painter, &r, color, 1),
+        Glyph::Folder => {
+            painter.add(Shape::convex_polygon(
+                vec![
+                    r.at(0.06, 0.24),
+                    r.at(0.38, 0.24),
+                    r.at(0.46, 0.33),
+                    r.at(0.94, 0.33),
+                    r.at(0.94, 0.84),
+                    r.at(0.06, 0.84),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+            painter.rect_filled(
+                Rect::from_min_max(r.at(0.06, 0.4), r.at(0.94, 0.42)),
+                0.0,
+                Color32::from_white_alpha(90),
+            );
+        }
+        Glyph::Lock => {
+            painter.circle_stroke(r.at(0.5, 0.38), r.size * 0.2, Stroke::new(r.size * 0.12, color));
+            painter.rect_filled(Rect::from_min_max(r.at(0.18, 0.45), r.at(0.82, 0.92)), r.size * 0.1, color);
+        }
         Glyph::Visualizer => {
             for (i, height) in [0.35, 0.7, 0.5, 0.85, 0.45].into_iter().enumerate() {
                 let x = 0.1 + i as f32 * 0.17;

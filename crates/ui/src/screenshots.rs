@@ -2,7 +2,7 @@
 //! captures the window and saves it as a PNG, then quits. The README's pictures come from here.
 
 use crate::app::TuneBoxApp;
-use crate::dialogs::{Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
+use crate::dialogs::{Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, SmartPlaylistDialog};
 use crate::state::{SourceItem, ViewMode};
 use egui::ColorImage;
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 11] = [
+const SCENES: [Scene; 13] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
@@ -28,6 +28,8 @@ const SCENES: [Scene; 11] = [
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
+    Scene { name: "tunebox-preferences-importing", setup: preferences_importing },
+    Scene { name: "tunebox-preferences-columns", setup: preferences_columns },
     Scene { name: "tunebox-visualizer-pulse", setup: visualizer_pulse },
     Scene { name: "tunebox-visualizer-aurora", setup: visualizer_aurora },
     Scene { name: "tunebox-visualizer-spectrum", setup: visualizer_spectrum },
@@ -200,4 +202,16 @@ fn preferences(app: &mut TuneBoxApp) {
         prefs.media_folder = music.join("Collection/Imports");
     }
     app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(&prefs))));
+}
+
+fn preferences_importing(app: &mut TuneBoxApp) {
+    preferences(app);
+    let prefs = app.session.preferences().clone();
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::Importing))));
+}
+
+fn preferences_columns(app: &mut TuneBoxApp) {
+    preferences(app);
+    let prefs = app.session.preferences().clone();
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::Columns))));
 }

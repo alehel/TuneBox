@@ -254,8 +254,7 @@ fn context_menu(response: &egui::Response, cx: &mut PanelContext, id: TrackId) {
         }
         ui.menu_button("Rating", |ui| {
             for stars in (0..=Rating::MAX_STARS).rev() {
-                let label = if stars == 0 { "None".to_owned() } else { "★".repeat(usize::from(stars)) };
-                if ui.button(label).clicked() {
+                if widgets::rating_menu_item(ui, stars).clicked() {
                     cx.act(Action::SetRating(tracks.clone(), Rating::from_stars(stars)));
                     ui.close();
                 }

@@ -72,9 +72,10 @@ unplugged player or a bad library file must produce an error the listener can ac
 
 - Behaviour comes from public specifications (MusicBrainz disc ids, FLAC, M3U) and from
   observing how music apps behave. Never copy another product's code, artwork, icons or text.
-- **Icons are drawn in code** (`crates/ui/src/glyphs.rs`); there are no image assets. The one
-  bundled font, Lato (OFL-1.1), lives in `assets/fonts/` with its licence and checksums in
-  `ATTRIBUTION.md`; installing it is `crates/ui/src/fonts.rs`. Demo
+- **Icons are drawn in code** (`crates/ui/src/glyphs.rs`); there are no image assets. The bundled
+  fonts, Lato and Noto Sans Symbols 2 (both OFL-1.1), live in `assets/fonts/` with their
+  licences and checksums in `ATTRIBUTION.md`; `crates/ui/src/fonts.rs` installs them. Its test
+  fails if the interface writes a character no bundled font can draw. Demo
   covers are generated procedurally (`xtask/src/covers.rs`). Any asset added later needs an
   open licence and an entry in `ATTRIBUTION.md` in the same change.
 - **Dependencies** must pass `cargo deny check` (`deny.toml`). symphonia (MPL-2.0, used

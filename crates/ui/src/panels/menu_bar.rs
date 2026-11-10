@@ -1,7 +1,7 @@
 //! The menu bar, generated from the engine's command registry.
 
 use crate::actions::Action;
-use crate::panels::PanelContext;
+use crate::panels::{PanelContext, widgets};
 use crate::state::ViewMode;
 use tunebox_engine::RepeatMode;
 use tunebox_engine::commands::{COMMANDS, CommandId, Context, Menu};
@@ -15,10 +15,9 @@ pub fn show(ui: &mut egui::Ui, cx: &mut PanelContext, context: Context) {
                     if spec.separator_before {
                         ui.separator();
                     }
-                    let label = if is_on(spec.id, cx) { format!("✓ {}", spec.label) } else { spec.label.to_owned() };
                     let shortcut = spec.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
-                    let button = egui::Button::new(label).shortcut_text(shortcut);
-                    if ui.add_enabled(cx.session.is_enabled(spec.id, context), button).clicked() {
+                    let enabled = cx.session.is_enabled(spec.id, context);
+                    if widgets::menu_item(ui, spec.label, &shortcut, is_on(spec.id, cx), enabled).clicked() {
                         cx.act(Action::Run(spec.id));
                         ui.close();
                     }

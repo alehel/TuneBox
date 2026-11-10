@@ -1,16 +1,43 @@
-//! Preferences: the media folder, importing, and which columns the track list shows.
+//! Preferences: three panes (Library, Importing, Columns) chosen from an icon tab bar. Each
+//! pane is a column of cards: a bold heading, one line saying what the card is for, then its
+//! settings, with on/off settings as switches that carry their explanation beneath them.
 
 use crate::actions::Action;
 use crate::dialogs::window;
-use egui::RichText;
+use crate::glyphs::{self, Glyph};
+use crate::panels::widgets;
+use crate::theme;
+use egui::{Align, Color32, Frame, Label, Layout, Margin, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
 use tunebox_engine::model::Column;
-use tunebox_engine::{LosslessFormat, Preferences};
+use tunebox_engine::{LibraryFolder, LosslessFormat, Preferences};
+
+const WIDTH: f32 = 640.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Tab {
-    General,
+pub enum Tab {
+    Library,
     Importing,
     Columns,
+}
+
+impl Tab {
+    const ALL: [Tab; 3] = [Tab::Library, Tab::Importing, Tab::Columns];
+
+    fn label(self) -> &'static str {
+        match self {
+            Tab::Library => "Library",
+            Tab::Importing => "Importing",
+            Tab::Columns => "Columns",
+        }
+    }
+
+    fn glyph(self) -> Glyph {
+        match self {
+            Tab::Library => Glyph::Folder,
+            Tab::Importing => Glyph::Disc,
+            Tab::Columns => Glyph::ListView,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -21,21 +48,20 @@ pub struct PreferencesDialog {
 
 impl PreferencesDialog {
     pub fn new(current: &Preferences) -> Self {
-        Self { tab: Tab::General, draft: current.clone() }
+        Self::on_tab(current, Tab::Library)
+    }
+
+    pub fn on_tab(current: &Preferences, tab: Tab) -> Self {
+        Self { tab, draft: current.clone() }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
         let (tab, draft) = (&mut self.tab, &mut self.draft);
-        let result = window(ctx, "Preferences", 560.0, "OK", |ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(tab, Tab::General, "General");
-                ui.selectable_value(tab, Tab::Importing, "Importing");
-                ui.selectable_value(tab, Tab::Columns, "Columns");
-            });
-            ui.separator();
-            ui.add_space(4.0);
+        let result = window(ctx, "Preferences", WIDTH, "OK", |ui| {
+            tab_bar(ui, tab);
+            ui.add_space(14.0);
             match tab {
-                Tab::General => general(ui, draft, actions),
+                Tab::Library => library(ui, draft, actions),
                 Tab::Importing => importing(ui, draft),
                 Tab::Columns => columns(ui, draft),
             }
@@ -51,67 +77,139 @@ impl PreferencesDialog {
     }
 }
 
-fn general(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
-    library_folders(ui, prefs, actions);
-    ui.separator();
-    ui.label(RichText::new("Imports folder (CD imports and copies)").strong());
-    ui.horizontal(|ui| {
-        ui.label(tunebox_platform::display_path(&prefs.media_folder));
-        if ui.button("Change…").clicked()
-            && let Some(folder) = rfd::FileDialog::new().set_directory(&prefs.media_folder).pick_folder()
-        {
-            prefs.media_folder = folder;
+// ----- layout pieces -----
+
+/// The icon tabs, centred, in the manner of a classic preferences toolbar.
+fn tab_bar(ui: &mut Ui, current: &mut Tab) {
+    let size = vec2(92.0, 54.0);
+    let total = size.x * Tab::ALL.len() as f32;
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), size.y), Sense::hover());
+    let left = row.center().x - total / 2.0;
+    for (i, tab) in Tab::ALL.into_iter().enumerate() {
+        let rect = Rect::from_min_size(pos2(left + size.x * i as f32, row.top()), size);
+        let response = ui.interact(rect, ui.scope_id().with(("preferences-tab", i)), Sense::click());
+        let selected = *current == tab;
+        let painter = ui.painter();
+        if selected {
+            painter.rect_filled(rect.shrink2(vec2(6.0, 0.0)), 10.0, Color32::from_rgb(0xE4, 0xE9, 0xF2));
+        } else if response.hovered() {
+            painter.rect_filled(rect.shrink2(vec2(6.0, 0.0)), 10.0, Color32::from_black_alpha(10));
         }
-    });
-    ui.add_space(6.0);
-    ui.checkbox(&mut prefs.copy_to_media_folder, "Copy files to the TuneBox Media folder when adding to library");
-    ui.label(
-        RichText::new("Off: songs play from where they are and nothing is added to your folders. On: copies are filed by artist and album. CD imports always go to the media folder.")
-            .weak()
-            .size(11.0),
-    );
-    if !tunebox_engine::files::may_write(prefs, &prefs.media_folder) {
-        ui.colored_label(
-            egui::Color32::from_rgb(0xB0, 0x30, 0x30),
-            "The media folder is in a read-only library folder, so CD imports and copies are not possible. Choose a writable folder.",
+        let color = if selected { theme::ACCENT } else { theme::GLYPH };
+        glyphs::paint(
+            painter,
+            Rect::from_center_size(rect.center() - vec2(0.0, 9.0), vec2(22.0, 22.0)),
+            tab.glyph(),
+            color,
         );
+        let font = if selected { crate::fonts::bold(12.0) } else { egui::FontId::proportional(12.0) };
+        painter.text(rect.center() + vec2(0.0, 15.0), egui::Align2::CENTER_CENTER, tab.label(), font, color);
+        if response.clicked() {
+            *current = tab;
+        }
     }
 }
 
-/// The listener's music folders, each read-only or writable.
-fn library_folders(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
-    ui.label(RichText::new("Library folders").strong());
+/// A rounded white card with a heading and one line of explanation.
+fn card(ui: &mut Ui, title: &str, description: &str, contents: impl FnOnce(&mut Ui)) {
+    Frame::new()
+        .fill(Color32::WHITE)
+        .stroke(Stroke::new(1.0, theme::GRID_LINE))
+        .corner_radius(10)
+        .inner_margin(Margin::symmetric(16, 14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(title).font(crate::fonts::bold(14.0)));
+            if description.is_empty() {
+                ui.add_space(4.0);
+            } else {
+                ui.add(Label::new(muted(description)).wrap());
+                ui.add_space(10.0);
+            }
+            contents(ui);
+        });
+    ui.add_space(12.0);
+}
+
+fn muted(text: &str) -> RichText {
+    RichText::new(text).size(12.0).color(theme::TEXT_MUTED)
+}
+
+/// A setting that is on or off: its name and explanation on the left, a switch on the right.
+fn switch_row(ui: &mut Ui, title: &str, detail: &str, value: &mut bool) {
+    ui.horizontal(|ui| {
+        let text_width = ui.available_width() - 58.0;
+        ui.allocate_ui_with_layout(vec2(text_width, 0.0), Layout::top_down(Align::Min), |ui| {
+            ui.set_width(text_width);
+            ui.label(RichText::new(title).size(13.0));
+            ui.add(Label::new(muted(detail)).wrap());
+        });
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            widgets::switch(ui, value, true);
+        });
+    });
+}
+
+/// A setting with a value: its name in a fixed-width column, then the control.
+fn value_row(ui: &mut Ui, title: &str, control: impl FnOnce(&mut Ui)) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(vec2(130.0, 24.0), Layout::left_to_right(Align::Center), |ui| {
+            ui.set_width(130.0);
+            ui.label(RichText::new(title).size(13.0));
+        });
+        control(ui);
+    });
+}
+
+// ----- the panes -----
+
+fn library(ui: &mut Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
+    card(
+        ui,
+        "Library folders",
+        "Where your music lives. TuneBox never changes, moves or deletes anything in a read-only folder; a folder inside another follows its own setting.",
+        |ui| folder_list(ui, prefs, actions),
+    );
+    card(ui, "Adding music", "", |ui| {
+        switch_row(
+            ui,
+            "Copy files to the media folder when adding to the library",
+            "Off: songs play from where they are and nothing is added to your folders. On: copies are filed by artist and album in the imports folder.",
+            &mut prefs.copy_to_media_folder,
+        );
+    });
+}
+
+/// The library folders as a list: one row each, then Add and Scan below.
+fn folder_list(ui: &mut Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
     let mut remove = None;
     let mut use_for_imports = None;
-    egui::Frame::new()
-        .fill(egui::Color32::WHITE)
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0xB0)))
-        .inner_margin(6)
+    Frame::new()
+        .fill(Color32::from_rgb(0xF7, 0xF8, 0xFA))
+        .stroke(Stroke::new(1.0, theme::GRID_LINE))
+        .corner_radius(8)
         .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
+            ui.set_width(ui.available_width());
             if prefs.library_folders.is_empty() {
-                ui.label(RichText::new("No folders yet. Songs you add are played from wherever they are.").weak());
+                ui.add_space(14.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(muted("No folders yet. Songs you add are played from wherever they are."))
+                });
+                ui.add_space(14.0);
             }
-            egui::Grid::new("library-folders").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-                for (index, folder) in prefs.library_folders.iter_mut().enumerate() {
-                    ui.label(tunebox_platform::display_path(&folder.path));
-                    ui.checkbox(&mut folder.read_only, "Read only");
-                    let is_imports = folder.path == prefs.media_folder;
-                    if is_imports {
-                        ui.label(RichText::new("Imports go here").weak());
-                    } else if ui.add_enabled(!folder.read_only, egui::Button::new("Use for Imports")).clicked() {
-                        use_for_imports = Some(folder.path.clone());
-                    }
-                    if ui
-                        .small_button("Remove")
-                        .on_hover_text("Stop listing it; its songs stay in the library")
-                        .clicked()
-                    {
-                        remove = Some(index);
-                    }
-                    ui.end_row();
+            let count = prefs.library_folders.len();
+            let imports = prefs.media_folder.clone();
+            for (index, folder) in prefs.library_folders.iter_mut().enumerate() {
+                match folder_row(ui, index, folder, folder.path == imports) {
+                    RowAction::Remove => remove = Some(index),
+                    RowAction::UseForImports => use_for_imports = Some(folder.path.clone()),
+                    RowAction::None => {}
                 }
-            });
+                if index + 1 < count {
+                    let rect = ui.available_rect_before_wrap();
+                    ui.painter().hline(rect.x_range().shrink(12.0), rect.top(), Stroke::new(1.0, theme::GRID_LINE));
+                }
+            }
         });
     if let Some(index) = remove {
         prefs.library_folders.remove(index);
@@ -119,67 +217,180 @@ fn library_folders(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec
     if let Some(path) = use_for_imports {
         prefs.media_folder = path;
     }
+    ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Add Folder…").clicked()
+        if ui.button("+  Add Folder…").clicked()
             && let Some(folder) = rfd::FileDialog::new().set_title("Add a Library Folder").pick_folder()
         {
             prefs.add_library_folder(folder.clone(), true);
             actions.push(Action::AddToLibrary(vec![folder]));
         }
-        if ui
-            .add_enabled(!prefs.library_folders.is_empty(), egui::Button::new("Scan All"))
-            .on_hover_text("Add songs that appeared since the last scan")
-            .clicked()
-        {
+        let scan = ui.add_enabled(!prefs.library_folders.is_empty(), egui::Button::new("Scan All"));
+        if scan.on_hover_text("Add songs that appeared in these folders since the last scan").clicked() {
             actions.push(Action::AddToLibrary(prefs.library_folders.iter().map(|f| f.path.clone()).collect()));
         }
     });
-    ui.label(
-        RichText::new("New folders are read only. TuneBox never changes, moves or deletes anything in a read-only folder: edits stay in its library, and deleting only removes songs from the library. A folder inside another follows its own setting.")
-            .weak()
-            .size(11.0),
-    );
-    ui.add_space(4.0);
 }
 
-fn importing(ui: &mut egui::Ui, prefs: &mut Preferences) {
-    ui.horizontal(|ui| {
-        ui.label("Import CDs using:");
-        egui::ComboBox::from_id_salt("rip-format").selected_text(prefs.rip_format.encoder_name()).show_ui(ui, |ui| {
-            for format in LosslessFormat::ALL {
-                ui.selectable_value(&mut prefs.rip_format, format, format.encoder_name());
+enum RowAction {
+    None,
+    Remove,
+    UseForImports,
+}
+
+/// One folder: icon, name and path, its rule, the imports badge, and remove.
+fn folder_row(ui: &mut Ui, index: usize, folder: &mut LibraryFolder, is_imports: bool) -> RowAction {
+    let mut action = RowAction::None;
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 50.0), Sense::hover());
+    let painter = ui.painter();
+    let icon = Rect::from_center_size(pos2(row.left() + 26.0, row.center().y), vec2(24.0, 24.0));
+    glyphs::paint(
+        painter,
+        icon,
+        Glyph::Folder,
+        if folder.read_only { theme::ICON_PLAYLIST } else { theme::ICON_LIBRARY },
+    );
+    if folder.read_only {
+        let badge = Rect::from_center_size(icon.right_bottom() - vec2(3.0, 4.0), vec2(12.0, 12.0));
+        painter.circle_filled(badge.center(), 7.5, Color32::WHITE);
+        glyphs::paint(painter, badge.shrink(1.5), Glyph::Lock, theme::GLYPH);
+    }
+    let name = folder
+        .path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| folder.path.display().to_string());
+    let text_left = icon.right() + 14.0;
+    let text_width = 210.0;
+    theme::font_in_row(
+        painter,
+        pos2(text_left, row.center().y - 8.0),
+        &name,
+        crate::fonts::bold(13.0),
+        theme::TEXT,
+        text_width,
+    );
+    let path = tunebox_platform::display_path(&folder.path);
+    theme::text_in_row(painter, pos2(text_left, row.center().y + 9.0), &path, 11.5, theme::TEXT_MUTED, text_width);
+
+    let controls = Rect::from_min_max(pos2(text_left + text_width + 8.0, row.top()), row.max - vec2(10.0, 0.0));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(controls).layout(Layout::right_to_left(Align::Center)), |ui| {
+        let remove = remove_button(ui).on_hover_text("Remove from the list (the songs stay in the library)");
+        if remove.clicked() {
+            action = RowAction::Remove;
+        }
+        ui.add_space(4.0);
+        if is_imports {
+            imports_badge(ui);
+        } else if !folder.read_only && ui.link("Use for imports").clicked() {
+            action = RowAction::UseForImports;
+        }
+        ui.add_space(6.0);
+        let mut choice = usize::from(!folder.read_only);
+        if widgets::segmented(ui, ("folder-rule", index), &["Read only", "Writable"], &mut choice) {
+            folder.read_only = choice == 0;
+        }
+    });
+    action
+}
+
+/// A small round button with a cross, darkening under the pointer.
+fn remove_button(ui: &mut Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+    let painter = ui.painter();
+    if response.hovered() {
+        painter.circle_filled(rect.center(), 11.0, Color32::from_black_alpha(14));
+    }
+    let color = if response.hovered() { theme::GLYPH_PRESSED } else { theme::TEXT_MUTED };
+    let stroke = Stroke::new(1.5, color);
+    let c = rect.center();
+    painter.line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], stroke);
+    painter.line_segment([c + vec2(4.0, -4.0), c + vec2(-4.0, 4.0)], stroke);
+    response
+}
+
+fn imports_badge(ui: &mut Ui) {
+    let font = egui::FontId::proportional(11.0);
+    let text = "Imports go here";
+    let width = ui.painter().layout_no_wrap(text.into(), font.clone(), theme::ACCENT).size().x + 16.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(width, 20.0), Sense::hover());
+    ui.painter().rect_filled(rect, 10.0, theme::ACCENT.gamma_multiply(0.12));
+    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, font, theme::ACCENT);
+}
+
+fn importing(ui: &mut Ui, prefs: &mut Preferences) {
+    card(ui, "CD import", "Every format here is lossless: every bit on the disc is kept.", |ui| {
+        value_row(ui, "Import using", |ui| {
+            egui::ComboBox::from_id_salt("rip-format")
+                .width(200.0)
+                .selected_text(prefs.rip_format.encoder_name())
+                .show_ui(ui, |ui| {
+                    for format in LosslessFormat::ALL {
+                        ui.selectable_value(&mut prefs.rip_format, format, format.encoder_name());
+                    }
+                });
+            ui.label(muted(match prefs.rip_format {
+                LosslessFormat::Flac => "About half the size of WAV",
+                LosslessFormat::Wav | LosslessFormat::Aiff => "Uncompressed",
+            }));
+        });
+        ui.add_space(6.0);
+        value_row(ui, "Imports folder", |ui| {
+            ui.label(tunebox_platform::display_path(&prefs.media_folder));
+            if ui.button("Change…").clicked()
+                && let Some(folder) = rfd::FileDialog::new().set_directory(&prefs.media_folder).pick_folder()
+            {
+                prefs.media_folder = folder;
             }
         });
+        if !tunebox_engine::files::may_write(prefs, &prefs.media_folder) {
+            ui.add_space(6.0);
+            warning(
+                ui,
+                "This folder is in a read-only library folder, so CDs cannot be imported there. Choose a writable folder.",
+            );
+        }
     });
-    ui.label(
-        RichText::new("All three are lossless: every bit on the disc is kept. FLAC files are about half the size.")
-            .weak()
-            .size(11.0),
-    );
-    ui.add_space(8.0);
-    ui.checkbox(&mut prefs.lookup_cd_names_automatically, "Automatically get CD track names from the Internet");
-    ui.label(RichText::new("Names come from MusicBrainz. Only the disc's identifier is sent.").weak().size(11.0));
+    card(ui, "Track names", "", |ui| {
+        switch_row(
+            ui,
+            "Look up track names when a disc is inserted",
+            "From MusicBrainz. Only the disc's identifier is sent, and only when this is on or you choose Get Track Names.",
+            &mut prefs.lookup_cd_names_automatically,
+        );
+    });
 }
 
-fn columns(ui: &mut egui::Ui, prefs: &mut Preferences) {
-    ui.label("Show these columns in the song list:");
-    ui.add_space(4.0);
-    egui::Grid::new("columns").num_columns(3).spacing([18.0, 4.0]).show(ui, |ui| {
-        for (i, column) in Column::ALL.iter().enumerate() {
-            let mut on = prefs.visible_columns.contains(column);
-            let enabled = *column != Column::Name;
-            if ui.add_enabled(enabled, egui::Checkbox::new(&mut on, column.title())).changed() {
-                if on {
-                    // Keep the registry's order so columns appear in a familiar sequence.
-                    prefs.visible_columns.push(*column);
-                    prefs.visible_columns.sort_by_key(|c| Column::ALL.iter().position(|x| x == c));
-                } else {
-                    prefs.visible_columns.retain(|c| c != column);
+fn warning(ui: &mut Ui, text: &str) {
+    Frame::new()
+        .fill(Color32::from_rgb(0xFD, 0xEE, 0xEC))
+        .corner_radius(6)
+        .inner_margin(Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.add(Label::new(RichText::new(text).size(12.0).color(Color32::from_rgb(0xA3, 0x2A, 0x22))).wrap());
+        });
+}
+
+fn columns(ui: &mut Ui, prefs: &mut Preferences) {
+    card(ui, "Song list columns", "Choose what the song list shows. Name is always shown.", |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+            for column in Column::ALL {
+                let mut on = prefs.visible_columns.contains(&column);
+                if widgets::chip(ui, column.title(), &mut on, column != Column::Name) {
+                    if on {
+                        // Keep the registry's order so columns appear in a familiar sequence.
+                        prefs.visible_columns.push(column);
+                        prefs.visible_columns.sort_by_key(|c| Column::ALL.iter().position(|x| x == c));
+                    } else {
+                        prefs.visible_columns.retain(|c| *c != column);
+                    }
                 }
             }
-            if i % 3 == 2 {
-                ui.end_row();
-            }
+        });
+        ui.add_space(10.0);
+        if ui.button("Restore Defaults").clicked() {
+            prefs.visible_columns = Column::DEFAULT_VISIBLE.to_vec();
         }
     });
 }
