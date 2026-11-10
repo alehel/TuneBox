@@ -49,4 +49,4 @@ pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, VirtualDrive};
 pub use tunebox_sync::{Device, SyncMode, SyncSettings, Volume};
-pub use tunebox_tags::{Artwork, read_artwork};
+pub use tunebox_tags::{Artwork, can_store, read_artwork};

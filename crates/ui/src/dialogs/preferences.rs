@@ -1,4 +1,4 @@
-//! Preferences: three panes (Library, Importing, Columns) chosen from an icon tab bar. Each
+//! Preferences: four panes (Library, Importing, Columns, Get Info) chosen from an icon tab bar. Each
 //! pane is a column of cards: a bold heading, one line saying what the card is for, then its
 //! settings, with on/off settings as switches that carry their explanation beneath them.
 
@@ -9,7 +9,7 @@ use crate::glyphs::{self, Glyph};
 use crate::panels::widgets;
 use crate::theme;
 use egui::{Align, Color32, Frame, Layout, Rect, Sense, Stroke, Ui, pos2, vec2};
-use tunebox_engine::model::Column;
+use tunebox_engine::model::{Column, FieldGroup};
 use tunebox_engine::{LibraryFolder, LosslessFormat, Preferences};
 
 const WIDTH: f32 = 640.0;
@@ -19,6 +19,7 @@ pub enum Tab {
     Library,
     Importing,
     Columns,
+    GetInfo,
 }
 
 #[derive(Clone, Debug)]
@@ -40,11 +41,12 @@ impl PreferencesDialog {
         let (tab, draft) = (&mut self.tab, &mut self.draft);
         let result = window(ctx, "Preferences", WIDTH, "OK", |ui| {
             layout::tab_bar(ui, tab, &TABS);
-            match tab {
+            layout::scrolling_body(ui, |ui| match tab {
                 Tab::Library => library(ui, draft, actions),
                 Tab::Importing => importing(ui, draft),
                 Tab::Columns => columns(ui, draft),
-            }
+                Tab::GetInfo => get_info_fields(ui, draft),
+            });
         });
         match result {
             Some(true) => {
@@ -59,10 +61,11 @@ impl PreferencesDialog {
 
 // ----- tabs -----
 
-const TABS: [(Tab, Glyph, &str); 3] = [
+const TABS: [(Tab, Glyph, &str); 4] = [
     (Tab::Library, Glyph::Folder, "Library"),
     (Tab::Importing, Glyph::Disc, "Importing"),
     (Tab::Columns, Glyph::ListView, "Columns"),
+    (Tab::GetInfo, Glyph::Info, "Get Info"),
 ];
 
 // ----- the panes -----
@@ -289,4 +292,37 @@ fn columns(ui: &mut Ui, prefs: &mut Preferences) {
             prefs.visible_columns = Column::DEFAULT_VISIBLE.to_vec();
         }
     });
+}
+
+fn get_info_fields(ui: &mut Ui, prefs: &mut Preferences) {
+    card(
+        ui,
+        "Always show in Get Info",
+        "Name, artist, album and the other everyday fields are always shown. Choose more to show beside them; the rest stay one click away under Show all fields.",
+        |ui| {
+            for group in FieldGroup::ALL {
+                group_heading(ui, group.title());
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+                    for field in group.fields() {
+                        let mut on = prefs.info_fields.contains(&field);
+                        if widgets::chip(ui, field.label(), &mut on, true) {
+                            prefs.pin_info_field(field, on);
+                        }
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            ui.add_space(6.0);
+            if ui.add_enabled(!prefs.info_fields.is_empty(), egui::Button::new("Show None")).clicked() {
+                prefs.info_fields.clear();
+            }
+        },
+    );
+}
+
+/// A small spaced-capitals heading over a group of chips.
+fn group_heading(ui: &mut Ui, title: &str) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+    theme::spaced_caps(ui.painter(), rect.left_bottom() - vec2(0.0, 5.0), title, theme::TEXT_MUTED);
 }

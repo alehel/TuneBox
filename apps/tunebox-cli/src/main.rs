@@ -12,6 +12,8 @@
     clippy::unreachable
 )]
 
+mod details;
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -71,6 +73,23 @@ enum Command {
         name: String,
         #[arg(long)]
         search: Option<String>,
+    },
+    /// Show every detail of the songs matching a search.
+    Info { search: String },
+    /// Change details of the songs matching a search, e.g.
+    /// `edit "nocturne" --set conductor="C. Baton" --set release-date=2011-04-02`.
+    /// An empty value clears the field. `info-fields` lists the additional field names.
+    Edit {
+        search: String,
+        #[arg(long = "set", value_name = "FIELD=VALUE", required = true)]
+        assignments: Vec<String>,
+    },
+    /// List the additional fields the app's Get Info always shows, or pin and unpin them.
+    InfoFields {
+        #[arg(long, value_name = "FIELD")]
+        pin: Vec<String>,
+        #[arg(long, value_name = "FIELD")]
+        unpin: Vec<String>,
     },
     /// Rate the tracks matching a search (0–5 stars).
     Rate { search: String, stars: u8 },
@@ -165,6 +184,9 @@ fn run(cli: Cli) -> Result<(), String> {
             session.set_rating(&ids, Rating::from_stars(stars));
             println!("Rated {} songs.", ids.len());
         }
+        Command::Info { search } => details::show(&session, &search)?,
+        Command::Edit { search, assignments } => details::edit(&mut session, &search, &assignments)?,
+        Command::InfoFields { pin, unpin } => details::info_fields(&mut session, &pin, &unpin)?,
         Command::Play { search, shuffle } => play(&mut session, search.as_deref(), shuffle),
         Command::CdInfo { virtual_disc, lookup } => {
             read_cd(&mut session, virtual_disc, lookup)?;

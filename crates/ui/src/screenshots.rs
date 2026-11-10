@@ -8,7 +8,7 @@ use egui::ColorImage;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
-use tunebox_engine::model::{PlaylistKind, TrackId};
+use tunebox_engine::model::{PlaylistKind, TagField, TrackId};
 use tunebox_engine::{Source, TrackQuery};
 
 /// Frames to let a scene settle (layout, artwork, the player) before capturing it.
@@ -19,7 +19,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 15] = [
+const SCENES: [Scene; 18] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
@@ -27,11 +27,14 @@ const SCENES: [Scene; 15] = [
     Scene { name: "tunebox-get-info", setup: get_info },
     Scene { name: "tunebox-get-info-details", setup: get_info_details },
     Scene { name: "tunebox-get-info-several", setup: get_info_several },
+    Scene { name: "tunebox-get-info-pinned", setup: get_info_pinned },
+    Scene { name: "tunebox-get-info-all-fields", setup: get_info_all_fields },
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
     Scene { name: "tunebox-preferences-importing", setup: preferences_importing },
     Scene { name: "tunebox-preferences-columns", setup: preferences_columns },
+    Scene { name: "tunebox-preferences-get-info", setup: preferences_get_info },
     Scene { name: "tunebox-visualizer-pulse", setup: visualizer_pulse },
     Scene { name: "tunebox-visualizer-aurora", setup: visualizer_aurora },
     Scene { name: "tunebox-visualizer-spectrum", setup: visualizer_spectrum },
@@ -233,4 +236,31 @@ fn get_info_several(app: &mut TuneBoxApp) {
         rows.into_iter().filter(|id| app.session.track(*id).is_some_and(|t| t.meta.album == "Paper Boats")).collect();
     app.view.selection.set(album.iter().copied());
     app.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&app.session, album))));
+}
+
+/// Get Info with label and release date pinned, scrolled down to "Show all fields". The pins
+/// stay for the scenes after it, so Preferences shows them too.
+fn get_info_pinned(app: &mut TuneBoxApp) {
+    let mut prefs = app.session.preferences().clone();
+    prefs.pin_info_field(TagField::Label, true);
+    prefs.pin_info_field(TagField::ReleaseDate, true);
+    app.session.set_preferences(prefs);
+    get_info_with_all_fields(app, false);
+}
+
+fn get_info_all_fields(app: &mut TuneBoxApp) {
+    get_info_with_all_fields(app, true);
+}
+
+fn get_info_with_all_fields(app: &mut TuneBoxApp, open: bool) {
+    get_info(app);
+    if let Some(Dialog::GetInfo(dialog)) = app.dialog.take() {
+        app.dialog = Some(Dialog::GetInfo(Box::new(dialog.on_details().with_all_fields(open))));
+    }
+}
+
+fn preferences_get_info(app: &mut TuneBoxApp) {
+    preferences(app);
+    let prefs = app.session.preferences().clone();
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::GetInfo))));
 }

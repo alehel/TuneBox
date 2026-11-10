@@ -118,7 +118,7 @@ pub enum Tone {
 pub fn banner(ui: &mut Ui, tone: Tone, glyph: Glyph, text: &str) {
     let (fill, ink) = match tone {
         Tone::Info => (Color32::from_rgb(0xE8, 0xF1, 0xFD), Color32::from_rgb(0x1E, 0x5B, 0xB8)),
-        Tone::Warning => (Color32::from_rgb(0xFD, 0xEE, 0xEC), Color32::from_rgb(0xA3, 0x2A, 0x22)),
+        Tone::Warning => (Color32::from_rgb(0xFD, 0xEE, 0xEC), theme::WARNING),
     };
     Frame::new().fill(fill).corner_radius(8).inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());

@@ -73,9 +73,15 @@ impl Session {
     /// Edits a track's details, writing them into its file as well, unless the file is in the
     /// protected music folder: then only the library changes. If the file cannot be written
     /// (read-only, missing) the library still takes the edit and a warning says why.
-    pub fn edit_track(&mut self, id: TrackId, meta: TrackMeta) -> Result<(), EngineError> {
-        let location =
-            self.library.track(id).map(|t| t.location.clone()).ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
+    pub fn edit_track(&mut self, id: TrackId, mut meta: TrackMeta) -> Result<(), EngineError> {
+        let (location, format) = self
+            .library
+            .track(id)
+            .map(|t| (t.location.clone(), t.file.format))
+            .ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
+        // A value the file has no place for, or that does not suit its field, would show in
+        // TuneBox but never reach the file; the frontends do not offer them, and this keeps it so.
+        meta.extra.retain(|field, value| tunebox_tags::can_store(format, *field) && field.accepts(value));
         if crate::files::may_write(&self.prefs, &location) {
             if let Err(e) = tunebox_tags::write(&location, &meta) {
                 self.notices

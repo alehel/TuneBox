@@ -19,7 +19,7 @@ browsing, rating and making playlists never touch a music file.
 | Action | What happens on disk |
 |---|---|
 | Add to Library | **Nothing.** Songs are played from where they are. If you turn on *Copy files to the TuneBox Media folder*, copies are made in the media folder; the originals are not touched |
-| Get Info ▸ edit details | The details are written into the song's tags. The edit is made on a hidden copy next to the file (`.tunebox-edit-…`) that replaces the original only when complete, so a crash or full disk cannot damage the song |
+| Get Info ▸ edit details | The details are written into the song's tags. Only fields you changed are written: the additional fields (credits, label, sort names, lyrics…) you did not touch stay exactly as they are, and a field the format has no place for is not offered. The edit is made on a hidden copy next to the file (`.tunebox-edit-…`) that replaces the original only when complete, so a crash or full disk cannot damage the song |
 | Delete from Library | Removes the song from the library. The file is deleted only if you tick *Also delete the files from disk* |
 | Import CD | New files in the media folder. A track appears only when it is complete (written as `*.part`, then renamed); a cancelled or failed track leaves nothing |
 | Sync a player | Writes only to the player: music under `Music/`, playlists under `Playlists/`, and `.tunebox/device.json`, which records what TuneBox put there. Sync deletes only files it put there itself |
@@ -29,7 +29,7 @@ cancelled.
 
 ## Library folders, read-only or writable
 
-**Preferences ▸ General ▸ Library folders** lists the folders your music lives in. You can list
+**Preferences ▸ Library ▸ Library folders** lists the folders your music lives in. You can list
 as many as you like, and each is **read only** (the default for a new folder) or **writable**:
 
 - In a **read-only** folder TuneBox never creates, changes, moves or deletes anything. Edits

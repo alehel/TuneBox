@@ -18,7 +18,9 @@
 - **Library.** Add folders of MP3, AAC, ALAC, FLAC, WAV, AIFF and Ogg Vorbis. Songs are played
   from where they are. Optionally, copies are filed by artist and album in a media folder.
   Sort by any of 20 columns, browse by genre, artist and album, search as you type, rate with
-  stars, uncheck songs to skip them, and edit details for one song or many at once.
+  stars, uncheck songs to skip them, and edit details for one song or many at once: the
+  everyday fields up front, and 31 more (credits, classical, release, sort names, lyrics…)
+  under *Show all fields*, with the ones you use pinned in Preferences.
 - **Playlists and smart playlists.** Drag songs onto playlists. Smart playlists match rules on
   text, numbers and dates, can be limited by count, time or size, and stay up to date as you
   listen.
@@ -85,6 +87,8 @@ The command line reaches every library feature without the window:
 tunebox-cli import ~/Music/Albums
 tunebox-cli list --search "harbour"
 tunebox-cli new-playlist "Evening" --search jazz
+tunebox-cli edit "Paper Boats" --set label="Lanternlight Records" --set release-date=1997-01-01
+tunebox-cli info-fields --pin label --pin release-date          # always shown in Get Info
 tunebox-cli cd-import --lookup
 tunebox-cli sync /media/me/PLAYER --playlist Evening
 tunebox-cli folders add ~/Music/Collection                    # read only: never written to
@@ -113,7 +117,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 133
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 146
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

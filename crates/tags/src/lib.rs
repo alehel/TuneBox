@@ -14,6 +14,10 @@
     clippy::unreachable
 )]
 
+mod fields;
+
+pub use fields::can_store;
+
 use lofty::config::WriteOptions;
 use lofty::file::FileType;
 use lofty::picture::{MimeType, Picture, PictureType};
@@ -101,11 +105,13 @@ fn meta_from_tag(tag: &Tag) -> TrackMeta {
         disc: NumberOf { number: tag.disk(), total: tag.disk_total() },
         bpm: number(ItemKey::IntegerBpm).or_else(|| number(ItemKey::Bpm)),
         compilation: matches!(text(ItemKey::FlagCompilation).as_str(), "1" | "true" | "True"),
+        extra: fields::read(tag),
     }
 }
 
 /// Writes `meta` into the file's main tag, creating the tag if the file has none. Fields left
-/// empty in `meta` are removed from the file. Tag items TuneBox does not know are kept.
+/// empty in `meta` are removed from the file; additional fields absent from `meta.extra` are
+/// left as they are. Tag items TuneBox does not know are kept.
 ///
 /// The edit is made on a copy next to the file, which then replaces it: if anything fails, or
 /// the computer stops half-way, the original file is untouched.
@@ -158,6 +164,7 @@ fn apply_meta(tag: &mut Tag, meta: &TrackMeta) {
     set_number(tag, ItemKey::DiscTotal, meta.disc.total);
     set_bpm(tag, meta.bpm);
     set_text(tag, ItemKey::FlagCompilation, if meta.compilation { "1" } else { "" });
+    fields::apply(tag, &meta.extra);
 }
 
 fn set_text(tag: &mut Tag, key: ItemKey, value: &str) {
@@ -227,6 +234,7 @@ fn sniff_mime(data: &[u8]) -> &'static str {
 mod tests {
     use super::*;
     use craft_audio::{AudioBuffer, EncodeFormat, EncodeOptions};
+    use tunebox_model::{FieldKind, TagField};
 
     /// One second of silence as a FLAC file.
     fn flac_file(dir: &Path) -> std::path::PathBuf {
@@ -261,6 +269,74 @@ mod tests {
         assert_eq!(back.file.format, AudioFormat::Flac);
         assert_eq!(back.file.sample_rate, Some(44_100));
         assert_eq!(back.file.duration.as_secs(), 1);
+    }
+
+    /// One second of silence in `format`, written by craft-audio.
+    fn audio_file(dir: &Path, format: EncodeFormat, extension: &str) -> std::path::PathBuf {
+        let buffer = AudioBuffer::new(44_100, 2, 44_100);
+        let path = dir.join(format!("silence.{extension}"));
+        std::fs::write(&path, craft_audio::encode(&buffer, &EncodeOptions::new(format)).unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn every_field_a_format_can_store_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = [
+            (AudioFormat::Flac, audio_file(dir.path(), EncodeFormat::Flac, "flac")),
+            (AudioFormat::Wav, audio_file(dir.path(), EncodeFormat::Wav, "wav")),
+            (AudioFormat::Aiff, audio_file(dir.path(), EncodeFormat::Aiff, "aiff")),
+        ];
+        for (format, path) in files {
+            let mut meta = TrackMeta { title: "Nocturne".into(), ..TrackMeta::default() };
+            for field in TagField::ALL.into_iter().filter(|f| can_store(format, *f)) {
+                let value = match field.kind() {
+                    FieldKind::Lines => "Line one\nLine two".to_owned(),
+                    FieldKind::Number => "3".to_owned(),
+                    FieldKind::Date => "2011-04-02".to_owned(),
+                    FieldKind::Text => format!("{} value", field.label()),
+                };
+                meta.extra.insert(field, value);
+            }
+            assert!(meta.extra.len() > 20, "{format:?} stores only {} fields", meta.extra.len());
+            write(&path, &meta).unwrap();
+            assert_eq!(read(&path).unwrap().meta, meta, "{format:?}");
+        }
+    }
+
+    #[test]
+    fn additional_fields_not_in_the_edit_are_kept_and_empty_ones_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = flac_file(dir.path());
+        let mut first = TrackMeta { title: "A".into(), ..TrackMeta::default() };
+        first.extra.insert(TagField::Conductor, "C. Baton".into());
+        first.extra.insert(TagField::Label, "Harbour Records".into());
+        write(&path, &first).unwrap();
+
+        // An edit that knows nothing of the extra fields, as for a song added before TuneBox
+        // read them, must not lose them.
+        write(&path, &TrackMeta { title: "B".into(), ..TrackMeta::default() }).unwrap();
+        let mut clear_label = TrackMeta { title: "B".into(), ..TrackMeta::default() };
+        clear_label.extra.insert(TagField::Label, String::new());
+        write(&path, &clear_label).unwrap();
+
+        let back = read(&path).unwrap().meta;
+        assert_eq!(back.extra(TagField::Conductor), "C. Baton");
+        assert_eq!(back.extra(TagField::Label), "");
+        assert_eq!(back.title, "B");
+    }
+
+    #[test]
+    fn a_value_unfit_for_its_field_is_never_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = audio_file(dir.path(), EncodeFormat::Wav, "wav");
+        let mut meta = TrackMeta { title: "A".into(), ..TrackMeta::default() };
+        meta.extra.insert(TagField::ReleaseDate, "2011-04-02".into());
+        write(&path, &meta).unwrap();
+        meta.extra.insert(TagField::ReleaseDate, "Release date value".into());
+        write(&path, &meta).unwrap();
+        // Before the check, this left an ID3v2 date frame lofty could no longer parse.
+        assert_eq!(read(&path).unwrap().meta.extra(TagField::ReleaseDate), "2011-04-02");
     }
 
     #[test]

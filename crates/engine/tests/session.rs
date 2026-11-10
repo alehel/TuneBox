@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
-use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TrackMeta};
+use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
     NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
@@ -260,4 +260,36 @@ fn a_writable_imports_folder_inside_a_read_only_collection() {
     write_song(&collection.join("New/late.flac"), "Late Arrival", "Quiet Harbour", "Lanterns", 3);
     f.session.scan_library_folders().unwrap();
     tick_until(&mut f.session, |s| s.library().len() == 4);
+}
+
+#[test]
+fn additional_fields_are_imported_edited_and_kept() {
+    let mut f = fixture(1.0);
+    let downloads = f.dir.path().join("Downloads");
+    let path = downloads.join("nocturne.flac");
+    write_song(&path, "Nocturne", "Quiet Harbour", "Lanterns", 1);
+    let mut tagged = tunebox_tags::read(&path).unwrap().meta;
+    tagged.extra.insert(TagField::Conductor, "C. Baton".into());
+    tagged.extra.insert(TagField::Label, "Harbour Records".into());
+    tunebox_tags::write(&path, &tagged).unwrap();
+    f.session.import(vec![downloads]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 1);
+
+    let id = f.session.query(&TrackQuery::new(Source::Music))[0];
+    let mut meta = f.session.track(id).unwrap().meta.clone();
+    assert_eq!(meta.extra(TagField::Conductor), "C. Baton", "read on import");
+    meta.set("label", "").unwrap();
+    meta.set("work", "Night Pieces").unwrap();
+    // FLAC has no place for a composer sort name, and a date must be a date: neither is kept.
+    meta.extra.insert(TagField::SortComposer, "Baton, C.".into());
+    meta.extra.insert(TagField::ReleaseDate, "spring".into());
+    f.session.edit_track(id, meta).unwrap();
+
+    for back in [tunebox_tags::read(&path).unwrap().meta, f.session.track(id).unwrap().meta.clone()] {
+        assert_eq!(back.extra(TagField::Conductor), "C. Baton");
+        assert_eq!(back.extra(TagField::Label), "");
+        assert_eq!(back.extra(TagField::Work), "Night Pieces");
+        assert_eq!(back.extra(TagField::SortComposer), "");
+        assert_eq!(back.extra(TagField::ReleaseDate), "");
+    }
 }

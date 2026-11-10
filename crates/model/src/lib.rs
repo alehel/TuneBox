@@ -16,6 +16,7 @@
 
 mod column;
 mod display;
+mod fields;
 mod format;
 mod id;
 mod meta;
@@ -28,9 +29,10 @@ mod track;
 
 pub use column::{Column, SortOrder, compare_tracks};
 pub use display::{format_bytes, format_clock, format_total_time};
+pub use fields::{FieldGroup, FieldKind, TagField};
 pub use format::AudioFormat;
 pub use id::{PlaylistId, TrackId};
-pub use meta::{NumberOf, TrackMeta};
+pub use meta::{FieldError, NumberOf, TrackMeta};
 pub use playlist::{Playlist, PlaylistKind};
 pub use rating::Rating;
 pub use smart::SmartRules;

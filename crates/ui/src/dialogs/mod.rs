@@ -1,5 +1,6 @@
 //! Dialogs. One is open at a time; each edits a draft and turns it into actions on OK.
 
+mod extra_fields;
 mod get_info;
 mod layout;
 mod preferences;

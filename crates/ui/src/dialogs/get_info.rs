@@ -1,17 +1,22 @@
 //! Get Info: a song's details, and editing them for one song or many at once. Two panes in the
 //! style of Preferences: Summary (artwork, rating, play history, the file) and Details (the tags,
-//! in cards).
+//! in cards). The everyday fields are always on Details; the additional ones are in
+//! `extra_fields`.
 
 use crate::actions::Action;
 use crate::artwork::{self, ArtworkCache};
+use crate::dialogs::extra_fields::{self, Disclosure, ExtraDraft};
 use crate::dialogs::layout::{self, Tone, banner, card, fact_row, muted, switch_row, text_field, value_row};
 use crate::dialogs::window;
 use crate::glyphs::Glyph;
 use crate::panels::widgets;
 use crate::theme;
 use egui::{Color32, RichText, Sense, Ui, vec2};
+use std::collections::BTreeMap;
 use tunebox_engine::Session;
-use tunebox_engine::model::{Column, Rating, Track, TrackId, TrackMeta, format_bytes, format_clock, format_total_time};
+use tunebox_engine::model::{
+    Column, Rating, TagField, Track, TrackId, TrackMeta, format_bytes, format_clock, format_total_time,
+};
 
 const WIDTH: f32 = 600.0;
 
@@ -43,6 +48,7 @@ struct Draft {
     disc_total: String,
     bpm: String,
     compilation: bool,
+    extra: ExtraDraft,
 }
 
 impl Draft {
@@ -64,6 +70,7 @@ impl Draft {
             disc_total: number(meta.disc.total),
             bpm: number(meta.bpm),
             compilation: meta.compilation,
+            extra: ExtraDraft::of(meta),
         }
     }
 
@@ -89,6 +96,7 @@ impl Draft {
             disc_total: same(|d| &d.disc_total),
             bpm: same(|d| &d.bpm),
             compilation: drafts.iter().all(|d| d.compilation),
+            extra: ExtraDraft::common(drafts.iter().map(|d| &d.extra)),
         }
     }
 
@@ -122,6 +130,7 @@ impl Draft {
         if self.compilation != original.compilation {
             out.compilation = self.compilation;
         }
+        self.extra.apply(&original.extra, &mut out);
         out
     }
 }
@@ -132,6 +141,8 @@ pub struct GetInfoDialog {
     tab: Tab,
     original: Draft,
     draft: Draft,
+    /// "Show all fields".
+    all_fields: Disclosure,
 }
 
 impl GetInfoDialog {
@@ -140,12 +151,18 @@ impl GetInfoDialog {
             tracks.iter().filter_map(|id| session.track(*id)).map(|t| Draft::of(&t.meta)).collect();
         let original = Draft::common(&drafts);
         let tab = if tracks.len() == 1 { Tab::Summary } else { Tab::Details };
-        Self { tracks, tab, draft: original.clone(), original }
+        Self { tracks, tab, draft: original.clone(), original, all_fields: Disclosure::default() }
     }
 
     /// The same dialog, opened on the Details pane.
     pub fn on_details(mut self) -> Self {
         self.tab = Tab::Details;
+        self
+    }
+
+    /// The same dialog with "Show all fields" open, or closed and scrolled into view.
+    pub fn with_all_fields(mut self, open: bool) -> Self {
+        self.all_fields = if open { Disclosure::revealed() } else { Disclosure::in_view() };
         self
     }
 
@@ -161,12 +178,18 @@ impl GetInfoDialog {
         let title = if tracks.len() == 1 { first.title().to_owned() } else { format!("{} Songs", tracks.len()) };
         let protected =
             tracks.iter().filter(|t| !tunebox_engine::files::may_write(session.preferences(), &t.location)).count();
-        let (tab, draft) = (&mut self.tab, &mut self.draft);
+        let blocked = blocked_fields(&tracks);
+        let extra = extra_fields::Context {
+            pinned: &session.preferences().info_fields,
+            blocked: &blocked,
+            several: tracks.len() > 1,
+        };
+        let (tab, draft, all_fields) = (&mut self.tab, &mut self.draft, &mut self.all_fields);
         let result = window(ctx, &title, WIDTH, "OK", |ui| {
             layout::tab_bar(ui, tab, &TABS);
             layout::scrolling_body(ui, |ui| match tab {
                 Tab::Summary => summary(ui, &tracks, artwork, actions),
-                Tab::Details => details(ui, draft, tracks.len(), protected),
+                Tab::Details => details(ui, draft, tracks.len(), protected, &extra, all_fields),
             });
         });
         match result {
@@ -185,6 +208,18 @@ impl GetInfoDialog {
             None => true,
         }
     }
+}
+
+/// The additional fields some of `tracks` have no place for, each with the reason.
+fn blocked_fields(tracks: &[&Track]) -> BTreeMap<TagField, String> {
+    TagField::ALL
+        .into_iter()
+        .filter_map(|field| {
+            let format = tracks.iter().map(|t| t.file.format).find(|f| !tunebox_engine::can_store(*f, field))?;
+            let files = format.kind_label().trim_end_matches(" file");
+            Some((field, format!("{files} files have no place for {}.", field.label().to_lowercase())))
+        })
+        .collect()
 }
 
 // ----- Summary -----
@@ -314,7 +349,14 @@ fn channels(count: Option<u8>) -> String {
 
 // ----- Details -----
 
-fn details(ui: &mut Ui, draft: &mut Draft, count: usize, protected: usize) {
+fn details(
+    ui: &mut Ui,
+    draft: &mut Draft,
+    count: usize,
+    protected: usize,
+    extra: &extra_fields::Context<'_>,
+    all_fields: &mut Disclosure,
+) {
     if count > 1 {
         let text = format!(
             "Editing {count} songs. Fields where they differ are empty and stay as they are unless you type in them."
@@ -370,9 +412,11 @@ fn details(ui: &mut Ui, draft: &mut Draft, count: usize, protected: usize) {
             &mut draft.compilation,
         );
     });
+    extra_fields::pinned(ui, &mut draft.extra, extra);
     card(ui, "Comments", "", |ui| {
         ui.add(egui::TextEdit::multiline(&mut draft.comments).desired_rows(3).desired_width(f32::INFINITY));
     });
+    extra_fields::the_rest(ui, &mut draft.extra, extra, all_fields);
 }
 
 /// The hint in an empty field when editing several songs: left empty, it is not changed.

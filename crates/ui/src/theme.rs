@@ -11,6 +11,8 @@ use egui::{
 pub const WINDOW_BG: Color32 = Color32::from_rgb(0xEE, 0xEF, 0xF1);
 pub const TEXT: Color32 = Color32::from_rgb(0x1D, 0x1F, 0x22);
 pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x78, 0x7C, 0x82);
+/// Text that warns: a value that will not be saved, a folder that cannot be used.
+pub const WARNING: Color32 = Color32::from_rgb(0xA3, 0x2A, 0x22);
 pub const BORDER: Color32 = Color32::from_rgb(0xC3, 0xC6, 0xCB);
 pub const BORDER_DARK: Color32 = Color32::from_rgb(0x9A, 0x9D, 0xA3);
 

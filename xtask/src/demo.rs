@@ -10,7 +10,7 @@ use std::time::UNIX_EPOCH;
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_library::{Library, NewTrack};
 use tunebox_model::smart::{Limit, LimitUnit, NumberField, NumberOp, Rule, SelectedBy, TextField, TextOp};
-use tunebox_model::{NumberOf, Rating, SmartRules, TrackId, TrackMeta, organize};
+use tunebox_model::{NumberOf, Rating, SmartRules, TagField, TrackId, TrackMeta, organize};
 use tunebox_sync::{Device, PlaylistFile, SyncItem, SyncMode};
 
 struct Album {
@@ -186,6 +186,7 @@ pub fn build(dir: &Path) -> Result<(), String> {
                 year: Some(album.year),
                 track: NumberOf::new(track_index as u32 + 1, album.tracks.len() as u32),
                 disc: NumberOf::new(1, 1),
+                extra: release_details(album_index, album),
                 ..TrackMeta::default()
             };
             let path = media.join(organize::relative_path(&meta, title, "flac"));
@@ -204,6 +205,26 @@ pub fn build(dir: &Path) -> Result<(), String> {
     sync_player(&library, &dir.join("player"))?;
     eprintln!("demo: {} tracks in {}", library.len(), dir.display());
     Ok(())
+}
+
+/// Invented record labels, one per album in turn.
+const LABELS: [&str; 4] = ["Lanternlight Records", "Quiet Pier Music", "Tidewater Sound", "Small Hours Recordings"];
+
+/// Label, catalogue number, release date and media for an album, so Get Info has additional
+/// fields to show.
+fn release_details(index: usize, album: &Album) -> std::collections::BTreeMap<TagField, String> {
+    let label = LABELS.get(index % LABELS.len()).copied().unwrap_or_default();
+    let initials: String = label.split_whitespace().filter_map(|w| w.chars().next()).collect();
+    let month = index % 12 + 1;
+    let day = (index * 7) % 27 + 1;
+    [
+        (TagField::Label, label.to_owned()),
+        (TagField::CatalogNumber, format!("{initials}-{:03}", 101 + index)),
+        (TagField::ReleaseDate, format!("{}-{month:02}-{day:02}", album.year)),
+        (TagField::MediaType, "CD".to_owned()),
+    ]
+    .into_iter()
+    .collect()
 }
 
 /// A quiet three-note figure over a soft kick drum, different for every track. Mono content in a

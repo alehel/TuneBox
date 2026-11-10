@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tunebox_audio::LosslessFormat;
-use tunebox_model::Column;
+use tunebox_model::{Column, TagField};
 use tunebox_playback::RepeatMode;
 
 /// A folder of music the listener keeps, and whether TuneBox may write in it.
@@ -40,6 +40,9 @@ pub struct Preferences {
     pub visualizer_style: String,
     /// Show the playing track's details over the visualizer.
     pub visualizer_track_info: bool,
+    /// Additional tag fields Get Info always shows, beside the everyday ones. The rest are a
+    /// click away under "Show all fields".
+    pub info_fields: Vec<TagField>,
 }
 
 impl Preferences {
@@ -52,6 +55,17 @@ impl Preferences {
         match self.library_folders.iter_mut().find(|f| f.path == path) {
             Some(folder) => folder.read_only = read_only,
             None => self.library_folders.push(LibraryFolder { path, read_only }),
+        }
+    }
+
+    /// Pins `field` to Get Info, or unpins it. Pinned fields keep the order of `TagField::ALL`,
+    /// so they appear in the same sequence however they were chosen.
+    pub fn pin_info_field(&mut self, field: TagField, pinned: bool) {
+        self.info_fields.retain(|f| *f != field);
+        if pinned {
+            self.info_fields.push(field);
+            // TagField orders as `ALL` lists the fields (a model test holds it to that).
+            self.info_fields.sort();
         }
     }
 
@@ -103,6 +117,7 @@ impl Default for Preferences {
             show_browser: true,
             visualizer_style: String::new(),
             visualizer_track_info: true,
+            info_fields: Vec::new(),
         }
     }
 }
@@ -118,9 +133,21 @@ mod tests {
         let media = dir.path().join("media");
         let mut prefs = Preferences::with_media_folder(media.clone());
         prefs.rip_format = LosslessFormat::Wav;
+        prefs.pin_info_field(TagField::Work, true);
         prefs.save(&path).unwrap();
         assert_eq!(Preferences::load(&path, &media), prefs);
         std::fs::write(&path, b"{{{").unwrap();
         assert_eq!(Preferences::load(&path, &media), Preferences::with_media_folder(media));
+    }
+
+    #[test]
+    fn pinned_fields_keep_the_display_order_and_appear_once() {
+        let mut prefs = Preferences::default();
+        prefs.pin_info_field(TagField::Mood, true);
+        prefs.pin_info_field(TagField::Conductor, true);
+        prefs.pin_info_field(TagField::Mood, true);
+        assert_eq!(prefs.info_fields, [TagField::Conductor, TagField::Mood]);
+        prefs.pin_info_field(TagField::Conductor, false);
+        assert_eq!(prefs.info_fields, [TagField::Mood]);
     }
 }
