@@ -8,6 +8,8 @@ pub enum EngineError {
     Library(#[from] LibraryError),
     #[error(transparent)]
     Store(#[from] StoreError),
+    #[error(transparent)]
+    Lock(#[from] tunebox_library::LockError),
     #[error("could not save preferences: {0}")]
     Preferences(String),
     #[error("{0}")]

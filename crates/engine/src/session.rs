@@ -13,8 +13,8 @@ use crate::prefs::Preferences;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tunebox_import::ImportReport;
-use tunebox_library::Library;
 use tunebox_library::store::{self, StoreError};
+use tunebox_library::{Library, LibraryLock};
 use tunebox_playback::Player;
 #[cfg(feature = "musicbrainz")]
 use tunebox_rip::DiscInfo;
@@ -76,6 +76,8 @@ pub struct Session {
     pub(crate) protected_edit_noted: bool,
     /// Paths the folder watcher reported, waiting for the running import or refresh to end.
     pub(crate) folder_changes: std::collections::BTreeSet<PathBuf>,
+    /// This process's hold on the library, for as long as the session lives.
+    _lock: LibraryLock,
 }
 
 impl Session {
@@ -83,7 +85,11 @@ impl Session {
     ///
     /// A damaged library file is moved aside (never overwritten) and a new library started, with
     /// a notice saying where the old file went.
+    ///
+    /// Fails if another TuneBox (the app or `tunebox-cli`) has the same library open: each
+    /// would otherwise save over the other's changes.
     pub fn open(paths: SessionPaths, player: Player) -> Result<Session, EngineError> {
+        let lock = LibraryLock::acquire(&paths.library_file)?;
         let prefs = Preferences::load(&paths.preferences_file, &paths.default_media_folder);
         let mut notices = Vec::new();
         let library = match store::load(&paths.library_file) {
@@ -113,6 +119,7 @@ impl Session {
             revision: 0,
             protected_edit_noted: false,
             folder_changes: std::collections::BTreeSet::new(),
+            _lock: lock,
         })
     }
 

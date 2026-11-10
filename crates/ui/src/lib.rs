@@ -63,7 +63,7 @@ pub fn run_with(
     options: LaunchOptions,
     extra_looks: Vec<Box<dyn tunebox_visualizer::Visualizer>>,
 ) -> Result<(), String> {
-    let session = app::open_session(&options)?;
+    let session = app::open_session(&options).inspect_err(|message| show_startup_error(message))?;
     let renderer = if options.opengl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let native = eframe::NativeOptions {
         renderer,
@@ -80,4 +80,18 @@ pub fn run_with(
         Box::new(move |cc| Ok(Box::new(app::TuneBoxApp::new(cc, session, options, extra_looks)))),
     )
     .map_err(|e| e.to_string())
+}
+
+/// Says why TuneBox could not start (another TuneBox has the library open, say) in a dialog:
+/// launched from a desktop there is no terminal to read the error in.
+fn show_startup_error(message: &str) {
+    let mut letters = message.chars();
+    let sentence: String =
+        letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or_default();
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("TuneBox could not open")
+        .set_description(sentence)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
 }

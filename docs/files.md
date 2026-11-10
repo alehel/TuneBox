@@ -9,6 +9,7 @@ change a song, and never to a folder you mark read-only.
 |---|---|---|
 | Library (songs, playlists, ratings, play counts) | Application data folder: `~/.local/share/TuneBox/` (Linux), `~/Library/Application Support/TuneBox/` (macOS), `%APPDATA%\TuneBox\` (Windows) | Not in your music folder |
 | Preferences | The same folder | |
+| `TuneBox Library.lock` | Beside the library | Keeps a second TuneBox (the app or `tunebox-cli`) from opening the same library and saving over its changes. The operating system releases it when TuneBox quits or crashes, so it never needs deleting |
 | Media folder | `~/Music/TuneBox Media` by default, changeable | **Created only when needed**: for CD imports, or if you turn on copying when adding music |
 
 Ratings, play counts, skip counts and checkboxes live only in the library file. Playing,

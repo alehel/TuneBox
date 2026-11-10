@@ -15,14 +15,18 @@ struct Fixture {
     session: Session,
 }
 
-fn fixture(speed: f64) -> Fixture {
-    let dir = tempfile::tempdir().unwrap();
-    let paths = SessionPaths {
+/// The library, preferences and media folder inside `dir`.
+fn paths_in(dir: &tempfile::TempDir) -> SessionPaths {
+    SessionPaths {
         library_file: dir.path().join("TuneBox/Library.json"),
         preferences_file: dir.path().join("TuneBox/Preferences.json"),
         default_media_folder: dir.path().join("TuneBox/Media"),
-    };
-    let session = Session::open(paths, Player::with_output(NullOutput { speed })).unwrap();
+    }
+}
+
+fn fixture(speed: f64) -> Fixture {
+    let dir = tempfile::tempdir().unwrap();
+    let session = Session::open(paths_in(&dir), Player::with_output(NullOutput { speed })).unwrap();
     Fixture { dir, session }
 }
 
@@ -96,19 +100,16 @@ fn import_query_and_playlists() {
     assert_eq!(f.session.query(&TrackQuery::new(Source::Playlist(top))), [all[0]]);
 
     // Saved and reopened, everything is still there.
-    f.session.shutdown().unwrap();
-    let reopened = fixture_at(&f.dir);
+    let Fixture { dir, mut session } = f;
+    session.shutdown().unwrap();
+    drop(session);
+    let reopened = fixture_at(&dir);
     assert_eq!(reopened.library().len(), 2);
     assert!(reopened.library().playlist(playlist).is_some());
 }
 
 fn fixture_at(dir: &tempfile::TempDir) -> Session {
-    let paths = SessionPaths {
-        library_file: dir.path().join("TuneBox/Library.json"),
-        preferences_file: dir.path().join("TuneBox/Preferences.json"),
-        default_media_folder: dir.path().join("TuneBox/Media"),
-    };
-    Session::open(paths, Player::with_output(NullOutput::default())).unwrap()
+    Session::open(paths_in(dir), Player::with_output(NullOutput::default())).unwrap()
 }
 
 #[test]
@@ -307,10 +308,12 @@ fn a_scan_reads_the_additional_fields_of_songs_added_before_they_were_read() {
     tunebox_tags::write(&path, &tagged).unwrap();
     f.session.import(vec![music.clone()]).unwrap();
     tick_until(&mut f.session, |s| s.library().len() == 1);
-    f.session.shutdown().unwrap();
+    let Fixture { dir, mut session } = f;
+    session.shutdown().unwrap();
+    drop(session);
 
     // Make the library file look as an older TuneBox left it: no additional fields, no marker.
-    let library_file = f.dir.path().join("TuneBox/Library.json");
+    let library_file = dir.path().join("TuneBox/Library.json");
     let mut json: serde_json::Value = serde_json::from_slice(&std::fs::read(&library_file).unwrap()).unwrap();
     for track in json["tracks"].as_array_mut().unwrap() {
         let track = track.as_object_mut().unwrap();
@@ -319,7 +322,7 @@ fn a_scan_reads_the_additional_fields_of_songs_added_before_they_were_read() {
     }
     std::fs::write(&library_file, serde_json::to_vec(&json).unwrap()).unwrap();
 
-    let mut session = fixture_at(&f.dir);
+    let mut session = fixture_at(&dir);
     let id = session.query(&TrackQuery::new(Source::Music))[0];
     assert_eq!(session.track(id).unwrap().meta.extra(TagField::Conductor), "", "not read yet");
     // An edit made before the scan, here kept in TuneBox only, must survive it.
@@ -464,4 +467,16 @@ fn watched_folder_changes_add_read_and_relink_songs_without_losing_any() {
     assert_eq!(settle(&mut f.session, vec![renamed.join("first.flac")]), "");
     assert_eq!(f.session.library().len(), 1);
     assert_eq!(f.session.track(id).unwrap().stats.rating, Rating::from_stars(5));
+}
+
+#[test]
+fn a_library_open_in_one_tunebox_cannot_be_opened_in_another() {
+    let f = fixture(1.0);
+    let Err(error) = Session::open(paths_in(&f.dir), Player::with_output(NullOutput::default())) else {
+        panic!("a second session opened the same library");
+    };
+    assert!(error.to_string().contains("already open in another TuneBox"), "{error}");
+    let Fixture { dir, session } = f;
+    drop(session);
+    assert!(Session::open(paths_in(&dir), Player::with_output(NullOutput::default())).is_ok());
 }

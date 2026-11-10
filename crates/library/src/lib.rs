@@ -17,6 +17,7 @@
 mod browse;
 mod error;
 mod library;
+mod lock;
 mod moves;
 pub mod store;
 mod summary;
@@ -24,5 +25,6 @@ mod summary;
 pub use browse::{BrowseFilter, Browser};
 pub use error::LibraryError;
 pub use library::{Library, NewTrack};
+pub use lock::{LibraryLock, LockError};
 pub use moves::MovedSongs;
 pub use summary::Summary;
