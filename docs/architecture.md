@@ -18,7 +18,7 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
                                   │
    L2   import ◀── rip      playback       sync
           │         │          │             │
-   L1   library    tags      audio ──▶ craft-audio     mtp ──▶ nusb (USB)
+   L1   library    tags      audio ──▶ craft-audio     mtp ──▶ nusb (USB)     metabrainz ──▶ ureq
           │         │          │
    L0     └──── tunebox-model ─┘
 ```
@@ -31,7 +31,8 @@ One Cargo workspace: twelve library crates in `crates/`, two binaries in `apps/`
 | `tunebox-audio` | Streaming decode by path, seekable; lossless block-by-block encoding through `*.part` files |
 | `tunebox-import` | Finds audio files, reads tags, copies into `Artist/Album/NN Title.ext` |
 | `tunebox-playback` | The play queue (shuffle, repeat), and a player thread feeding a lock-free ring to a cpal callback |
-| `tunebox-rip` | CD drives (cd-da-reader, or a virtual drive), tables of contents, MusicBrainz disc ids and lookup, ripping |
+| `tunebox-metabrainz` | Every web request: the `WebClient` boundary (a fake in tests and the demo), the real client (ureq: user agent, one MusicBrainz request a second, timeouts, size limits), a per-session cache, MusicBrainz release search and Cover Art Archive covers |
+| `tunebox-rip` | CD drives (cd-da-reader, or a virtual drive), tables of contents, MusicBrainz disc ids and lookup (through `tunebox-metabrainz`), ripping |
 | `tunebox-mtp` | The MTP protocol from the public specification: containers, datasets, a blocking session over a `Transport`; USB through nusb (Linux, macOS); a simulated device for tests ([mtp.md](mtp.md)) |
 | `tunebox-sync` | Recognises players (mounted, or over MTP), plans a sync as a diff against the device manifest, executes it through a `Storage` (folder or MTP), writes M3U8 |
 | `tunebox-engine` | The `Session` façade, background jobs, preferences, notices, the command registry |

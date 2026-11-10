@@ -32,8 +32,12 @@
 - **Visualizer.** Five looks (Spectrum, Aurora, Pulse, Oscilloscope, Hyperspace), driven by what
   the sound card is playing, with an optional track-info card. Writing a new look is one file
   ([docs/visualizers.md](docs/visualizers.md)).
-- **CDs.** See the disc, fetch its track names from MusicBrainz (only when you ask), edit them
-  and import to FLAC, WAV or AIFF.
+- **CDs.** See the disc, fetch its track names from MusicBrainz and its cover from the Cover
+  Art Archive (only when you ask, or when you turn that on), edit them and import to FLAC, WAV
+  or AIFF with the cover in every song.
+- **Album artwork.** Choose a picture, drop one on Get Info, or *Find Album Artwork…*: TuneBox
+  searches MusicBrainz for the album's editions, shows each with its cover, date, country,
+  format and track count, and uses the one you pick.
 - **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…), and on Linux
   and macOS players that connect over MTP (Android-based players and phones, recent Walkmans;
   so far tested only against a simulated device): pick the whole library or chosen playlists,
@@ -65,6 +69,14 @@
 <tr>
 <td align="center"><sub>Importing a CD</sub></td>
 <td align="center"><sub>Syncing a player</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/tunebox-find-artwork.png" alt="Find Album Artwork: an album's editions with their covers"></td>
+<td width="50%"><img src="docs/images/tunebox-cd-cover.png" alt="The CD import page with the disc's cover from the Cover Art Archive"></td>
+</tr>
+<tr>
+<td align="center"><sub>Finding an album's cover</sub></td>
+<td align="center"><sub>A CD's cover, before importing</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/tunebox-smart-editor.png" alt="The smart playlist editor"></td>
@@ -130,6 +142,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-audio` | Streaming decode and lossless encoding through [craft-audio](https://github.com/storytold/craft-libs) (symphonia) |
 | `tunebox-import` | Finding music and filing copies |
 | `tunebox-playback` | Play queue, player thread, sound output (cpal), spectrum analysis |
+| `tunebox-metabrainz` | Every web request: MusicBrainz and the Cover Art Archive, behind a small client boundary |
 | `tunebox-rip` | CD drives (cd-da-reader), disc ids, MusicBrainz, ripping |
 | `tunebox-mtp` | The MTP protocol (written from the public specification) over pure-Rust USB (nusb) |
 | `tunebox-sync` | Recognising players, planning and carrying out syncs, on folders or over MTP |
@@ -138,7 +151,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 265
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 291
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

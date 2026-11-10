@@ -25,7 +25,7 @@ layers, plus the same-layer edges listed there.
 | Layer | Crates | Role |
 |---|---|---|
 | L0 | `model` | The vocabulary: tracks, playlists, smart rules, columns, search, file layout. Pure |
-| L1 | `library`, `tags`, `audio` | The collection and its file; tag I/O (lofty); codecs (craft-audio) |
+| L1 | `library`, `tags`, `audio`, `mtp`, `metabrainz` | The collection and its file; tag I/O (lofty); codecs (craft-audio); the MTP protocol; every web request |
 | L2 | `import`, `playback`, `rip`, `sync` | One crate per feature family |
 | L6 | `engine` | The façade: `Session`, background jobs, the command registry |
 | L7 | `platform`, `visualizer`, `ui` | OS services; visualizer looks; the egui interface |
@@ -80,8 +80,12 @@ unplugged player or a bad library file must produce an error the listener can ac
   open licence and an entry in `ATTRIBUTION.md` in the same change.
 - **Dependencies** must pass `cargo deny check` (`deny.toml`). symphonia (MPL-2.0, used
   unmodified through craft-audio) is the one copyleft exception.
-- **Network:** TuneBox makes one kind of request, the MusicBrainz disc lookup, and only when
-  the listener asks (or turns on automatic lookup). No telemetry, no accounts.
+- **Network:** TuneBox asks two MetaBrainz services, and only when the listener asks (or turns
+  on an automatic setting, off by default): MusicBrainz for a CD's names by disc id and for the
+  releases matching an album's artist and title; the Cover Art Archive (coverartarchive.org,
+  served from archive.org) for a release's front cover. Requests send only what the lookup
+  needs, name TuneBox in the user agent, keep to MusicBrainz's one request a second, and all
+  go through `tunebox-metabrainz`. No other requests, no telemetry, no accounts.
 
 ## 6. Quality gates
 
