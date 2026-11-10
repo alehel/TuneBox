@@ -1,35 +1,44 @@
 //! Track names from MusicBrainz, looked up by disc id.
 //!
-//! This is TuneBox's only network request, and it is only made when the listener asks for
-//! track names (or turns on automatic lookup). Nothing about the listener is sent: the request
-//! carries the disc id and an application user agent, as MusicBrainz asks.
+//! The request is only made when the listener asks for track names (or turns on automatic
+//! lookup). Nothing about the listener is sent: the request carries the disc id, and the
+//! client (`tunebox-metabrainz`) an application user agent, as MusicBrainz asks.
 
 use crate::info::DiscInfo;
 use serde::Deserialize;
+use tunebox_metabrainz::{WebClient, WebError};
 use tunebox_model::NumberOf;
 
-const ENDPOINT: &str = "https://musicbrainz.org/ws/2/discid";
-const USER_AGENT: &str = concat!("TuneBox/", env!("CARGO_PKG_VERSION"), " ( https://github.com/alehel/tunebox )");
+/// Disc replies are small; anything bigger is not one.
+const REPLY_LIMIT: u64 = 5_000_000;
 
 /// Why a lookup failed.
 #[derive(Debug, thiserror::Error)]
 pub enum LookupError {
-    #[error("could not reach MusicBrainz: {0}")]
-    Network(String),
+    #[error("MusicBrainz could not be asked: {0}")]
+    Network(WebError),
     #[error("MusicBrainz sent a reply TuneBox could not read: {0}")]
     BadReply(String),
 }
 
+/// The lookup of the releases with this disc (and their release groups, for covers).
+pub fn lookup_url(disc_id: &str) -> String {
+    // Disc ids are base64 with `._-`: nothing in them needs escaping in a URL path.
+    let disc_id: String = disc_id.chars().filter(|c| c.is_ascii_alphanumeric() || "._-".contains(*c)).collect();
+    format!(
+        "{}/discid/{disc_id}?inc=artist-credits+recordings+genres+release-groups&fmt=json",
+        tunebox_metabrainz::MUSICBRAINZ
+    )
+}
+
 /// Every release MusicBrainz knows with this disc, best first. Empty when the disc is unknown.
-pub fn lookup(disc_id: &str) -> Result<Vec<DiscInfo>, LookupError> {
-    let url = format!("{ENDPOINT}/{disc_id}?inc=artist-credits+recordings+genres&fmt=json");
-    let response = ureq::get(&url).header("User-Agent", USER_AGENT).call();
-    let body = match response {
-        Ok(mut response) => response.body_mut().read_to_string().map_err(|e| LookupError::Network(e.to_string()))?,
-        Err(ureq::Error::StatusCode(404)) => return Ok(Vec::new()),
-        Err(e) => return Err(LookupError::Network(e.to_string())),
+pub fn lookup(client: &dyn WebClient, disc_id: &str) -> Result<Vec<DiscInfo>, LookupError> {
+    let body = match client.get(&lookup_url(disc_id), REPLY_LIMIT) {
+        Ok(body) => body,
+        Err(WebError::NotFound) => return Ok(Vec::new()),
+        Err(e) => return Err(LookupError::Network(e)),
     };
-    parse(&body, disc_id)
+    parse(&String::from_utf8_lossy(&body), disc_id)
 }
 
 /// Turns a `discid` reply into disc infos for the medium carrying `disc_id`.
@@ -65,6 +74,12 @@ fn release_info(release: &Release, disc_id: &str) -> Option<DiscInfo> {
             NumberOf::default()
         },
         tracks,
+        release_id: Some(release.id.clone()).filter(|id| tunebox_metabrainz::is_mbid(id)),
+        release_group_id: release
+            .release_group
+            .as_ref()
+            .map(|g| g.id.clone())
+            .filter(|id| tunebox_metabrainz::is_mbid(id)),
     })
 }
 
@@ -91,6 +106,10 @@ struct Reply {
 
 #[derive(Deserialize)]
 struct Release {
+    #[serde(default)]
+    id: String,
+    #[serde(rename = "release-group", default)]
+    release_group: Option<ReleaseGroup>,
     title: String,
     #[serde(default)]
     date: String,
@@ -100,6 +119,11 @@ struct Release {
     media: Vec<Medium>,
     #[serde(default)]
     genres: Vec<Genre>,
+}
+
+#[derive(Deserialize)]
+struct ReleaseGroup {
+    id: String,
 }
 
 #[derive(Deserialize)]
@@ -144,6 +168,8 @@ mod tests {
     /// A hand-written reply in the shape of the MusicBrainz web service (fictional release).
     const REPLY: &str = r#"{
       "releases": [{
+        "id": "11111111-2222-3333-4444-555555555555",
+        "release-group": {"id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"},
         "title": "Tidewater",
         "date": "2009-05-04",
         "artist-credit": [{"name": "The Lanterns", "joinphrase": ""}],
@@ -168,6 +194,8 @@ mod tests {
         assert_eq!(info.year, Some(2009));
         assert_eq!(info.genre, "Indie Folk");
         assert_eq!(info.disc, NumberOf::new(2, 2));
+        assert_eq!(info.release_id.as_deref(), Some("11111111-2222-3333-4444-555555555555"));
+        assert_eq!(info.release_group_id.as_deref(), Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         assert_eq!(
             info.tracks,
             [("Low Tide".into(), String::new()), ("Breakwater".into(), "The Lanterns feat. Mara".into())]
@@ -178,5 +206,14 @@ mod tests {
     fn unknown_disc_and_bad_replies() {
         assert!(parse(r#"{"releases": []}"#, "x").unwrap().is_empty());
         assert!(matches!(parse("<html>", "x"), Err(LookupError::BadReply(_))));
+        let without_id = parse(r#"{"releases": [{"id": "?", "title": "T", "media": [{"tracks": []}]}]}"#, "x").unwrap();
+        assert_eq!(without_id[0].release_id, None, "an id that is not one is not kept");
+    }
+
+    #[test]
+    fn the_disc_id_cannot_change_the_request() {
+        let url = lookup_url("ab/../C_d.e-");
+        assert!(url.starts_with("https://musicbrainz.org/ws/2/discid/ab..C_d.e-?inc="), "{url}");
+        assert!(url.contains("release-groups"));
     }
 }

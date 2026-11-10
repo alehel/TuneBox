@@ -4,8 +4,8 @@
 //!    [`PhysicalDrive`] reads real drives through cd-da-reader; [`VirtualDrive`] serves a
 //!    synthetic disc for tests and demos.
 //! 2. The table of contents gives the disc's MusicBrainz [`disc_id`], with which
-//!    [`musicbrainz::lookup`] finds album and track names (only when asked: it is the one
-//!    network call TuneBox makes).
+//!    [`musicbrainz::lookup`] finds album and track names (only when asked), and the
+//!    MusicBrainz release they came from, whose cover the engine can fetch.
 //! 3. [`rip`] reads the chosen tracks, encodes them losslessly into the media folder, tags them
 //!    and returns them as `NewTrack`s for the library.
 

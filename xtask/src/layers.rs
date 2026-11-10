@@ -13,6 +13,7 @@ const TABLE: &[(&str, Option<u8>)] = &[
     ("tags", Some(1)),
     ("audio", Some(1)),
     ("mtp", Some(1)),
+    ("metabrainz", Some(1)),
     ("import", Some(2)),
     ("playback", Some(2)),
     ("rip", Some(2)),
