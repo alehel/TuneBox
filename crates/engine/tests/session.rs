@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    LibraryOnlyEdits, NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings, TrackQuery,
-    VirtualDrive, Volume,
+    LibraryOnlyEdits, LibrarySnapshot, NullOutput, Player, Session, SessionPaths, Source, SyncMode, SyncSettings,
+    TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -479,4 +479,30 @@ fn a_library_open_in_one_tunebox_cannot_be_opened_in_another() {
     let Fixture { dir, session } = f;
     drop(session);
     assert!(Session::open(paths_in(&dir), Player::with_output(NullOutput::default())).is_ok());
+}
+
+#[test]
+fn a_snapshot_reads_a_library_another_tunebox_has_open_and_never_writes() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    f.session.save().unwrap();
+
+    let snapshot = LibrarySnapshot::open(&paths_in(&f.dir)).unwrap();
+    let view = snapshot.view();
+    let songs = view.query(&TrackQuery::new(Source::Music));
+    assert_eq!(songs.len(), 2);
+    assert_eq!(view.summary(&songs).count, 2);
+
+    // It sees what was last saved, not the session's unsaved changes.
+    f.session.set_rating(&[songs[0]], Rating::from_stars(3));
+    assert_eq!(view.track(songs[0]).unwrap().stats.rating, Rating::UNRATED);
+
+    // A damaged library is reported and left where it is: setting it aside is a write.
+    let Fixture { dir, session } = f;
+    drop(session);
+    let library_file = paths_in(&dir).library_file;
+    std::fs::write(&library_file, b"{ not json").unwrap();
+    let Err(error) = LibrarySnapshot::open(&paths_in(&dir)) else { panic!("opened a damaged library") };
+    assert!(error.to_string().contains("damaged"), "{error}");
+    assert_eq!(std::fs::read(&library_file).unwrap(), b"{ not json");
 }

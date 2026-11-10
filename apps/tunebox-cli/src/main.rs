@@ -22,7 +22,9 @@ use std::time::Duration;
 use tunebox_engine::commands::COMMANDS;
 use tunebox_engine::model::search::SearchScope;
 use tunebox_engine::model::{Column, Rating, TrackId, format_clock};
-use tunebox_engine::{NoticeLevel, Player, Session, Source, SyncMode, TrackQuery, VirtualDrive};
+use tunebox_engine::{
+    LibrarySnapshot, LibraryView, NoticeLevel, Player, Session, Source, SyncMode, TrackQuery, VirtualDrive,
+};
 
 #[derive(Parser)]
 #[command(name = "tunebox-cli", version, about = "TuneBox from the command line")]
@@ -159,60 +161,104 @@ fn main() -> ExitCode {
     }
 }
 
+impl Command {
+    /// Whether the command only reads the library. Those run on a snapshot, which takes no lock,
+    /// so they work while the app or another tunebox-cli has the library open.
+    fn reads_only(&self) -> bool {
+        match self {
+            Command::Stats | Command::List { .. } | Command::Playlists | Command::Info { .. } | Command::Commands => {
+                true
+            }
+            Command::InfoFields { pin, unpin } => pin.is_empty() && unpin.is_empty(),
+            Command::Folders { action } => action.is_none(),
+            _ => false,
+        }
+    }
+}
+
 fn run(cli: Cli) -> Result<(), String> {
     let paths = cli.library_dir.as_deref().map_or_else(tunebox_platform::default_paths, tunebox_platform::app_paths);
+    if cli.command.reads_only() {
+        let snapshot = LibrarySnapshot::open(&paths).map_err(|e| e.to_string())?;
+        return show(snapshot.view(), cli.command);
+    }
     let mut session = Session::open(paths, Player::new()).map_err(|e| e.to_string())?;
-    match cli.command {
+    let result = change(&mut session, cli.command);
+    session.shutdown().map_err(|e| e.to_string())?;
+    print_notices(&mut session);
+    result
+}
+
+/// The commands that only read.
+fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
+    match command {
         Command::Stats => {
-            let all = session.query(&TrackQuery::new(Source::Music));
-            println!("{}", session.summary(&all).label());
+            let all = view.query(&TrackQuery::new(Source::Music));
+            println!("{}", view.summary(&all).label());
         }
         Command::List { playlist, search } => {
             let source = match playlist {
-                Some(name) => Source::Playlist(find_playlist(&session, &name)?),
+                Some(name) => Source::Playlist(find_playlist(view, &name)?),
                 None => Source::Music,
             };
-            let ids = search_ids(&session, source, search.as_deref());
-            print_tracks(&session, &ids);
-        }
-        Command::Import { paths } => {
-            session.import(paths).map_err(|e| e.to_string())?;
-            wait_for_jobs(&mut session);
+            let ids = search_ids(view, source, search.as_deref());
+            print_tracks(view, &ids);
         }
         Command::Playlists => {
-            for playlist in session.library().playlists() {
-                let count = session.source_tracks(&Source::Playlist(playlist.id)).len();
+            for playlist in view.library().playlists() {
+                let count = view.source_tracks(&Source::Playlist(playlist.id)).len();
                 let kind = if playlist.is_smart() { "smart" } else { "" };
                 println!("{:<30} {:>6} songs  {kind}", playlist.name, count);
             }
         }
+        Command::Info { search } => details::show(view, &search)?,
+        Command::InfoFields { .. } => details::print_info_fields(view.preferences()),
+        Command::Folders { .. } => print_folders(view.preferences()),
+        Command::Commands => {
+            for command in COMMANDS {
+                let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
+                println!("{:<10} {:<32} {shortcut}", command.menu.title(), command.label);
+            }
+        }
+        // `run` sends only reading commands here; this keeps a mistake from doing harm.
+        _ => return Err("this command changes the library and needs it open for changing".into()),
+    }
+    Ok(())
+}
+
+/// The commands that change something, on the session (which holds the library's lock).
+fn change(session: &mut Session, command: Command) -> Result<(), String> {
+    match command {
+        Command::Import { paths } => {
+            session.import(paths).map_err(|e| e.to_string())?;
+            wait_for_jobs(session);
+        }
         Command::NewPlaylist { name, search } => {
-            let ids = search_ids(&session, Source::Music, search.as_deref());
+            let ids = search_ids(session.view(), Source::Music, search.as_deref());
             session.create_playlist(&name, &ids).map_err(|e| e.to_string())?;
             println!("Created “{name}” with {} songs.", ids.len());
         }
         Command::Rate { search, stars } => {
-            let ids = search_ids(&session, Source::Music, Some(&search));
+            let ids = search_ids(session.view(), Source::Music, Some(&search));
             session.set_rating(&ids, Rating::from_stars(stars));
             println!("Rated {} songs.", ids.len());
         }
-        Command::Info { search } => details::show(&session, &search)?,
-        Command::Edit { search, assignments } => details::edit(&mut session, &search, &assignments)?,
+        Command::Edit { search, assignments } => details::edit(session, &search, &assignments)?,
         Command::Refresh { search, replace_library_edits } => {
-            details::refresh(&mut session, search.as_deref(), replace_library_edits)?;
-            wait_for_jobs(&mut session);
+            details::refresh(session, search.as_deref(), replace_library_edits)?;
+            wait_for_jobs(session);
         }
-        Command::InfoFields { pin, unpin } => details::info_fields(&mut session, &pin, &unpin)?,
-        Command::Play { search, shuffle } => play(&mut session, search.as_deref(), shuffle),
+        Command::InfoFields { pin, unpin } => details::info_fields(session, &pin, &unpin)?,
+        Command::Play { search, shuffle } => play(session, search.as_deref(), shuffle),
         Command::CdInfo { virtual_disc, lookup } => {
-            read_cd(&mut session, virtual_disc, lookup)?;
-            print_cd(&session);
+            read_cd(session, virtual_disc, lookup)?;
+            print_cd(session);
         }
         Command::CdImport { virtual_disc, lookup } => {
-            read_cd(&mut session, virtual_disc, lookup)?;
-            print_cd(&session);
+            read_cd(session, virtual_disc, lookup)?;
+            print_cd(session);
             session.import_cd().map_err(|e| e.to_string())?;
-            wait_for_jobs(&mut session);
+            wait_for_jobs(session);
         }
         Command::Devices => {
             session.refresh_devices(&tunebox_platform::volumes());
@@ -226,23 +272,19 @@ fn run(cli: Cli) -> Result<(), String> {
             tunebox_engine::Device::register(&root, &name).map_err(|e| e.to_string())?;
             println!("“{name}” is ready to sync.");
         }
-        Command::Sync { root, playlists } => sync(&mut session, &root, &playlists)?,
-        Command::Folders { action } => folders(&mut session, action)?,
-        Command::Commands => {
-            for command in COMMANDS {
-                let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
-                println!("{:<10} {:<32} {shortcut}", command.menu.title(), command.label);
-            }
-        }
+        Command::Sync { root, playlists } => sync(session, &root, &playlists)?,
+        Command::Folders { action } => folders(session, action)?,
+        command @ (Command::Stats
+        | Command::List { .. }
+        | Command::Playlists
+        | Command::Info { .. }
+        | Command::Commands) => show(session.view(), command)?,
     }
-    session.shutdown().map_err(|e| e.to_string())?;
-    print_notices(&mut session);
     Ok(())
 }
 
-fn find_playlist(session: &Session, name: &str) -> Result<tunebox_engine::model::PlaylistId, String> {
-    session
-        .library()
+fn find_playlist(view: LibraryView<'_>, name: &str) -> Result<tunebox_engine::model::PlaylistId, String> {
+    view.library()
         .playlists()
         .iter()
         .find(|p| p.name.eq_ignore_ascii_case(name))
@@ -250,24 +292,24 @@ fn find_playlist(session: &Session, name: &str) -> Result<tunebox_engine::model:
         .ok_or_else(|| format!("there is no playlist called “{name}” (see `tunebox-cli playlists`)"))
 }
 
-fn search_ids(session: &Session, source: Source, search: Option<&str>) -> Vec<TrackId> {
+fn search_ids(view: LibraryView<'_>, source: Source, search: Option<&str>) -> Vec<TrackId> {
     let mut query = TrackQuery::new(source);
     query.search = search.unwrap_or_default().to_owned();
     query.scope = SearchScope::All;
-    session.query(&query)
+    view.query(&query)
 }
 
-fn print_tracks(session: &Session, ids: &[TrackId]) {
+fn print_tracks(view: LibraryView<'_>, ids: &[TrackId]) {
     let columns = [Column::Name, Column::Time, Column::Artist, Column::Album, Column::Rating, Column::Plays];
     for id in ids {
-        let Some(track) = session.track(*id) else { continue };
+        let Some(track) = view.track(*id) else { continue };
         let cells: Vec<String> = columns.iter().map(|c| c.text(track)).collect();
         println!(
             "{:<36.36} {:>7} {:<24.24} {:<28.28} {:<5} {:>4}",
             cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]
         );
     }
-    println!("{}", session.summary(ids).label());
+    println!("{}", view.summary(ids).label());
 }
 
 /// Ticks the session until its background work is done, printing progress.
@@ -294,7 +336,7 @@ fn print_notices(session: &mut Session) {
 }
 
 fn play(session: &mut Session, search: Option<&str>, shuffle: bool) {
-    let ids = search_ids(session, Source::Music, search);
+    let ids = search_ids(session.view(), Source::Music, search);
     session.set_shuffle(shuffle);
     session.play_tracks(&ids, 0);
     let mut last = None;
@@ -352,7 +394,7 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
         session.refresh_devices(&[volume]);
     }
     if !playlists.is_empty() {
-        let ids = playlists.iter().map(|name| find_playlist(session, name)).collect::<Result<Vec<_>, _>>()?;
+        let ids = playlists.iter().map(|name| find_playlist(session.view(), name)).collect::<Result<Vec<_>, _>>()?;
         let mut settings = session
             .device(root)
             .and_then(|d| d.device.as_ref())
@@ -396,7 +438,11 @@ fn folders(session: &mut Session, action: Option<FolderAction>) -> Result<(), St
         }
         None => {}
     }
-    let prefs = session.preferences();
+    print_folders(session.preferences());
+    Ok(())
+}
+
+fn print_folders(prefs: &tunebox_engine::Preferences) {
     if prefs.library_folders.is_empty() {
         println!("No library folders are listed. Add one with `tunebox-cli folders add <path>`.");
     }
@@ -410,7 +456,6 @@ fn folders(session: &mut Session, action: Option<FolderAction>) -> Result<(), St
         "  (in a read-only folder: CD imports are blocked)"
     };
     println!("CD imports and copies go to {}{imports}", prefs.media_folder.display());
-    Ok(())
 }
 
 /// Feeds the folder watcher's changes to the session until the process is stopped. The library
@@ -437,5 +482,43 @@ fn watch(session: &mut Session) -> Result<(), String> {
             session.save().map_err(|e| e.to_string())?;
         }
         std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(args: &[&str]) -> Command {
+        let mut all = vec!["tunebox-cli"];
+        all.extend_from_slice(args);
+        Cli::try_parse_from(all).unwrap().command
+    }
+
+    #[test]
+    fn only_commands_that_cannot_change_anything_skip_the_lock() {
+        for reads in [
+            &["stats"][..],
+            &["list", "--search", "x"],
+            &["playlists"],
+            &["info", "x"],
+            &["info-fields"],
+            &["folders"],
+            &["commands"],
+        ] {
+            assert!(command(reads).reads_only(), "{reads:?}");
+        }
+        for changes in [
+            &["rate", "x", "3"][..],
+            &["edit", "x", "--set", "mood=Calm"],
+            &["info-fields", "--pin", "mood"],
+            &["folders", "scan"],
+            &["folders", "watch"],
+            &["import", "/x"],
+            &["refresh"],
+            &["play"],
+        ] {
+            assert!(!command(changes).reads_only(), "{changes:?}");
+        }
     }
 }

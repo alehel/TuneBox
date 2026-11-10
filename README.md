@@ -84,7 +84,9 @@ cargo xtask demo                                  # build the demo library (~/Mu
 cargo run --release -p tunebox -- --demo ~/Music/TuneBox\ Demo   # try it with a virtual CD and player
 ```
 
-The command line reaches every library feature without the window:
+The command line reaches every library feature without the window. Commands that only read
+(`list`, `info`, `stats`…) work while the app is open; commands that change the library wait
+for it to be closed, so the two never save over each other.
 
 ```sh
 tunebox-cli import ~/Music/Albums
@@ -122,7 +124,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 161
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 163
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

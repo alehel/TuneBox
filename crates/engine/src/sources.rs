@@ -1,11 +1,12 @@
-//! What the track list shows: the tracks of a source, searched, browsed and sorted.
+//! What the track list shows: a source, and the search, browse and sort applied to it. The
+//! reading itself is in `view`.
 
 use crate::session::Session;
-use chrono::Utc;
+use crate::view::LibraryView;
 use std::path::PathBuf;
 use tunebox_library::{BrowseFilter, Browser, Summary};
-use tunebox_model::search::{Query, SearchScope};
-use tunebox_model::{Column, PlaylistId, SortOrder, TrackId, compare_tracks};
+use tunebox_model::search::SearchScope;
+use tunebox_model::{Column, PlaylistId, SortOrder, TrackId};
 
 /// An entry in the source list whose contents are library tracks. (The CD has its own view,
 /// since its tracks are not in the library until imported.)
@@ -36,62 +37,28 @@ impl TrackQuery {
 }
 
 impl Session {
-    /// A source's tracks in its own order. Playlists may list a track more than once.
+    /// A read-only look at the library, as the track list and the command line read it.
+    pub fn view(&self) -> LibraryView<'_> {
+        LibraryView { library: &self.library, prefs: &self.prefs, devices: &self.devices }
+    }
+
+    /// A source's tracks in its own order (see [`LibraryView::source_tracks`]).
     pub fn source_tracks(&self, source: &Source) -> Vec<TrackId> {
-        match source {
-            Source::Music => self.in_album_order(self.library.tracks().map(|t| t.id).collect()),
-            Source::Playlist(id) => self.library.playlist_tracks(*id, Utc::now()).unwrap_or_default(),
-            Source::Device(root) => {
-                let on_device = self
-                    .devices
-                    .iter()
-                    .find(|d| d.volume.root == *root)
-                    .and_then(|d| d.device.as_ref())
-                    .map(|d| d.manifest.files.keys().copied().filter(|id| self.library.track(*id).is_some()).collect())
-                    .unwrap_or_default();
-                self.in_album_order(on_device)
-            }
-        }
+        self.view().source_tracks(source)
     }
 
-    fn in_album_order(&self, mut ids: Vec<TrackId>) -> Vec<TrackId> {
-        self.sort_ids(&mut ids, Column::Artist, SortOrder::Ascending);
-        ids
-    }
-
-    fn sort_ids(&self, ids: &mut [TrackId], column: Column, order: SortOrder) {
-        ids.sort_by(|a, b| match (self.library.track(*a), self.library.track(*b)) {
-            (Some(ta), Some(tb)) => compare_tracks(ta, tb, column, order),
-            _ => a.cmp(b),
-        });
-    }
-
-    /// The rows of the track list.
+    /// The rows of the track list (see [`LibraryView::query`]).
     pub fn query(&self, query: &TrackQuery) -> Vec<TrackId> {
-        let search = Query::new(&query.search, query.scope);
-        let mut ids: Vec<TrackId> = self
-            .source_tracks(&query.source)
-            .into_iter()
-            .filter(|id| self.library.track(*id).is_some_and(|t| search.matches(t) && query.browse.matches(t)))
-            .collect();
-        if let Some((column, order)) = query.sort {
-            self.sort_ids(&mut ids, column, order);
-        }
-        ids
+        self.view().query(query)
     }
 
-    /// The column browser for a query: built from the searched source, before the browser's own
-    /// selection narrows it.
+    /// The column browser for a query (see [`LibraryView::browser`]).
     pub fn browser(&self, query: &TrackQuery) -> Browser {
-        let search = Query::new(&query.search, query.scope);
-        let ids = self.source_tracks(&query.source);
-        let tracks: Vec<_> =
-            ids.iter().filter_map(|id| self.library.track(*id)).filter(|t| search.matches(t)).collect();
-        Browser::build(&tracks, &query.browse)
+        self.view().browser(query)
     }
 
     /// Totals for the status bar.
     pub fn summary(&self, ids: &[TrackId]) -> Summary {
-        Summary::of(ids.iter().filter_map(|id| self.library.track(*id)))
+        self.view().summary(ids)
     }
 }

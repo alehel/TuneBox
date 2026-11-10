@@ -31,7 +31,9 @@ mod playback;
 mod prefs;
 mod refresh;
 mod session;
+mod snapshot;
 mod sources;
+mod view;
 mod watch;
 
 pub use cd::CdState;
@@ -43,7 +45,9 @@ pub use playback::NowPlaying;
 pub use prefs::{LibraryFolder, Preferences};
 pub use refresh::LibraryOnlyEdits;
 pub use session::{Session, SessionPaths};
+pub use snapshot::LibrarySnapshot;
 pub use sources::{Source, TrackQuery};
+pub use view::LibraryView;
 
 // The types frontends need from the layers below, so they depend on the engine alone.
 pub use tunebox_audio::LosslessFormat;

@@ -3,13 +3,13 @@
 
 use crate::search_ids;
 use tunebox_engine::model::{FieldGroup, TagField, TrackId, TrackMeta};
-use tunebox_engine::{LibraryOnlyEdits, Session, Source};
+use tunebox_engine::{LibraryOnlyEdits, LibraryView, Preferences, Session, Source};
 
 /// Prints every field that has a value, everyday and additional, for each matching song.
-pub fn show(session: &Session, search: &str) -> Result<(), String> {
-    let ids = matching(session, search)?;
+pub fn show(view: LibraryView<'_>, search: &str) -> Result<(), String> {
+    let ids = matching(view, search)?;
     for id in ids {
-        let Some(track) = session.track(id) else { continue };
+        let Some(track) = view.track(id) else { continue };
         println!("{}", track.location.display());
         let keys = TrackMeta::CORE_KEYS.into_iter().chain(TagField::ALL.map(TagField::key));
         for key in keys {
@@ -25,7 +25,7 @@ pub fn show(session: &Session, search: &str) -> Result<(), String> {
 
 /// Applies `key=value` assignments to every matching song.
 pub fn edit(session: &mut Session, search: &str, assignments: &[String]) -> Result<(), String> {
-    let ids = matching(session, search)?;
+    let ids = matching(session.view(), search)?;
     let pairs: Vec<(&str, &str)> = assignments
         .iter()
         .map(|a| a.split_once('=').ok_or_else(|| format!("“{a}” is not in the form field=value")))
@@ -59,15 +59,15 @@ pub fn edit(session: &mut Session, search: &str, assignments: &[String]) -> Resu
 /// Starts reading the matching songs (all without a search) from their files again.
 pub fn refresh(session: &mut Session, search: Option<&str>, replace_library_edits: bool) -> Result<(), String> {
     let ids = match search {
-        Some(search) => matching(session, search)?,
-        None => search_ids(session, Source::Music, None),
+        Some(search) => matching(session.view(), search)?,
+        None => search_ids(session.view(), Source::Music, None),
     };
     let edits = if replace_library_edits { LibraryOnlyEdits::Replace } else { LibraryOnlyEdits::Keep };
     session.refresh_from_files(&ids, edits).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// Lists the additional fields Get Info always shows, after pinning and unpinning any.
+/// Pins and unpins additional fields for Get Info, then lists them.
 pub fn info_fields(session: &mut Session, pin: &[String], unpin: &[String]) -> Result<(), String> {
     let mut prefs = session.preferences().clone();
     for (keys, pinned) in [(pin, true), (unpin, false)] {
@@ -80,21 +80,26 @@ pub fn info_fields(session: &mut Session, pin: &[String], unpin: &[String]) -> R
         }
     }
     session.set_preferences(prefs);
+    print_info_fields(session.preferences());
+    Ok(())
+}
+
+/// The additional fields by group, marked when Get Info always shows them.
+pub fn print_info_fields(prefs: &Preferences) {
     for group in FieldGroup::ALL {
         let fields: Vec<String> = group
             .fields()
             .map(|f| {
-                let mark = if session.preferences().info_fields.contains(&f) { "[x]" } else { "[ ]" };
+                let mark = if prefs.info_fields.contains(&f) { "[x]" } else { "[ ]" };
                 format!("{mark} {}", f.key())
             })
             .collect();
         println!("{:<13} {}", group.title(), fields.join("  "));
     }
-    Ok(())
 }
 
-fn matching(session: &Session, search: &str) -> Result<Vec<TrackId>, String> {
-    let ids = search_ids(session, Source::Music, Some(search));
+fn matching(view: LibraryView<'_>, search: &str) -> Result<Vec<TrackId>, String> {
+    let ids = search_ids(view, Source::Music, Some(search));
     if ids.is_empty() {
         return Err(format!("no songs match “{search}”"));
     }
