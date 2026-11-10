@@ -1,10 +1,16 @@
 //! Playing music: the queue, the transport buttons, and play and skip counts.
+//!
+//! Gapless playback: the player is always told which song follows the current one
+//! (`Session::sync_next`), so it can go straight on into it. When it does, it says so, and the
+//! session only catches up (counts the play, moves the queue); it does not load anything.
 
 use crate::file_check::FileStatus;
 use crate::notices::Notice;
 use crate::prefs::Preferences;
 use crate::session::Session;
 use chrono::Utc;
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::time::Duration;
 use tunebox_model::TrackId;
 use tunebox_playback::{PlayQueue, PlayState, Player, PlayerEvent, RepeatMode};
@@ -30,12 +36,28 @@ pub(crate) struct PlaybackState {
     repeat: RepeatMode,
     /// Tracks that failed to play in a row, to stop a queue of unplayable files spinning.
     failures_in_a_row: usize,
+    /// The file the player was last told to play, or went on to. Events about another file
+    /// are stale: they were sent before the latest load.
+    playing_path: Option<PathBuf>,
+    /// The song the player was last told to go on to, until it does (or drops it).
+    next_sent: Option<(TrackId, PathBuf)>,
+    /// Songs in this queue whose file could not be opened, so they are not queued again.
+    unplayable: HashSet<TrackId>,
 }
 
 impl PlaybackState {
     pub fn new(player: Player, prefs: &Preferences) -> Self {
         player.set_volume(prefs.volume);
-        Self { player, queue: None, shuffle: prefs.shuffle, repeat: prefs.repeat, failures_in_a_row: 0 }
+        Self {
+            player,
+            queue: None,
+            shuffle: prefs.shuffle,
+            repeat: prefs.repeat,
+            failures_in_a_row: 0,
+            playing_path: None,
+            next_sent: None,
+            unplayable: HashSet::new(),
+        }
     }
 
     pub fn apply_preferences(&mut self, prefs: &Preferences) {
@@ -49,6 +71,8 @@ impl PlaybackState {
     pub fn stop(&mut self) {
         self.player.stop();
         self.queue = None;
+        self.playing_path = None;
+        self.next_sent = None;
     }
 }
 
@@ -81,14 +105,50 @@ impl Session {
         let state = &mut self.playback;
         state.queue = PlayQueue::new(playable, start, state.shuffle, state.repeat, shuffle_seed());
         state.failures_in_a_row = 0;
+        state.unplayable.clear();
         self.load_current(true);
     }
 
+    /// Loads the current song, cutting off whatever played, and queues the one after it.
     fn load_current(&mut self, play: bool) {
         match self.playback.current().and_then(|id| self.library.track(id)) {
-            Some(track) => self.playback.player.load(track.location.clone(), play),
+            Some(track) => {
+                let path = track.location.clone();
+                self.playback.player.load(path.clone(), play);
+                self.playback.playing_path = Some(path);
+                // A load clears what the player had queued.
+                self.playback.next_sent = None;
+                self.sync_next();
+            }
             None => self.stop(),
         }
+    }
+
+    /// Tells the player which song follows the current one, when that changed. Called every
+    /// tick, so whatever changes it (shuffle, repeat, a song unchecked, a file gone missing or
+    /// its drive disconnected) reaches the player without each of those having to say so.
+    pub(crate) fn sync_next(&mut self) {
+        let wanted = self.up_next().and_then(|id| self.library.track(id).map(|t| (id, t.location.clone())));
+        if wanted != self.playback.next_sent {
+            self.playback.player.set_next(wanted.as_ref().map(|(_, path)| path.clone()));
+            self.playback.next_sent = wanted;
+        }
+    }
+
+    /// The song that plays when the current one ends by itself.
+    fn up_next(&self) -> Option<TrackId> {
+        let queue = self.playback.queue.as_ref()?;
+        let current = queue.current();
+        queue.peek_after_finish(|id| self.can_follow(id, current))
+    }
+
+    /// Whether a song may play by itself after another: still in the library, checked, its file
+    /// there, and not already failed in this queue. The song playing is exempt from its check
+    /// box: the listener may have started it unchecked, and Repeat One then repeats it.
+    fn can_follow(&self, id: TrackId, current: Option<TrackId>) -> bool {
+        self.library.track(id).is_some_and(|t| t.checked || Some(id) == current)
+            && *self.file_status(id) == FileStatus::Present
+            && !self.playback.unplayable.contains(&id)
     }
 
     /// The Play/Pause button. Returns `false` when nothing is loaded, so the frontend can start
@@ -151,6 +211,7 @@ impl Session {
         if let Some(queue) = self.playback.queue.as_mut() {
             queue.set_shuffle(on, shuffle_seed());
         }
+        self.sync_next();
         self.prefs.shuffle = on;
         self.save_preferences();
     }
@@ -166,6 +227,7 @@ impl Session {
         if let Some(queue) = self.playback.queue.as_mut() {
             queue.set_repeat(repeat);
         }
+        self.sync_next();
         self.prefs.repeat = repeat;
         self.save_preferences();
     }
@@ -193,29 +255,44 @@ impl Session {
         }
     }
 
-    /// Reacts to the player: a finished track counts as played and the queue moves on; a track
-    /// that cannot be played is reported and skipped.
+    /// Reacts to the player: a finished song counts as played and the queue moves on (to the
+    /// song the player already went on to, or by loading the next); a song that cannot be
+    /// played is reported and skipped.
     pub(crate) fn follow_player(&mut self) {
         for event in self.playback.player.poll_events() {
             match event {
-                PlayerEvent::Finished(_) => {
+                PlayerEvent::Finished { path, started } => {
+                    if self.playback.playing_path.as_ref() != Some(&path) {
+                        continue; // From before the latest load.
+                    }
                     self.playback.failures_in_a_row = 0;
                     if let Some(current) = self.playback.current() {
                         let _ = self.library.record_play(current, Utc::now());
                         self.library_changed();
                     }
-                    self.advance_after_finish();
+                    match started {
+                        Some(started) => self.went_on_to(started),
+                        None => self.advance_after_finish(),
+                    }
                 }
-                PlayerEvent::Failed { path, message } => {
+                PlayerEvent::Failed { path, message, upcoming: true } => {
+                    // Only the song still queued: an earlier one was replaced and is no concern.
+                    let failed = self.playback.next_sent.take_if(|(_, sent)| Some(&*sent) == path.as_ref());
+                    if let Some((id, _)) = failed {
+                        self.playback.unplayable.insert(id);
+                        self.check_tracks(&[id]);
+                        self.report_failure(path, message);
+                    }
+                }
+                PlayerEvent::Failed { path, message, upcoming: false } => {
                     // Perhaps the file went, perhaps its share dropped: find out which.
                     if let Some(current) = self.playback.current() {
                         self.check_tracks(&[current]);
+                        self.playback.unplayable.insert(current);
                     }
-                    let name = path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
-                    self.notices.push(Notice::error(match name {
-                        Some(name) => format!("Could not play “{name}”: {message}"),
-                        None => message,
-                    }));
+                    self.report_failure(path.clone(), message);
+                    // The player stopped, and dropped what it had queued.
+                    self.playback.next_sent = None;
                     self.playback.failures_in_a_row += 1;
                     let queue_len = self.playback.queue.as_ref().map_or(0, |q| q.tracks().len());
                     if path.is_some() && self.playback.failures_in_a_row < queue_len {
@@ -226,10 +303,48 @@ impl Session {
                 }
             }
         }
+        // After the events, so a song that just failed is passed over.
+        self.sync_next();
     }
 
+    fn report_failure(&mut self, path: Option<PathBuf>, message: String) {
+        let name = path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
+        self.notices.push(Notice::error(match name {
+            Some(name) => format!("Could not play “{name}”: {message}"),
+            None => message,
+        }));
+    }
+
+    /// The player went on by itself to `started`, the song it was told would follow: the queue
+    /// catches up, and nothing is loaded.
+    fn went_on_to(&mut self, started: PathBuf) {
+        let sent = self.playback.next_sent.take();
+        // Normally the song last sent. If the queue changed after the player had committed to
+        // the song it sent before, find that one by its file.
+        let id = match sent {
+            Some((id, path)) if path == started => Some(id),
+            _ => self.playback.queue.as_ref().and_then(|q| {
+                q.tracks().iter().copied().find(|id| self.library.track(*id).is_some_and(|t| t.location == started))
+            }),
+        };
+        let moved = match (self.playback.queue.as_mut(), id) {
+            (Some(queue), Some(id)) => queue.move_to(id),
+            _ => false,
+        };
+        if moved {
+            self.playback.playing_path = Some(started);
+        } else {
+            // Playing a song the queue does not hold: nothing sensible to show, so stop.
+            self.stop();
+        }
+    }
+
+    /// Moves to the song after the current one and loads it, or stops at the end of the queue.
     fn advance_after_finish(&mut self) {
-        let next = self.playback.queue.as_mut().and_then(PlayQueue::advance_after_finish);
+        let current = self.playback.current();
+        let mut queue = self.playback.queue.take();
+        let next = queue.as_mut().and_then(|q| q.advance_after_finish(|id| self.can_follow(id, current)));
+        self.playback.queue = queue;
         if next.is_some() { self.load_current(true) } else { self.stop() }
     }
 }

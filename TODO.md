@@ -9,7 +9,7 @@ What TuneBox lacks or has not proven yet. What already works is described featur
 2. Japanese, Chinese and Korean text (a system font as fallback).
 3. Adding and changing album artwork.
 4. MTP players.
-5. Gapless playback and volume levelling.
+5. Volume levelling.
 6. Installers.
 7. Undo.
 
@@ -28,12 +28,16 @@ The biggest risk: these parts are built but have never run where it counts.
 - [ ] Measure large libraries (tens of thousands of songs): the library is one JSON file,
       rewritten about 2 seconds after each change, and the startup file check looks at every
       song.
+- [ ] Check gapless joins of real MP3 and AAC albums. Encoder delay and padding are trimmed by
+      craft-audio, but only WAV and FLAC fixtures exist (no encoder to make others).
 - [ ] Check Opus playback. Opus files import and their tags are read, but the decoder
       (symphonia, through craft-audio) has no Opus support, so they probably do not play.
 
 ## Playback
 
-- [ ] Gapless playback.
+- [x] Gapless playback.
+- [ ] Gapless across a change of sample rate or channel count. Today the output restarts in the
+      new format (a short gap); converting instead needs a better resampler than the linear one.
 - [ ] Crossfade.
 - [ ] Volume levelling (Sound Check / ReplayGain).
 - [ ] Equaliser.

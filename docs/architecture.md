@@ -72,6 +72,16 @@ and counts played frames, from which the position is derived. Pause keeps the ri
 stop flush it. `NullOutput` drains the ring without a sound device, for tests, headless use and
 demo mode.
 
+Gapless: the session always tells the player which song comes next (`Player::set_next`,
+recomputed every tick from the queue, shuffle, repeat, check boxes and file status). The player
+opens it on a helper thread straight away, and when the song being decoded ends, the next one's
+audio follows it into the same ring with no stop and no flush. The output frame where it begins
+is noted; when the callback's played-frame count reaches it, the status switches and a
+`PlayerEvent::Finished { started: Some(..) }` tells the session, which counts the play and moves
+the queue without loading anything. A next song in another sample rate or channel count waits
+for the ring to drain and restarts the output (a short gap). Encoder delay and padding are
+trimmed by craft-audio, below.
+
 The callback also copies what it plays, mixed to mono and before the volume, into a second
 ring: the visualizer tap. `Player::recent_audio` reads it; `tunebox_playback::analysis` turns it
 into spectrum bands; `tunebox-visualizer`'s `Meter` smooths them into the `Frame` a look paints.

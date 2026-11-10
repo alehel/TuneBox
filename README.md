@@ -24,8 +24,8 @@
 - **Playlists and smart playlists.** Drag songs onto playlists. Smart playlists match rules on
   text, numbers and dates, can be limited by count, time or size, and stay up to date as you
   listen.
-- **Playback.** A dedicated player thread with a lock-free path to the sound card, shuffle,
-  repeat one or all, and play and skip counts. The status display shows what's playing and what's being
+- **Playback.** A dedicated player thread with a lock-free path to the sound card, gapless
+  playback from song to song, shuffle, repeat one or all, and play and skip counts. The status display shows what's playing and what's being
   imported or synced.
 - **Visualizer.** Five looks (Spectrum, Aurora, Pulse, Oscilloscope, Hyperspace), driven by what
   the sound card is playing, with an optional track-info card. Writing a new look is one file
@@ -129,7 +129,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer` | The `Visualizer` trait, the audio meter and the built-in looks |
 | `tunebox-ui` | The egui desktop interface |
 
-**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 179
+**Quality gates** (`cargo xtask ci`): formatting, Clippy with warnings as errors, 194
 unit and end-to-end tests, the crate layering check, and dependency licences
 (`cargo deny`). No `unsafe`, and no `unwrap`/`expect`/`panic!` outside tests. Contributors and
 agents follow [AGENTS.md](AGENTS.md).

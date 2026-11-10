@@ -4,10 +4,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
+use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Player, Session, SessionPaths, Source, SyncMode,
-    SyncSettings, TrackQuery, VirtualDrive, Volume,
+    FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, PlayState, Player, RepeatMode, Session, SessionPaths,
+    Source, SyncMode, SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -32,9 +33,14 @@ fn fixture(speed: f64) -> Fixture {
 
 /// A short tagged FLAC.
 fn write_song(path: &Path, title: &str, artist: &str, album: &str, track: u32) {
+    write_song_lasting(path, title, artist, album, track, 0.5);
+}
+
+/// A tagged FLAC, `seconds` long.
+fn write_song_lasting(path: &Path, title: &str, artist: &str, album: &str, track: u32, seconds: f64) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let mut writer = PcmWriter::create(path, LosslessFormat::Flac, 8_000, 1).unwrap();
-    writer.write(&[vec![0.1; 4_000]]).unwrap();
+    writer.write(&[vec![0.1; (seconds * 8_000.0) as usize]]).unwrap();
     writer.finish().unwrap();
     let meta = TrackMeta {
         title: title.into(),
@@ -123,6 +129,112 @@ fn playing_through_counts_plays() {
     for id in &all {
         assert_eq!(f.session.track(*id).unwrap().stats.play_count, 1);
     }
+}
+
+/// Imports an album of `count` songs, each `seconds` long, and returns them in album order.
+fn import_album(f: &mut Fixture, count: u32, seconds: f64) -> Vec<TrackId> {
+    let folder = f.dir.path().join("Album");
+    for n in 1..=count {
+        write_song_lasting(&folder.join(format!("{n}.flac")), &format!("Part {n}"), "Tone", "Suite", n, seconds);
+    }
+    f.session.import(vec![folder]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == count as usize);
+    f.session.query(&TrackQuery::new(Source::Music))
+}
+
+/// Ticks until `done`, noting each song heard and asserting that playback never stops in
+/// between: no gap where the player was stopped and the session loaded the next song.
+fn songs_heard_until(session: &mut Session, mut done: impl FnMut(&Session) -> bool) -> Vec<TrackId> {
+    let mut heard: Vec<TrackId> = Vec::new();
+    let mut stopped = false;
+    tick_until(session, |s| {
+        if let Some(now) = s.now_playing() {
+            // Stopped before the first song starts, or after the last, is fine.
+            stopped |= !heard.is_empty() && now.state == PlayState::Stopped;
+            if now.state == PlayState::Playing && heard.last() != Some(&now.track) {
+                assert!(!stopped, "playback stopped before {:?} started, after {heard:?}", now.track);
+                heard.push(now.track);
+            }
+        }
+        done(s)
+    });
+    heard
+}
+
+#[test]
+fn an_album_plays_through_without_stopping_between_songs() {
+    let mut f = fixture(8.0);
+    let album = import_album(&mut f, 3, 1.0);
+    f.session.play_tracks(&album, 0);
+    let heard = songs_heard_until(&mut f.session, |s| s.now_playing().is_none());
+    assert_eq!(heard, album);
+    for id in &album {
+        assert_eq!(f.session.track(*id).unwrap().stats.play_count, 1, "one play each");
+    }
+    assert!(f.session.take_notices().iter().all(|n| !n.text.contains("Could not play")));
+}
+
+#[test]
+fn turning_repeat_on_queues_the_first_song_again() {
+    let mut f = fixture(4.0);
+    let album = import_album(&mut f, 2, 2.0);
+    // The last song: on its own it would end the queue.
+    f.session.play_tracks(&album, 1);
+    f.session.cycle_repeat();
+    assert_eq!(f.session.repeat(), RepeatMode::All);
+    let heard = songs_heard_until(&mut f.session, |s| s.now_playing().is_some_and(|n| n.track == album[0]));
+    assert_eq!(heard, [album[1], album[0]]);
+    // Repeat One: the song goes straight on into itself.
+    f.session.cycle_repeat();
+    let heard = songs_heard_until(&mut f.session, |s| s.track(album[0]).unwrap().stats.play_count == 1);
+    assert_eq!(heard, [album[0]]);
+    assert_eq!(f.session.now_playing().map(|n| (n.track, n.state)), Some((album[0], PlayState::Playing)));
+    f.session.stop();
+}
+
+#[test]
+fn turning_shuffle_off_queues_the_next_song_in_list_order() {
+    let mut f = fixture(4.0);
+    let album = import_album(&mut f, 4, 2.0);
+    f.session.set_shuffle(true);
+    f.session.play_tracks(&album, 0);
+    f.session.set_shuffle(false);
+    let heard = songs_heard_until(&mut f.session, |s| s.now_playing().is_some_and(|n| n.track != album[0]));
+    assert_eq!(heard, [album[0], album[1]]);
+    f.session.stop();
+}
+
+#[test]
+fn a_song_that_goes_missing_or_is_unchecked_is_not_played_next() {
+    let mut f = fixture(4.0);
+    let album = import_album(&mut f, 4, 2.0);
+    f.session.play_tracks(&album, 0);
+    // While the first plays, the third's file goes, then the second (already queued in the
+    // player) is unchecked: the player is told to go on to the fourth, never the third.
+    let third = f.session.track(album[2]).unwrap().location.clone();
+    std::fs::remove_file(third).unwrap();
+    f.session.check_files_now();
+    assert_eq!(*f.session.file_status(album[2]), FileStatus::Missing);
+    f.session.set_checked(&[album[1]], false);
+    let heard = songs_heard_until(&mut f.session, |s| s.now_playing().is_some_and(|n| n.track != album[0]));
+    assert_eq!(heard, [album[0], album[3]]);
+    let notices = f.session.take_notices();
+    assert!(notices.iter().all(|n| !n.text.contains("Could not play")), "{notices:?}");
+    f.session.stop();
+}
+
+#[test]
+fn a_song_that_cannot_be_opened_is_reported_and_passed_over() {
+    let mut f = fixture(8.0);
+    let album = import_album(&mut f, 3, 1.0);
+    // Damaged after import, so the session takes it for playable until the player tries it.
+    std::fs::write(&f.session.track(album[1]).unwrap().location, b"not audio").unwrap();
+    f.session.play_tracks(&album, 0);
+    let heard = songs_heard_until(&mut f.session, |s| s.now_playing().is_none());
+    assert_eq!(heard, [album[0], album[2]]);
+    let failures: Vec<_> = f.session.take_notices().into_iter().filter(|n| n.text.contains("Could not play")).collect();
+    assert_eq!(failures.len(), 1, "reported once: {failures:?}");
+    assert_eq!(f.session.track(album[1]).unwrap().stats.play_count, 0);
 }
 
 #[test]

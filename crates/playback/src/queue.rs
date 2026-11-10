@@ -52,7 +52,7 @@ impl PlayQueue {
 
     /// The track playing now.
     pub fn current(&self) -> Option<TrackId> {
-        self.order.get(self.cursor).and_then(|&i| self.tracks.get(i)).copied()
+        self.track_at(self.cursor)
     }
 
     pub fn tracks(&self) -> &[TrackId] {
@@ -87,13 +87,32 @@ impl PlayQueue {
         self.shuffle = on;
     }
 
-    /// The track to play when the current one finishes by itself. Repeat One plays it again;
-    /// Repeat All wraps around at the end; otherwise the queue ends (`None`).
-    pub fn advance_after_finish(&mut self) -> Option<TrackId> {
-        if self.repeat == RepeatMode::One {
-            return self.current();
+    /// The track that plays when the current one finishes by itself, without moving there:
+    /// Repeat One plays it again; otherwise the next one after it, wrapping round (to the
+    /// current track at the latest) under Repeat All. Tracks `playable` rejects are passed
+    /// over. `None` when the queue ends.
+    pub fn peek_after_finish(&self, playable: impl FnMut(TrackId) -> bool) -> Option<TrackId> {
+        self.position_after_finish(playable).and_then(|position| self.track_at(position))
+    }
+
+    /// Moves to the track [`PlayQueue::peek_after_finish`] names and returns it.
+    pub fn advance_after_finish(&mut self, playable: impl FnMut(TrackId) -> bool) -> Option<TrackId> {
+        let position = self.position_after_finish(playable)?;
+        self.cursor = position;
+        self.current()
+    }
+
+    /// Makes `track` the current one: its first appearance after the current track, wrapping
+    /// round. For when the player has already gone on to it by itself, which can be a track
+    /// that is no longer what [`PlayQueue::peek_after_finish`] names (the order changed after
+    /// it was committed). Returns `false` when `track` is not in the queue.
+    pub fn move_to(&mut self, track: TrackId) -> bool {
+        let len = self.order.len();
+        let found = (1..=len).map(|step| (self.cursor + step) % len).find(|&p| self.track_at(p) == Some(track));
+        if let Some(position) = found {
+            self.cursor = position;
         }
-        self.step_forward()
+        found.is_some()
     }
 
     /// The Next button: like a finish, but Repeat One does not hold the listener on one track.
@@ -110,6 +129,20 @@ impl PlayQueue {
             self.cursor = self.order.len().saturating_sub(1);
         }
         self.current()
+    }
+
+    fn track_at(&self, position: usize) -> Option<TrackId> {
+        self.order.get(position).and_then(|&i| self.tracks.get(i)).copied()
+    }
+
+    fn position_after_finish(&self, mut playable: impl FnMut(TrackId) -> bool) -> Option<usize> {
+        let len = self.order.len();
+        let mut candidates: Box<dyn Iterator<Item = usize>> = match self.repeat {
+            RepeatMode::One => Box::new(std::iter::once(self.cursor)),
+            RepeatMode::All => Box::new((1..=len).map(|step| (self.cursor + step) % len)),
+            RepeatMode::Off => Box::new(self.cursor + 1..len),
+        };
+        candidates.find(|&p| self.track_at(p).is_some_and(&mut playable))
     }
 
     fn step_forward(&mut self) -> Option<TrackId> {
@@ -153,16 +186,16 @@ mod tests {
     fn plays_through_in_order_and_ends() {
         let mut q = PlayQueue::new(ids(3), 1, false, RepeatMode::Off, 0).unwrap();
         assert_eq!(q.current(), Some(TrackId(2)));
-        assert_eq!(q.advance_after_finish(), Some(TrackId(3)));
-        assert_eq!(q.advance_after_finish(), None);
+        assert_eq!(q.advance_after_finish(|_| true), Some(TrackId(3)));
+        assert_eq!(q.advance_after_finish(|_| true), None);
     }
 
     #[test]
     fn repeat_all_wraps_and_repeat_one_holds() {
         let mut q = PlayQueue::new(ids(2), 1, false, RepeatMode::All, 0).unwrap();
-        assert_eq!(q.advance_after_finish(), Some(TrackId(1)));
+        assert_eq!(q.advance_after_finish(|_| true), Some(TrackId(1)));
         q.set_repeat(RepeatMode::One);
-        assert_eq!(q.advance_after_finish(), Some(TrackId(1)));
+        assert_eq!(q.advance_after_finish(|_| true), Some(TrackId(1)));
         assert_eq!(q.skip_forward(), Some(TrackId(2)), "Next leaves a repeating track");
     }
 
@@ -178,7 +211,7 @@ mod tests {
     fn shuffle_starts_with_the_chosen_track_and_visits_every_track_once() {
         let mut q = PlayQueue::new(ids(10), 4, true, RepeatMode::Off, 42).unwrap();
         let mut played = vec![q.current().unwrap()];
-        while let Some(next) = q.advance_after_finish() {
+        while let Some(next) = q.advance_after_finish(|_| true) {
             played.push(next);
         }
         assert_eq!(played[0], TrackId(5));
@@ -197,6 +230,41 @@ mod tests {
         assert_eq!(q.current(), Some(current));
         let expected_next = if current.0 < 5 { Some(TrackId(current.0 + 1)) } else { None };
         assert_eq!(q.skip_forward(), expected_next);
+    }
+
+    #[test]
+    fn peeking_does_not_move_and_passes_over_unplayable_tracks() {
+        let mut q = PlayQueue::new(ids(4), 0, false, RepeatMode::Off, 0).unwrap();
+        assert_eq!(q.peek_after_finish(|_| true), Some(TrackId(2)));
+        assert_eq!(q.current(), Some(TrackId(1)), "peeking leaves the queue where it was");
+        assert_eq!(q.peek_after_finish(|id| id != TrackId(2)), Some(TrackId(3)));
+        assert_eq!(q.peek_after_finish(|id| id == TrackId(1)), None, "nothing playable after it");
+        assert_eq!(q.advance_after_finish(|id| id != TrackId(2)), Some(TrackId(3)));
+        assert_eq!(q.peek_after_finish(|_| true), Some(TrackId(4)));
+    }
+
+    #[test]
+    fn peeking_follows_repeat() {
+        let mut q = PlayQueue::new(ids(3), 2, false, RepeatMode::Off, 0).unwrap();
+        assert_eq!(q.peek_after_finish(|_| true), None, "the queue ends");
+        q.set_repeat(RepeatMode::All);
+        assert_eq!(q.peek_after_finish(|_| true), Some(TrackId(1)));
+        assert_eq!(q.peek_after_finish(|id| id == TrackId(3)), Some(TrackId(3)), "wraps to itself at the latest");
+        q.set_repeat(RepeatMode::One);
+        assert_eq!(q.peek_after_finish(|_| true), Some(TrackId(3)));
+        assert_eq!(q.peek_after_finish(|_| false), None);
+    }
+
+    #[test]
+    fn move_to_finds_the_next_appearance_wrapping_round() {
+        let tracks = vec![TrackId(1), TrackId(2), TrackId(1), TrackId(3)];
+        let mut q = PlayQueue::new(tracks, 1, false, RepeatMode::Off, 0).unwrap();
+        assert!(q.move_to(TrackId(1)));
+        assert_eq!(q.peek_after_finish(|_| true), Some(TrackId(3)), "the appearance after the current track");
+        assert!(q.move_to(TrackId(2)), "wraps round to an earlier one");
+        assert_eq!(q.current(), Some(TrackId(2)));
+        assert!(!q.move_to(TrackId(9)));
+        assert_eq!(q.current(), Some(TrackId(2)));
     }
 
     #[test]

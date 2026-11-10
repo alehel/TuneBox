@@ -2,9 +2,10 @@
 //!
 //! - [`PlayQueue`] decides what comes next: list order or shuffled, repeat off, all or one. It is
 //!   pure and knows only track ids.
-//! - [`Player`] plays one file at a time on its own thread: it decodes ahead into a lock-free ring
-//!   buffer that the sound device's callback drains, converting sample rate and channel count on
-//!   the way. It reports progress through [`Player::status`] and endings through
+//! - [`Player`] plays files on its own thread: it decodes ahead into a lock-free ring buffer that
+//!   the sound device's callback drains, converting sample rate and channel count on the way. The
+//!   song queued with [`Player::set_next`] follows the current one without a gap. It reports
+//!   progress through [`Player::status`] and endings and hand-overs through
 //!   [`Player::poll_events`].
 //!
 //! ```text
@@ -27,6 +28,7 @@ mod engine;
 mod output;
 mod player;
 mod queue;
+mod upcoming;
 
 #[cfg(feature = "cpal")]
 pub use output::CpalOutput;

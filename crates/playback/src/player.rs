@@ -32,10 +32,14 @@ pub struct Status {
 /// Something that happened, for the owner to act on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlayerEvent {
-    /// The loaded file played to its end.
-    Finished(PathBuf),
-    /// A file could not be played, or the output failed.
-    Failed { path: Option<PathBuf>, message: String },
+    /// The song playing (`path`) was heard to its end. `started` is the song queued with
+    /// [`Player::set_next`] that the output went straight on to; `None` when nothing followed and
+    /// the player has stopped. Sent when the output gets there, not when decoding does, so the
+    /// owner can count the play and show the new song at the moment it is heard.
+    Finished { path: PathBuf, started: Option<PathBuf> },
+    /// A file could not be played, or the output failed. `upcoming` is set when the file was the
+    /// one queued with [`Player::set_next`]: it was dropped, and what is playing carries on.
+    Failed { path: Option<PathBuf>, message: String, upcoming: bool },
 }
 
 /// The most recent audio that was played, for visualizers.
@@ -101,6 +105,14 @@ impl Player {
         self.send(Command::Load { path, play });
     }
 
+    /// The song to go on to, without a gap, when the one playing ends; `None` for none. It is
+    /// opened straight away, so a slow disk delays nothing audible. Replaces any queued before,
+    /// unless the player has already started on it (it decodes about half a second ahead): then
+    /// this names the song after it. [`Player::load`] and [`Player::stop`] clear it.
+    pub fn set_next(&self, path: Option<PathBuf>) {
+        self.send(Command::Next(path));
+    }
+
     pub fn play(&self) {
         self.send(Command::Play);
     }
@@ -153,7 +165,11 @@ impl Player {
     pub fn poll_events(&self) -> Vec<PlayerEvent> {
         let mut events: Vec<PlayerEvent> = self.events.try_iter().collect();
         if self.thread.as_ref().is_none_or(JoinHandle::is_finished) && events.is_empty() {
-            events.push(PlayerEvent::Failed { path: None, message: "The audio player stopped unexpectedly.".into() });
+            events.push(PlayerEvent::Failed {
+                path: None,
+                message: "The audio player stopped unexpectedly.".into(),
+                upcoming: false,
+            });
         }
         events
     }

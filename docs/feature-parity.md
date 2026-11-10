@@ -52,7 +52,8 @@ radio and sharing are out of scope.
 | Formats | Shipped | MP3, AAC, ALAC, FLAC, WAV, AIFF, Ogg Vorbis (through craft-audio and symphonia) |
 | Visualizer | Shipped | Five looks, track-info card, ⌘T / Ctrl+T; new looks are one file or a compile-time plug-in |
 | Full-screen visualizer, run-time (WebAssembly) visualizer plug-ins | Planned | |
-| Gapless playback, crossfade, Sound Check, equaliser | Planned | |
+| Gapless playback | Shipped | The next song is opened ahead and follows in the same output stream, switching at the exact frame it is heard. A change of sample rate or channel count restarts the output, a short gap |
+| Crossfade, Sound Check, equaliser | Planned | |
 | Up Next / play queue editing, iTunes DJ | Planned | |
 
 ## CDs
