@@ -63,7 +63,12 @@ The biggest risk: these parts are built but have never run where it counts.
 
 - [ ] AAC and MP3 encoding (lossless only today: FLAC, WAV, AIFF). Waits for permissively
       licensed pure-Rust encoders.
-- [ ] AccurateRip verification that a rip is error-free.
+- [ ] AccurateRip verification that a rip is error-free. Blocked: the database is for approved
+      programs only and TuneBox needs Illustrate's prior agreement; see
+      [docs/accuraterip.md](docs/accuraterip.md).
+- [ ] Drive read offset correction, so rips are sample-exact (needed for AccurateRip, useful
+      without it).
+- [ ] Test and copy: read each track twice and re-read on a mismatch.
 - [ ] Play a CD directly.
 - [ ] Cover art from the Cover Art Archive.
 
