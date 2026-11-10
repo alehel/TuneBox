@@ -1,5 +1,38 @@
 [package]
 name = "tunebox-engine"
+description = "TuneBox engine façade: the session every frontend talks to, background jobs and the command registry."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["sound", "drives", "musicbrainz"]
+# Sound output through the system audio device (cpal).
+sound = ["tunebox-playback/cpal"]
+# Physical CD drives.
+drives = ["tunebox-rip/drives"]
+# "Get Track Names" from musicbrainz.org.
+musicbrainz = ["tunebox-rip/musicbrainz"]
+
 [dependencies]
+tunebox-model = { workspace = true }
+tunebox-library = { workspace = true }
+tunebox-tags = { workspace = true }
+tunebox-audio = { workspace = true }
+tunebox-import = { workspace = true }
+tunebox-playback = { workspace = true }
+tunebox-rip = { workspace = true }
+tunebox-sync = { workspace = true }
+craft-atomic = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

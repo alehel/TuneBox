@@ -19,6 +19,7 @@ cpal = ["dep:cpal"]
 tunebox-model = { workspace = true }
 tunebox-audio = { workspace = true }
 rtrb = { workspace = true }
+serde = { workspace = true }
 log = { workspace = true }
 cpal = { workspace = true, optional = true }
 

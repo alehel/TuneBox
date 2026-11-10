@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use tunebox_model::AudioFormat;
 
 /// The formats TuneBox can rip to.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LosslessFormat {
     #[default]
     Flac,

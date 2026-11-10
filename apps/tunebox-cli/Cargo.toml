@@ -1,5 +1,16 @@
 [package]
 name = "tunebox-cli"
+description = "TuneBox from the command line: import, browse, play, rip CDs and sync players without the GUI."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
 [dependencies]
+tunebox-engine = { workspace = true, features = ["sound", "drives", "musicbrainz"] }
+tunebox-platform = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }

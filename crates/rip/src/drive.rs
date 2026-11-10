@@ -18,7 +18,7 @@ pub enum DriveError {
 }
 
 /// Something that holds an audio CD.
-pub trait CdDrive: Send {
+pub trait CdDrive: Send + Sync {
     /// How the drive is shown in the source list, e.g. "Audio CD (/dev/sr0)".
     fn name(&self) -> String;
 

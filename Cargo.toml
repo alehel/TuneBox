@@ -16,10 +16,10 @@ tunebox-library = { path = "crates/library", version = "0.1.0" }
 tunebox-tags = { path = "crates/tags", version = "0.1.0" }
 tunebox-audio = { path = "crates/audio", version = "0.1.0" }
 tunebox-import = { path = "crates/import", version = "0.1.0" }
-tunebox-playback = { path = "crates/playback", version = "0.1.0" }
-tunebox-rip = { path = "crates/rip", version = "0.1.0" }
+tunebox-playback = { path = "crates/playback", version = "0.1.0", default-features = false }
+tunebox-rip = { path = "crates/rip", version = "0.1.0", default-features = false }
 tunebox-sync = { path = "crates/sync", version = "0.1.0" }
-tunebox-engine = { path = "crates/engine", version = "0.1.0" }
+tunebox-engine = { path = "crates/engine", version = "0.1.0", default-features = false }
 tunebox-platform = { path = "crates/platform", version = "0.1.0" }
 tunebox-ui = { path = "crates/ui", version = "0.1.0" }
 
@@ -48,6 +48,8 @@ sha1 = "0.10"
 base64 = "0.22"
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 dirs = "6"
+# Mounted volumes, their labels and free space, on every platform.
+sysinfo = { version = "0.40", default-features = false, features = ["disk"] }
 
 # ui
 egui = "0.37"

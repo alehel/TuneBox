@@ -137,6 +137,7 @@ fn cd_audio_to_planar(bytes: &[u8]) -> Vec<Vec<f32>> {
     let mut left = Vec::with_capacity(frames);
     let mut right = Vec::with_capacity(frames);
     for frame in bytes.chunks_exact(4) {
+        // `chunks_exact(4)` guarantees four bytes, so indexes 0..=3 are in range.
         let sample = |lo: usize| f32::from(i16::from_le_bytes([frame[lo], frame[lo + 1]])) / 32_768.0;
         left.push(sample(0));
         right.push(sample(2));

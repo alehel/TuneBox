@@ -4,7 +4,7 @@
 use tunebox_model::TrackId;
 
 /// The repeat button's three states.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RepeatMode {
     #[default]
     Off,

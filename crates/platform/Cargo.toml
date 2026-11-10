@@ -1,5 +1,16 @@
 [package]
 name = "tunebox-platform"
+description = "TuneBox operating-system services: where files live, mounted volumes, revealing files and ejecting media."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
 [dependencies]
+tunebox-engine = { workspace = true }
+dirs = { workspace = true }
+sysinfo = { workspace = true }
+log = { workspace = true }

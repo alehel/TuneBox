@@ -15,7 +15,10 @@ pub fn format_total_time(d: Duration) -> String {
     const MINUTE: f64 = 60.0;
     const HOUR: f64 = 3600.0;
     const DAY: f64 = 86_400.0;
-    if secs < HOUR {
+    if secs < MINUTE {
+        let seconds = secs.round();
+        if seconds == 1.0 { "1 second".to_owned() } else { format!("{seconds} seconds") }
+    } else if secs < HOUR {
         let minutes = (secs / MINUTE).round();
         if minutes == 1.0 { "1 minute".to_owned() } else { format!("{minutes} minutes") }
     } else if secs < DAY {
@@ -55,6 +58,7 @@ mod tests {
 
     #[test]
     fn totals() {
+        assert_eq!(format_total_time(Duration::from_secs(14)), "14 seconds");
         assert_eq!(format_total_time(Duration::from_secs(60)), "1 minute");
         assert_eq!(format_total_time(Duration::from_secs(42 * 60)), "42 minutes");
         assert_eq!(format_total_time(Duration::from_secs(5 * 3600)), "5.0 hours");

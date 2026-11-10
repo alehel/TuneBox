@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 tunebox-model = { workspace = true }
 craft-audio = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
