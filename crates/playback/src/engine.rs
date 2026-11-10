@@ -134,6 +134,7 @@ impl Engine {
             ((f64::from(format.sample_rate) * BUFFER_SECONDS) as usize).max(1024) * usize::from(format.channels.max(1));
         let (producer, consumer) = RingBuffer::new(capacity);
         let stream = self.factory.start(format, consumer, Arc::clone(&self.shared))?;
+        self.shared.output_rate.store(format.sample_rate, Ordering::Relaxed);
         Ok(ActiveOutput { format, producer, capacity, _stream: stream })
     }
 
@@ -296,6 +297,11 @@ mod tests {
         std::thread::sleep(Duration::from_millis(150));
         let position = player.status().position;
         assert!(position >= Duration::from_secs(6) && position < Duration::from_secs(7), "{position:?}");
+
+        // What was played reaches the visualizer tap.
+        let tap = player.recent_audio(512).unwrap();
+        assert_eq!((tap.samples.len(), tap.sample_rate), (512, 8_000));
+        assert!(tap.samples.iter().any(|s| s.abs() > 0.1));
     }
 
     #[test]

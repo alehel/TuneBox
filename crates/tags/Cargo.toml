@@ -4,6 +4,7 @@ description = "TuneBox tag I/O: reads and writes track metadata and artwork in M
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

@@ -30,6 +30,7 @@ pub enum CommandId {
     ShowBrowser,
     AsList,
     AsAlbums,
+    Visualizer,
     // Controls
     PlayPause,
     NextTrack,
@@ -221,6 +222,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     )),
     spec(CommandId::AsList, "as List", Menu::View, Some(Shortcut::cmd(Key::Letter('1'))), Needs::Nothing),
     spec(CommandId::AsAlbums, "as Album Grid", Menu::View, Some(Shortcut::cmd(Key::Letter('2'))), Needs::Nothing),
+    after_separator(spec(
+        CommandId::Visualizer,
+        "Visualizer",
+        Menu::View,
+        Some(Shortcut::cmd(Key::Letter('t'))),
+        Needs::Nothing,
+    )),
     after_separator(spec(
         CommandId::ShowBrowser,
         "Column Browser",

@@ -1,6 +1,6 @@
 //! `cargo xtask <task>`: TuneBox's build tooling.
 //!
-//! - `ci`: every quality gate (format, Clippy, tests, layering).
+//! - `ci`: every quality gate (format, Clippy, tests, layering, dependency licences).
 //! - `layers`: checks that crates only depend on lower layers.
 //! - `demo [DIR]`: builds a demo library, virtual player and artwork from scratch.
 //! - `screenshots`: regenerates the README screenshots from the demo.
@@ -61,7 +61,16 @@ fn ci() -> Result<(), String> {
     cargo(&["fmt", "--all", "--check"])?;
     cargo(&["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])?;
     cargo(&["test", "--workspace"])?;
-    layers::check()
+    layers::check()?;
+    // Dependency licences and sources (deny.toml). Skipped, with a note, when cargo-deny is not
+    // installed: `cargo install cargo-deny`.
+    match Command::new(env!("CARGO")).args(["deny", "--version"]).output() {
+        Ok(out) if out.status.success() => cargo(&["deny", "check"]),
+        _ => {
+            eprintln!("note: cargo-deny is not installed; dependency licences were not checked");
+            Ok(())
+        }
+    }
 }
 
 fn screenshots(demo_dir: PathBuf) -> Result<(), String> {

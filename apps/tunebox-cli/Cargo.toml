@@ -4,6 +4,7 @@ description = "TuneBox from the command line: import, browse, play, rip CDs and 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

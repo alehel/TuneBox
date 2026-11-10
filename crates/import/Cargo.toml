@@ -4,6 +4,7 @@ description = "TuneBox import: finds audio files, reads their tags and files the
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

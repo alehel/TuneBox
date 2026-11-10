@@ -2,7 +2,7 @@
 //! captures the window and saves it as a PNG, then quits. The README's pictures come from here.
 
 use crate::app::TuneBoxApp;
-use crate::dialogs::{Dialog, GetInfoDialog, SmartPlaylistDialog};
+use crate::dialogs::{Dialog, GetInfoDialog, PreferencesDialog, SmartPlaylistDialog};
 use crate::state::{SourceItem, ViewMode};
 use egui::ColorImage;
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 7] = [
+const SCENES: [Scene; 11] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
@@ -27,6 +27,10 @@ const SCENES: [Scene; 7] = [
     Scene { name: "tunebox-get-info", setup: get_info },
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-device-sync", setup: device },
+    Scene { name: "tunebox-preferences", setup: preferences },
+    Scene { name: "tunebox-visualizer-pulse", setup: visualizer_pulse },
+    Scene { name: "tunebox-visualizer-aurora", setup: visualizer_aurora },
+    Scene { name: "tunebox-visualizer-spectrum", setup: visualizer_spectrum },
 ];
 
 type Shot = Arc<Mutex<Option<Arc<ColorImage>>>>;
@@ -51,6 +55,8 @@ impl ScreenshotRunner {
         ctx.request_repaint();
         if self.frames == 0 {
             app.dialog = None;
+            app.view.show_visualizer = false;
+            app.visualizer.controls_pinned = false;
             (scene.setup)(app);
         }
         self.frames += 1;
@@ -156,4 +162,41 @@ fn device(app: &mut TuneBoxApp) {
     if let Some(root) = app.demo.as_ref().map(|d| d.player_volume().root) {
         app.view.select_source(SourceItem::Device(root));
     }
+}
+
+fn show_visualizer(app: &mut TuneBoxApp, look: &str, track_info: bool) {
+    let mut prefs = app.session.preferences().clone();
+    prefs.visualizer_style = look.to_owned();
+    prefs.visualizer_track_info = track_info;
+    app.session.set_preferences(prefs);
+    app.view.select_source(SourceItem::Music);
+    app.view.show_visualizer = true;
+}
+
+fn visualizer_pulse(app: &mut TuneBoxApp) {
+    show_visualizer(app, "pulse", true);
+}
+
+fn visualizer_aurora(app: &mut TuneBoxApp) {
+    show_visualizer(app, "aurora", false);
+    // Show the controls, as when the pointer has just moved.
+    app.visualizer.controls_pinned = true;
+}
+
+fn visualizer_spectrum(app: &mut TuneBoxApp) {
+    show_visualizer(app, "spectrum", true);
+}
+
+/// Preferences with the demo's music folder chosen and protected (shown, not saved).
+fn preferences(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    let mut prefs = app.session.preferences().clone();
+    if let Some(track) = app.session.library().tracks().next() {
+        prefs.music_folder = track.location.ancestors().nth(3).map(std::path::Path::to_path_buf);
+    }
+    prefs.music_folder_read_only = true;
+    if let Some(home) = std::env::var_os("HOME") {
+        prefs.media_folder = std::path::PathBuf::from(home).join("TuneBox Media");
+    }
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(&prefs))));
 }

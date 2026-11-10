@@ -166,6 +166,9 @@ impl Session {
         if self.jobs.is_running(JobKind::Rip) {
             return Err(EngineError::Busy("Importing the CD"));
         }
+        if !crate::files::may_write(&self.prefs, &self.prefs.media_folder) {
+            return Err(EngineError::Protected(self.prefs.media_folder.clone()));
+        }
         let cd = self.cd.as_ref().ok_or(EngineError::NoDisc)?;
         let tracks: Vec<u8> = cd
             .audio_numbers()

@@ -11,6 +11,7 @@ use crate::panels::{
 };
 use crate::screenshots::ScreenshotRunner;
 use crate::state::{SourceItem, ViewMode, ViewState};
+use crate::visualizer::VisualizerView;
 use crate::{shortcuts, theme};
 use egui::{Frame, Rect, pos2};
 use std::time::{Duration, Instant};
@@ -26,17 +27,17 @@ const DISC_SCAN: Duration = Duration::from_secs(8);
 
 /// Opens the library the options point at.
 pub fn open_session(options: &LaunchOptions) -> Result<Session, String> {
-    let folder = match (&options.demo, &options.library_dir) {
-        (Some(demo), _) => demo.join("library"),
-        (None, Some(dir)) => dir.clone(),
-        (None, None) => tunebox_platform::tunebox_folder(),
+    let paths = match (&options.demo, &options.library_dir) {
+        (Some(demo), _) => tunebox_platform::app_paths(&demo.join("library")),
+        (None, Some(dir)) => tunebox_platform::app_paths(dir),
+        (None, None) => tunebox_platform::default_paths(),
     };
     let player = if options.silent || options.demo.is_some() {
         Player::with_output(tunebox_engine::NullOutput::default())
     } else {
         player()
     };
-    Session::open(tunebox_platform::app_paths(&folder), player).map_err(|e| e.to_string())
+    Session::open(paths, player).map_err(|e| e.to_string())
 }
 
 #[cfg(feature = "sound")]
@@ -54,6 +55,7 @@ pub struct TuneBoxApp {
     pub(crate) view: ViewState,
     pub(crate) dialog: Option<Dialog>,
     pub(crate) artwork: ArtworkCache,
+    pub(crate) visualizer: VisualizerView,
     pub(crate) demo: Option<Demo>,
     ctx: egui::Context,
     toasts: Toasts,
@@ -64,7 +66,12 @@ pub struct TuneBoxApp {
 }
 
 impl TuneBoxApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, mut session: Session, options: LaunchOptions) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        mut session: Session,
+        options: LaunchOptions,
+        extra_looks: Vec<Box<dyn tunebox_visualizer::Visualizer>>,
+    ) -> Self {
         theme::install(&cc.egui_ctx);
         let demo = options.demo.as_deref().map(|dir| Demo::start(dir, &mut session));
         let screenshots = options.screenshots.clone().map(ScreenshotRunner::new);
@@ -73,6 +80,7 @@ impl TuneBoxApp {
             view: ViewState::new(),
             dialog: None,
             artwork: ArtworkCache::new(),
+            visualizer: VisualizerView::new(extra_looks),
             demo,
             ctx: cc.egui_ctx.clone(),
             toasts: Toasts::default(),
@@ -193,6 +201,10 @@ impl TuneBoxApp {
                 self.view.selection.clear();
             }
             Action::SetPreferences(prefs) => self.session.set_preferences(*prefs),
+            Action::AddToLibrary(paths) => {
+                let result = self.session.import(paths);
+                self.report(result);
+            }
             Action::SaveSmartPlaylist { id, name, rules } => self.save_smart_playlist(id, &name, rules),
         }
     }
@@ -244,8 +256,15 @@ impl TuneBoxApp {
                 prefs.show_browser = !prefs.show_browser;
                 self.session.set_preferences(prefs);
             }
-            CommandId::AsList => self.view.view_mode = ViewMode::List,
-            CommandId::AsAlbums => self.view.view_mode = ViewMode::Albums,
+            CommandId::AsList => {
+                self.view.view_mode = ViewMode::List;
+                self.view.show_visualizer = false;
+            }
+            CommandId::AsAlbums => {
+                self.view.view_mode = ViewMode::Albums;
+                self.view.show_visualizer = false;
+            }
+            CommandId::Visualizer => self.view.show_visualizer = !self.view.show_visualizer,
             CommandId::PlayPause => self.play_pause(),
             CommandId::NextTrack => self.session.next_track(),
             CommandId::PreviousTrack => self.session.previous_track(),
@@ -420,7 +439,8 @@ impl eframe::App for TuneBoxApp {
                 .show(ui, |ui| {
                     sidebar::show(ui, &mut cx);
                 });
-            egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| central(ui, &mut cx));
+            let visualizer = &mut self.visualizer;
+            egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| central(ui, &mut cx, visualizer));
         }
         if let Some(dialog) = &mut self.dialog
             && !dialog.show(&self.ctx, &self.session, &mut self.artwork, &mut actions)
@@ -453,8 +473,12 @@ impl eframe::App for TuneBoxApp {
     }
 }
 
-/// The middle of the window: whatever the selected source shows.
-fn central(ui: &mut egui::Ui, cx: &mut PanelContext) {
+/// The middle of the window: the visualizer, or whatever the selected source shows.
+fn central(ui: &mut egui::Ui, cx: &mut PanelContext, visualizer: &mut VisualizerView) {
+    if cx.view.show_visualizer {
+        visualizer.show(ui, cx);
+        return;
+    }
     let rect = ui.max_rect();
     match cx.view.source.clone() {
         SourceItem::Cd => cd_view::show(ui, cx),

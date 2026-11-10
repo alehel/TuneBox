@@ -16,4 +16,9 @@ pub enum EngineError {
     NoDisc,
     #[error("{0} is already in progress")]
     Busy(&'static str),
+    #[error(
+        "{} is inside your protected music folder, which TuneBox does not change. Choose a media folder outside it in Preferences, or turn off the protection.",
+        .0.display()
+    )]
+    Protected(std::path::PathBuf),
 }

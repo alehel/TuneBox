@@ -24,7 +24,14 @@ pub fn copy_into_media_folder(
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::copy(source, &target)?;
+    // Copy beside the target and rename when complete, so a failed copy leaves no torn file.
+    let mut part_name = target.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    part_name.push(".part");
+    let part = target.with_file_name(part_name);
+    if let Err(e) = std::fs::copy(source, &part).and_then(|_| std::fs::rename(&part, &target)) {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
     Ok(target)
 }
 

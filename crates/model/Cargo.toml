@@ -4,6 +4,7 @@ description = "TuneBox domain model: tracks, playlists, smart playlist rules, so
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

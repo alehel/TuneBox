@@ -27,13 +27,18 @@ mod screenshots;
 mod shortcuts;
 mod state;
 mod theme;
+mod visualizer;
 
 use std::path::PathBuf;
+
+/// The visualizer API, for looks written outside TuneBox (see [`run_with`]).
+pub use tunebox_visualizer;
 
 /// How the app was started.
 #[derive(Clone, Debug, Default)]
 pub struct LaunchOptions {
-    /// The folder holding the library (default: the platform's music folder).
+    /// A folder holding the library, preferences and media (default: the library and
+    /// preferences in the platform's application data folder).
     pub library_dir: Option<PathBuf>,
     /// Play without a sound device (the player runs silently in real time).
     pub silent: bool,
@@ -47,6 +52,15 @@ pub struct LaunchOptions {
 
 /// Opens the main window and runs until it is closed.
 pub fn run(options: LaunchOptions) -> Result<(), String> {
+    run_with(options, Vec::new())
+}
+
+/// Like [`run`], with extra visualizer looks from other crates (compile-time plug-ins). A look
+/// with the id of a built-in replaces it.
+pub fn run_with(
+    options: LaunchOptions,
+    extra_looks: Vec<Box<dyn tunebox_visualizer::Visualizer>>,
+) -> Result<(), String> {
     let session = app::open_session(&options)?;
     let renderer = if options.opengl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let native = eframe::NativeOptions {
@@ -58,6 +72,10 @@ pub fn run(options: LaunchOptions) -> Result<(), String> {
             .with_min_inner_size([860.0, 520.0]),
         ..eframe::NativeOptions::default()
     };
-    eframe::run_native("TuneBox", native, Box::new(move |cc| Ok(Box::new(app::TuneBoxApp::new(cc, session, options)))))
-        .map_err(|e| e.to_string())
+    eframe::run_native(
+        "TuneBox",
+        native,
+        Box::new(move |cc| Ok(Box::new(app::TuneBoxApp::new(cc, session, options, extra_looks)))),
+    )
+    .map_err(|e| e.to_string())
 }

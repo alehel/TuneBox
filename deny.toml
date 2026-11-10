@@ -1,0 +1,110 @@
+# Dependency policy, checked by `cargo deny check` (part of the quality gates in AGENTS.md).
+
+[graph]
+all-features = true
+
+[advisories]
+# Report unmaintained crates we depend on directly; deeper ones come with egui and its
+# accessibility stack and are theirs to replace.
+unmaintained = "workspace"
+
+[licenses]
+# Every licence in the dependency tree must be one of these (an `OR` needs only one of them).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Zlib",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    # clipboard-win (Windows clipboard, through egui): permissive, like MIT.
+    "BSL-1.0",
+    # webpki-roots (the CA list rustls uses for the MusicBrainz lookup): permissive data licence.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+# MPL-2.0 is weak, file-level copyleft: these crates are used unmodified, as the Craft libraries
+# use them. symphonia decodes MP3, FLAC, ALAC and Vorbis inside craft-audio until native decoders
+# replace it; option-ext comes in through `dirs`.
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-core"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-metadata"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-common"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-bundle-flac"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-bundle-mp3"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-codec-aac"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-codec-adpcm"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-codec-alac"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-codec-pcm"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-codec-vorbis"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-format-caf"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-format-isomp4"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-format-mkv"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-format-ogg"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "symphonia-format-riff"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "option-ext"
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/storytold/craft-libs"]

@@ -2,6 +2,8 @@
 
 use crate::engine::{Command, Engine};
 use crate::output::{OutputFactory, Shared};
+use rtrb::Consumer;
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -36,12 +38,30 @@ pub enum PlayerEvent {
     Failed { path: Option<PathBuf>, message: String },
 }
 
+/// The most recent audio that was played, for visualizers.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AudioTap {
+    /// Mono samples, oldest first.
+    pub samples: Vec<f32>,
+    pub sample_rate: u32,
+}
+
+/// The reading end of the visualizer tap and the last few thousand samples read from it.
+struct TapReader {
+    reader: Consumer<f32>,
+    recent: VecDeque<f32>,
+}
+
+/// How many recent samples are kept for [`Player::recent_audio`].
+const RECENT_SAMPLES: usize = 8192;
+
 /// Plays audio files on a dedicated thread.
 pub struct Player {
     commands: Sender<Command>,
     events: Receiver<PlayerEvent>,
     status: Arc<Mutex<Status>>,
     shared: Arc<Shared>,
+    tap: Mutex<TapReader>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -57,7 +77,9 @@ impl Player {
         let (commands, command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
         let status = Arc::new(Mutex::new(Status::default()));
-        let shared = Arc::new(Shared::new());
+        let (shared, tap_reader) = Shared::new();
+        let shared = Arc::new(shared);
+        let tap = Mutex::new(TapReader { reader: tap_reader, recent: VecDeque::with_capacity(RECENT_SAMPLES) });
         let (engine_shared, engine_status) = (Arc::clone(&shared), Arc::clone(&status));
         let factory: Box<dyn OutputFactory> = Box::new(output);
         // The engine is built on its own thread: the output stream it will own must not move.
@@ -66,7 +88,7 @@ impl Player {
             .spawn(move || Engine::new(factory, engine_shared, engine_status, event_tx).run(command_rx))
             .map_err(|e| log::error!("could not start the player thread: {e}"))
             .ok();
-        Self { commands, events, status, shared, thread }
+        Self { commands, events, status, shared, tap, thread }
     }
 
     fn send(&self, command: Command) {
@@ -102,6 +124,25 @@ impl Player {
 
     pub fn volume(&self) -> f32 {
         self.shared.volume()
+    }
+
+    /// Up to `frames` of the audio played most recently (mono, before the volume), or `None`
+    /// when nothing is playing.
+    pub fn recent_audio(&self, frames: usize) -> Option<AudioTap> {
+        let mut tap = self.tap.lock().unwrap_or_else(PoisonError::into_inner);
+        let TapReader { reader, recent } = &mut *tap;
+        while let Ok(sample) = reader.pop() {
+            if recent.len() == RECENT_SAMPLES {
+                recent.pop_front();
+            }
+            recent.push_back(sample);
+        }
+        if !self.shared.playing.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        let sample_rate = self.shared.output_rate.load(std::sync::atomic::Ordering::Relaxed);
+        let skip = recent.len().saturating_sub(frames);
+        Some(AudioTap { samples: recent.iter().skip(skip).copied().collect(), sample_rate })
     }
 
     pub fn status(&self) -> Status {

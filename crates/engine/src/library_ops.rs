@@ -20,6 +20,9 @@ impl Session {
         if self.jobs.is_running(JobKind::Import) {
             return Err(EngineError::Busy("An import"));
         }
+        if self.prefs.copy_to_media_folder && !crate::files::may_write(&self.prefs, &self.prefs.media_folder) {
+            return Err(EngineError::Protected(self.prefs.media_folder.clone()));
+        }
         let known: HashSet<PathBuf> = self.library.tracks().map(|t| t.location.clone()).collect();
         let options = ImportOptions {
             media_folder: self.prefs.media_folder.clone(),
@@ -60,14 +63,22 @@ impl Session {
         }
     }
 
-    /// Edits a track's details, writing them into its file as well. If the file cannot be
-    /// written (read-only, missing) the library still takes the edit and a warning says why.
+    /// Edits a track's details, writing them into its file as well, unless the file is in the
+    /// protected music folder: then only the library changes. If the file cannot be written
+    /// (read-only, missing) the library still takes the edit and a warning says why.
     pub fn edit_track(&mut self, id: TrackId, meta: TrackMeta) -> Result<(), EngineError> {
         let location =
             self.library.track(id).map(|t| t.location.clone()).ok_or(tunebox_library::LibraryError::NoSuchTrack(id))?;
-        if let Err(e) = tunebox_tags::write(&location, &meta) {
-            self.notices
-                .push(Notice::warning(format!("The details were saved in the library but not in the file: {e}")));
+        if crate::files::may_write(&self.prefs, &location) {
+            if let Err(e) = tunebox_tags::write(&location, &meta) {
+                self.notices
+                    .push(Notice::warning(format!("The details were saved in the library but not in the file: {e}")));
+            }
+        } else if !self.protected_edit_noted {
+            self.notices.push(Notice::info(
+                "The song is in your protected music folder, so the change is kept in TuneBox's library only.",
+            ));
+            self.protected_edit_noted = true;
         }
         self.library.set_meta(id, meta)?;
         self.library_changed();
@@ -89,16 +100,24 @@ impl Session {
     }
 
     /// Removes tracks from the library (and from every playlist). With `delete_files` their
-    /// files are deleted from disk too.
+    /// files are deleted from disk too, except files in the protected music folder.
     pub fn remove_tracks(&mut self, ids: &[TrackId], delete_files: bool) {
         if self.playback.current().is_some_and(|c| ids.contains(&c)) {
             self.stop();
         }
         let removed = self.library.remove_tracks(ids);
         if delete_files {
-            let failed = removed.iter().filter(|t| std::fs::remove_file(&t.location).is_err()).count();
+            let (allowed, protected): (Vec<_>, Vec<_>) =
+                removed.iter().partition(|t| crate::files::may_write(&self.prefs, &t.location));
+            let failed = allowed.iter().filter(|t| std::fs::remove_file(&t.location).is_err()).count();
             if failed > 0 {
                 self.notices.push(Notice::warning(format!("{failed} files could not be deleted from disk.")));
+            }
+            if !protected.is_empty() {
+                self.notices.push(Notice::info(format!(
+                    "{} songs were removed from the library only: their files are in your protected music folder.",
+                    protected.len()
+                )));
             }
         }
         self.library_changed();

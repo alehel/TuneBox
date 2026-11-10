@@ -25,7 +25,7 @@ use tunebox_engine::{NoticeLevel, Player, Session, Source, SyncMode, TrackQuery,
 #[derive(Parser)]
 #[command(name = "tunebox-cli", version, about = "TuneBox from the command line")]
 struct Cli {
-    /// The folder holding the library (default: ~/Music/TuneBox).
+    /// A folder holding the library, preferences and media, instead of the usual places.
     #[arg(long, global = true)]
     library_dir: Option<PathBuf>,
     #[command(subcommand)]
@@ -90,6 +90,17 @@ enum Command {
         #[arg(long = "playlist")]
         playlists: Vec<String>,
     },
+    /// Show or set your music folder and whether TuneBox may change it.
+    MusicFolder {
+        /// The folder (omit to show the current setting).
+        path: Option<PathBuf>,
+        /// Let TuneBox write into it (edit tags, delete files). Read-only is the default.
+        #[arg(long)]
+        writable: bool,
+        /// Forget the music folder.
+        #[arg(long, conflicts_with = "path")]
+        clear: bool,
+    },
     /// List the app's commands and shortcuts.
     Commands,
 }
@@ -107,8 +118,8 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<(), String> {
-    let folder = cli.library_dir.unwrap_or_else(tunebox_platform::tunebox_folder);
-    let mut session = Session::open(tunebox_platform::app_paths(&folder), Player::new()).map_err(|e| e.to_string())?;
+    let paths = cli.library_dir.as_deref().map_or_else(tunebox_platform::default_paths, tunebox_platform::app_paths);
+    let mut session = Session::open(paths, Player::new()).map_err(|e| e.to_string())?;
     match cli.command {
         Command::Stats => {
             let all = session.query(&TrackQuery::new(Source::Music));
@@ -167,6 +178,7 @@ fn run(cli: Cli) -> Result<(), String> {
             println!("“{name}” is ready to sync.");
         }
         Command::Sync { root, playlists } => sync(&mut session, &root, &playlists)?,
+        Command::MusicFolder { path, writable, clear } => music_folder(&mut session, path, writable, clear),
         Command::Commands => {
             for command in COMMANDS {
                 let shortcut = command.shortcut.map(|s| s.label(cfg!(target_os = "macos"))).unwrap_or_default();
@@ -303,4 +315,25 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
     session.sync_device(root).map_err(|e| e.to_string())?;
     wait_for_jobs(session);
     Ok(())
+}
+
+fn music_folder(session: &mut Session, path: Option<PathBuf>, writable: bool, clear: bool) {
+    let mut prefs = session.preferences().clone();
+    if clear {
+        prefs.music_folder = None;
+    } else if let Some(path) = path {
+        prefs.music_folder = Some(path);
+        prefs.music_folder_read_only = !writable;
+    }
+    if prefs != *session.preferences() {
+        session.set_preferences(prefs);
+    }
+    let prefs = session.preferences();
+    match &prefs.music_folder {
+        Some(folder) if prefs.music_folder_read_only => {
+            println!("{} (read only: TuneBox never changes it)", folder.display())
+        }
+        Some(folder) => println!("{} (TuneBox may edit tags and delete files in it)", folder.display()),
+        None => println!("No music folder is set."),
+    }
 }

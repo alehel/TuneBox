@@ -4318,6 +4318,15 @@ dependencies = [
  "rfd",
  "tunebox-engine",
  "tunebox-platform",
+ "tunebox-visualizer",
+]
+
+[[package]]
+name = "tunebox-visualizer"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "tunebox-engine",
 ]
 
 [[package]]

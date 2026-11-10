@@ -28,6 +28,7 @@ pub enum Glyph {
     ListView,
     GridView,
     NowPlaying,
+    Visualizer,
 }
 
 /// Paints `glyph` into `rect`.
@@ -109,6 +110,12 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
             }
         }
         Glyph::NowPlaying => speaker(painter, &r, color, 1),
+        Glyph::Visualizer => {
+            for (i, height) in [0.35, 0.7, 0.5, 0.85, 0.45].into_iter().enumerate() {
+                let x = 0.1 + i as f32 * 0.17;
+                painter.rect_filled(Rect::from_min_max(r.at(x, 0.92 - height), r.at(x + 0.12, 0.92)), 1.0, color);
+            }
+        }
     }
 }
 

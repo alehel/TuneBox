@@ -1,10 +1,10 @@
 //! Sound outputs. An output pulls samples from the player's ring buffer in its own callback;
 //! [`Shared`] carries the few things the player and the callback both touch.
 
-use rtrb::Consumer;
+use rtrb::{Consumer, Producer, RingBuffer};
 use std::any::Any;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// State shared between the player thread, the [`crate::Player`] handle and the output callback.
@@ -21,16 +21,29 @@ pub struct Shared {
     /// Set by the player to have the callback discard everything queued; cleared by the
     /// callback once done.
     pub(crate) flush: AtomicBool,
+    /// Mono copies of what was just played, for visualizers. Only the output callback locks it,
+    /// with `try_lock`, so it never waits.
+    tap: Mutex<Producer<f32>>,
+    /// The output's sample rate, for reading the tap.
+    pub(crate) output_rate: AtomicU32,
 }
 
+/// Seconds of played audio the tap holds for a visualizer to read.
+const TAP_FRAMES: usize = 16_384;
+
 impl Shared {
-    pub(crate) fn new() -> Self {
-        Self {
+    /// The shared state and the reading end of its tap.
+    pub(crate) fn new() -> (Self, Consumer<f32>) {
+        let (tap, tap_reader) = RingBuffer::new(TAP_FRAMES);
+        let shared = Self {
             volume: AtomicU32::new(1.0f32.to_bits()),
             playing: AtomicBool::new(false),
             played_frames: AtomicU64::new(0),
             flush: AtomicBool::new(false),
-        }
+            tap: Mutex::new(tap),
+            output_rate: AtomicU32::new(0),
+        };
+        (shared, tap_reader)
     }
 
     pub fn volume(&self) -> f32 {
@@ -57,6 +70,7 @@ impl Shared {
             return;
         }
         let (filled, rest) = queue.pop_partial_slice(out);
+        self.feed_tap(filled, channels);
         let volume = self.volume();
         // A perceptual curve: the slider's midpoint sounds like half as loud.
         let gain = volume * volume;
@@ -64,6 +78,20 @@ impl Shared {
         let frames = filled.len() / usize::from(channels.max(1));
         rest.fill(0.0);
         self.played_frames.fetch_add(frames as u64, Ordering::Relaxed);
+    }
+}
+
+impl Shared {
+    /// Copies played audio, mixed to mono and before the volume, into the visualizer tap.
+    /// When the reader falls behind, new audio is dropped rather than waited for.
+    fn feed_tap(&self, samples: &[f32], channels: u16) {
+        let Ok(mut tap) = self.tap.try_lock() else { return };
+        let width = usize::from(channels.max(1));
+        for frame in samples.chunks_exact(width) {
+            if tap.push(frame.iter().sum::<f32>() / width as f32).is_err() {
+                break;
+            }
+        }
     }
 }
 
@@ -249,7 +277,7 @@ mod tests {
 
     #[test]
     fn fill_applies_volume_and_pads_with_silence() {
-        let shared = Shared::new();
+        let (shared, _tap) = Shared::new();
         shared.set_volume(0.5);
         shared.playing.store(true, Ordering::Relaxed);
         let (mut producer, mut consumer) = rtrb::RingBuffer::new(16);
@@ -262,7 +290,7 @@ mod tests {
 
     #[test]
     fn paused_output_keeps_the_queue() {
-        let shared = Shared::new();
+        let (shared, _tap) = Shared::new();
         let (mut producer, mut consumer) = rtrb::RingBuffer::new(16);
         let _ = producer.push_partial_slice(&[1.0, 1.0]);
         let mut out = [9.0; 2];
@@ -273,7 +301,7 @@ mod tests {
 
     #[test]
     fn flush_discards_the_queue() {
-        let shared = Shared::new();
+        let (shared, _tap) = Shared::new();
         shared.flush.store(true, Ordering::Relaxed);
         let (mut producer, mut consumer) = rtrb::RingBuffer::new(16);
         let _ = producer.push_partial_slice(&[1.0; 6]);
@@ -284,7 +312,7 @@ mod tests {
 
     #[test]
     fn volume_is_clamped() {
-        let shared = Shared::new();
+        let (shared, _tap) = Shared::new();
         shared.set_volume(3.0);
         assert_eq!(shared.volume(), 1.0);
         shared.set_volume(f32::NAN);

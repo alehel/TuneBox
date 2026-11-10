@@ -106,11 +106,34 @@ fn meta_from_tag(tag: &Tag) -> TrackMeta {
 
 /// Writes `meta` into the file's main tag, creating the tag if the file has none. Fields left
 /// empty in `meta` are removed from the file. Tag items TuneBox does not know are kept.
+///
+/// The edit is made on a copy next to the file, which then replaces it: if anything fails, or
+/// the computer stops half-way, the original file is untouched.
 pub fn write(path: &Path, meta: &TrackMeta) -> Result<(), TagError> {
-    let mut tag = load_primary_tag(path)?;
-    apply_meta(&mut tag, meta);
-    tag.save_to_path(path, WriteOptions::default())?;
-    Ok(())
+    rewrite_atomically(path, |copy| {
+        let mut tag = load_primary_tag(copy)?;
+        apply_meta(&mut tag, meta);
+        tag.save_to_path(copy, WriteOptions::default())?;
+        Ok(())
+    })
+}
+
+/// Runs `edit` on a copy of `path` and moves the copy over the original only when it succeeds.
+/// The copy is removed on failure, so nothing is left behind.
+fn rewrite_atomically(path: &Path, edit: impl FnOnce(&Path) -> Result<(), TagError>) -> Result<(), TagError> {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    // Hidden, and keeping the extension: lofty recognises the format by it.
+    let copy = path.with_file_name(format!(".tunebox-edit-{name}"));
+    let result = std::fs::copy(path, &copy)
+        .map_err(TagError::from)
+        .and_then(|_| edit(&copy))
+        .and_then(|()| Ok(std::fs::File::open(&copy)?.sync_all()?))
+        .and_then(|()| Ok(std::fs::rename(&copy, path)?));
+    if result.is_err() {
+        // The copy is ours and incomplete; failing to remove it changes nothing for the caller.
+        let _ = std::fs::remove_file(&copy);
+    }
+    result
 }
 
 fn load_primary_tag(path: &Path) -> Result<Tag, TagError> {
@@ -182,15 +205,17 @@ pub fn read_artwork(path: &Path) -> Result<Option<Artwork>, TagError> {
 
 /// Sets the file's front cover, replacing any existing one.
 pub fn write_artwork(path: &Path, artwork: &Artwork) -> Result<(), TagError> {
-    let mut tag = load_primary_tag(path)?;
-    tag.remove_picture_type(PictureType::CoverFront);
-    let picture = Picture::unchecked(artwork.data.clone())
-        .pic_type(PictureType::CoverFront)
-        .mime_type(MimeType::from_str(&artwork.mime))
-        .build();
-    tag.push_picture(picture);
-    tag.save_to_path(path, WriteOptions::default())?;
-    Ok(())
+    rewrite_atomically(path, |copy| {
+        let mut tag = load_primary_tag(copy)?;
+        tag.remove_picture_type(PictureType::CoverFront);
+        let picture = Picture::unchecked(artwork.data.clone())
+            .pic_type(PictureType::CoverFront)
+            .mime_type(MimeType::from_str(&artwork.mime))
+            .build();
+        tag.push_picture(picture);
+        tag.save_to_path(copy, WriteOptions::default())?;
+        Ok(())
+    })
 }
 
 /// The image type from its first bytes, for pictures stored without one.
@@ -255,6 +280,16 @@ mod tests {
         let art = Artwork { mime: "image/png".into(), data: vec![0x89, b'P', b'N', b'G', 1, 2, 3] };
         write_artwork(&path, &art).unwrap();
         assert_eq!(read_artwork(&path).unwrap(), Some(art));
+    }
+
+    #[test]
+    fn a_failed_edit_leaves_the_file_and_folder_as_they_were() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fake.mp3");
+        std::fs::write(&path, b"this is not audio at all").unwrap();
+        assert!(write(&path, &TrackMeta { title: "x".into(), ..TrackMeta::default() }).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"this is not audio at all");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no temporary copy is left behind");
     }
 
     #[test]

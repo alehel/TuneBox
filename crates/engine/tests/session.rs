@@ -60,9 +60,16 @@ fn import_two_songs(f: &mut Fixture) {
     tick_until(&mut f.session, |s| s.library().len() == 2);
 }
 
+fn copy_into_media_folder(f: &mut Fixture) {
+    let mut prefs = f.session.preferences().clone();
+    prefs.copy_to_media_folder = true;
+    f.session.set_preferences(prefs);
+}
+
 #[test]
 fn import_query_and_playlists() {
     let mut f = fixture(1.0);
+    copy_into_media_folder(&mut f);
     import_two_songs(&mut f);
     let notices = f.session.take_notices();
     assert!(notices.iter().any(|n| n.text.contains("Added 2 songs")), "{notices:?}");
@@ -162,4 +169,65 @@ fn syncs_a_player() {
     assert!(!player_root.join("Music/Quiet Harbour/Lanterns/02 Second Light.flac").exists());
     assert!(player_root.join("Playlists/Commute.m3u8").exists());
     assert_eq!(f.session.query(&TrackQuery::new(Source::Device(player_root))), [all[0]]);
+}
+
+/// Every file in `dir`, with its bytes, for before/after comparisons.
+fn snapshot(dir: &Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+    let mut files = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in std::fs::read_dir(&next).unwrap().flatten() {
+            if entry.path().is_dir() {
+                pending.push(entry.path());
+            } else {
+                files.push((entry.path(), std::fs::read(entry.path()).unwrap()));
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
+#[test]
+fn by_default_songs_are_played_where_they_are() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    let location = &f.session.track(all[0]).unwrap().location;
+    assert!(location.starts_with(f.dir.path().join("Downloads")), "{}", location.display());
+    assert!(!f.dir.path().join("TuneBox/Media").exists(), "nothing is created in the media folder");
+}
+
+#[test]
+fn a_protected_music_folder_is_never_changed() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    let downloads = f.dir.path().join("Downloads");
+    let mut prefs = f.session.preferences().clone();
+    prefs.music_folder = Some(downloads.clone());
+    prefs.music_folder_read_only = true;
+    f.session.set_preferences(prefs.clone());
+    let before = snapshot(&downloads);
+
+    // Editing details changes the library only.
+    let all = f.session.query(&TrackQuery::new(Source::Music));
+    let mut meta = f.session.track(all[0]).unwrap().meta.clone();
+    meta.title = "Renamed".into();
+    f.session.edit_track(all[0], meta).unwrap();
+    assert_eq!(f.session.track(all[0]).unwrap().title(), "Renamed");
+
+    // Deleting removes the song from the library, never the file.
+    f.session.remove_tracks(&[all[1]], true);
+    assert_eq!(f.session.library().len(), 1);
+    assert_eq!(snapshot(&downloads), before, "the protected folder is byte-for-byte unchanged");
+
+    // Copies and rips may not be filed inside it.
+    prefs.media_folder = downloads.join("TuneBox Media");
+    prefs.copy_to_media_folder = true;
+    f.session.set_preferences(prefs);
+    assert!(f.session.import(vec![downloads.clone()]).is_err());
+    f.session.read_disc(Arc::new(VirtualDrive::new("Virtual Drive", vec![1])));
+    tick_until(&mut f.session, |s| s.cd().is_some());
+    assert!(f.session.import_cd().is_err());
+    assert_eq!(snapshot(&downloads), before);
 }

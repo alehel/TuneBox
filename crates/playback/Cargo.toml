@@ -4,6 +4,7 @@ description = "TuneBox playback: the play queue with shuffle and repeat, and an 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

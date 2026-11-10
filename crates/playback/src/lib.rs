@@ -21,6 +21,7 @@
     clippy::unreachable
 )]
 
+pub mod analysis;
 mod convert;
 mod engine;
 mod output;
@@ -30,5 +31,5 @@ mod queue;
 #[cfg(feature = "cpal")]
 pub use output::CpalOutput;
 pub use output::{NullOutput, OutputFactory, OutputFormat, Shared};
-pub use player::{PlayState, Player, PlayerEvent, Status};
+pub use player::{AudioTap, PlayState, Player, PlayerEvent, Status};
 pub use queue::{PlayQueue, RepeatMode};

@@ -12,8 +12,13 @@ use tunebox_playback::RepeatMode;
 pub struct Preferences {
     /// Where imported and ripped music is kept.
     pub media_folder: PathBuf,
-    /// "Copy files to the media folder when adding to library".
+    /// "Copy files to the media folder when adding to library". Off by default: songs are
+    /// played from where they are and nothing is added to the listener's folders.
     pub copy_to_media_folder: bool,
+    /// The listener's own music folder, if they chose one.
+    pub music_folder: Option<PathBuf>,
+    /// Never create, change or delete anything in `music_folder`.
+    pub music_folder_read_only: bool,
     /// What CDs are ripped to.
     pub rip_format: LosslessFormat,
     /// Look up CD track names on MusicBrainz as soon as a disc is inserted. Off by default:
@@ -25,6 +30,10 @@ pub struct Preferences {
     pub visible_columns: Vec<Column>,
     /// Whether the column browser is shown above the track list.
     pub show_browser: bool,
+    /// The visualizer look, by the frontend's name for it.
+    pub visualizer_style: String,
+    /// Show the playing track's details over the visualizer.
+    pub visualizer_track_info: bool,
 }
 
 impl Preferences {
@@ -64,7 +73,9 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             media_folder: PathBuf::new(),
-            copy_to_media_folder: true,
+            copy_to_media_folder: false,
+            music_folder: None,
+            music_folder_read_only: true,
             rip_format: LosslessFormat::Flac,
             lookup_cd_names_automatically: false,
             volume: 0.8,
@@ -72,6 +83,8 @@ impl Default for Preferences {
             repeat: RepeatMode::Off,
             visible_columns: Column::DEFAULT_VISIBLE.to_vec(),
             show_browser: true,
+            visualizer_style: String::new(),
+            visualizer_track_info: true,
         }
     }
 }

@@ -4,6 +4,7 @@ description = "TuneBox engine façade: the session every frontend talks to, back
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

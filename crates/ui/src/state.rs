@@ -115,6 +115,8 @@ pub struct ViewState {
     pub selection: Selection,
     /// The artwork pane at the bottom of the source list.
     pub show_artwork: bool,
+    /// The visualizer fills the middle of the window instead of the source.
+    pub show_visualizer: bool,
     /// Set to move keyboard focus to the search field on the next frame.
     pub focus_search: bool,
     key: Option<RowsKey>,
@@ -133,6 +135,7 @@ impl ViewState {
             view_mode: ViewMode::List,
             selection: Selection::default(),
             show_artwork: true,
+            show_visualizer: false,
             focus_search: false,
             key: None,
             rows: Vec::new(),

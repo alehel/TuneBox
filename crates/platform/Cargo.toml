@@ -4,6 +4,7 @@ description = "TuneBox operating-system services: where files live, mounted volu
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

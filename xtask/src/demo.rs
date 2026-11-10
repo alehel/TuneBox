@@ -206,8 +206,8 @@ pub fn build(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// A quiet three-note figure, different for every track. Mono content in a stereo file, so FLAC
-/// stores it compactly.
+/// A quiet three-note figure over a soft kick drum, different for every track. Mono content in a
+/// stereo file, so FLAC stores it compactly.
 fn write_audio(path: &Path, seconds: u32, seed: usize) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -223,7 +223,13 @@ fn write_audio(path: &Path, seconds: u32, seed: usize) -> Result<(), String> {
             .map(|i| {
                 let t = (second * block + i) as f32 / RATE as f32;
                 let envelope = 1.0 - (i as f32 / block as f32) * 0.6;
-                (t * note * std::f32::consts::TAU).sin() * 0.05 * envelope
+                let tone: f32 = [(1.0, 1.0), (2.0, 0.5), (3.0, 0.3), (4.0, 0.2), (6.0, 0.1)]
+                    .iter()
+                    .map(|(harmonic, weight)| (t * note * harmonic * std::f32::consts::TAU).sin() * weight)
+                    .sum();
+                let beat = (i % (block / 2)) as f32 / RATE as f32;
+                let kick = (beat * 55.0 * std::f32::consts::TAU).sin() * (-beat * 14.0).exp();
+                tone * 0.03 * envelope + kick * 0.06
             })
             .collect();
         writer.write(&[samples.clone(), samples]).map_err(|e| e.to_string())?;

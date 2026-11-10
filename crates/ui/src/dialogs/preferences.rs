@@ -26,7 +26,7 @@ impl PreferencesDialog {
 
     pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
         let (tab, draft) = (&mut self.tab, &mut self.draft);
-        let result = window(ctx, "Preferences", 520.0, "OK", |ui| {
+        let result = window(ctx, "Preferences", 560.0, "OK", |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(tab, Tab::General, "General");
                 ui.selectable_value(tab, Tab::Importing, "Importing");
@@ -35,7 +35,7 @@ impl PreferencesDialog {
             ui.separator();
             ui.add_space(4.0);
             match tab {
-                Tab::General => general(ui, draft),
+                Tab::General => general(ui, draft, actions),
                 Tab::Importing => importing(ui, draft),
                 Tab::Columns => columns(ui, draft),
             }
@@ -51,10 +51,12 @@ impl PreferencesDialog {
     }
 }
 
-fn general(ui: &mut egui::Ui, prefs: &mut Preferences) {
+fn general(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
+    music_folder(ui, prefs, actions);
+    ui.separator();
     ui.label(RichText::new("TuneBox Media folder location").strong());
     ui.horizontal(|ui| {
-        ui.label(prefs.media_folder.display().to_string());
+        ui.label(tunebox_platform::display_path(&prefs.media_folder));
         if ui.button("Change…").clicked()
             && let Some(folder) = rfd::FileDialog::new().set_directory(&prefs.media_folder).pick_folder()
         {
@@ -64,8 +66,52 @@ fn general(ui: &mut egui::Ui, prefs: &mut Preferences) {
     ui.add_space(6.0);
     ui.checkbox(&mut prefs.copy_to_media_folder, "Copy files to the TuneBox Media folder when adding to library");
     ui.label(
-        RichText::new("Copies are filed by artist and album. Unchecked, songs stay where they are.").weak().size(11.0),
+        RichText::new("Off: songs play from where they are and nothing is added to your folders. On: copies are filed by artist and album. CD imports always go to the media folder.")
+            .weak()
+            .size(11.0),
     );
+    if prefs.music_folder_read_only && prefs.music_folder.as_ref().is_some_and(|m| prefs.media_folder.starts_with(m)) {
+        ui.colored_label(
+            egui::Color32::from_rgb(0xB0, 0x30, 0x30),
+            "The media folder is inside your read-only music folder, so CD imports and copies are not possible. Choose another media folder.",
+        );
+    }
+}
+
+/// The listener's own music folder, and protecting it.
+fn music_folder(ui: &mut egui::Ui, prefs: &mut Preferences, actions: &mut Vec<Action>) {
+    ui.label(RichText::new("Your music folder").strong());
+    ui.horizontal(|ui| {
+        match &prefs.music_folder {
+            Some(folder) => ui.label(tunebox_platform::display_path(folder)),
+            None => ui.label(RichText::new("Not chosen").weak()),
+        };
+        if ui.button("Choose…").clicked()
+            && let Some(folder) = rfd::FileDialog::new().set_title("Your Music Folder").pick_folder()
+        {
+            prefs.music_folder = Some(folder);
+        }
+        if let Some(folder) = prefs.music_folder.clone() {
+            if ui.button("Add to Library").on_hover_text("Adds every song in the folder, in place").clicked() {
+                actions.push(Action::AddToLibrary(vec![folder]));
+            }
+            if ui.button("Forget").clicked() {
+                prefs.music_folder = None;
+            }
+        }
+    });
+    ui.add_enabled_ui(prefs.music_folder.is_some(), |ui| {
+        ui.checkbox(
+            &mut prefs.music_folder_read_only,
+            "Read only: never change, move or delete anything in this folder",
+        );
+    });
+    ui.label(
+        RichText::new("Edits to songs in a read-only folder are kept in TuneBox's library; deleting a song only removes it from the library.")
+            .weak()
+            .size(11.0),
+    );
+    ui.add_space(4.0);
 }
 
 fn importing(ui: &mut egui::Ui, prefs: &mut Preferences) {

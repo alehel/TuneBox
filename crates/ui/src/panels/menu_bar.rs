@@ -34,6 +34,7 @@ fn is_on(id: CommandId, cx: &PanelContext) -> bool {
         CommandId::Shuffle => cx.session.shuffle(),
         CommandId::Repeat => cx.session.repeat() != RepeatMode::Off,
         CommandId::ShowBrowser => cx.session.preferences().show_browser,
+        CommandId::Visualizer => cx.view.show_visualizer,
         CommandId::AsList => cx.view.view_mode == ViewMode::List,
         CommandId::AsAlbums => cx.view.view_mode == ViewMode::Albums,
         _ => false,

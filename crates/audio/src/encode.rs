@@ -70,14 +70,21 @@ impl PcmWriter {
         self.encoder.write(channels, frames)
     }
 
-    /// Completes the file and moves it into place.
+    /// Completes the file and moves it into place. On failure the partial file is removed.
     pub fn finish(self) -> Result<PathBuf, AudioError> {
-        let writer = self.encoder.finish()?;
-        let file = writer.into_inner().map_err(|e| AudioError::Io(e.into_error()))?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(&self.part_path, &self.final_path)?;
-        Ok(self.final_path)
+        let Self { encoder, part_path, final_path } = self;
+        let result = encoder
+            .finish()
+            .and_then(|writer| writer.into_inner().map_err(|e| AudioError::Io(e.into_error())))
+            .and_then(|file| Ok(file.sync_all()?))
+            .and_then(|()| Ok(std::fs::rename(&part_path, &final_path)?));
+        match result {
+            Ok(()) => Ok(final_path),
+            Err(e) => {
+                let _ = std::fs::remove_file(&part_path);
+                Err(e)
+            }
+        }
     }
 
     /// Stops writing and removes the partial file.

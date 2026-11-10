@@ -49,6 +49,8 @@ pub enum Action {
         delete_files: bool,
     },
     SetPreferences(Box<Preferences>),
+    /// Import these files and folders.
+    AddToLibrary(Vec<PathBuf>),
     SaveSmartPlaylist {
         id: Option<PlaylistId>,
         name: String,

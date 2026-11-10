@@ -4,6 +4,7 @@ description = "TuneBox library: the track collection, playlists, browsing, summa
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 rust-version.workspace = true
 
 [lints]

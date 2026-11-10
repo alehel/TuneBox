@@ -18,7 +18,7 @@ use std::process::ExitCode;
 #[derive(Parser)]
 #[command(name = "tunebox", version, about = "Your music library, CD importing and player syncing")]
 struct Args {
-    /// The folder holding the library (default: ~/Music/TuneBox).
+    /// A folder holding the library, preferences and media, instead of the usual places.
     #[arg(long)]
     library_dir: Option<PathBuf>,
     /// Play without a sound device.

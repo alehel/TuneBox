@@ -63,6 +63,8 @@ pub struct Session {
     unsaved_since: Option<Instant>,
     /// Bumped whenever anything a view shows may have changed (see [`Session::revision`]).
     revision: u64,
+    /// Whether the listener has been told edits to protected songs stay in the library.
+    pub(crate) protected_edit_noted: bool,
 }
 
 impl Session {
@@ -98,6 +100,7 @@ impl Session {
             notices,
             unsaved_since: None,
             revision: 0,
+            protected_edit_noted: false,
         })
     }
 
@@ -107,6 +110,11 @@ impl Session {
 
     pub fn preferences(&self) -> &Preferences {
         &self.prefs
+    }
+
+    /// The folder TuneBox must not write to, if the listener protected one.
+    pub fn protected_folder(&self) -> Option<&std::path::Path> {
+        crate::files::protected_folder(&self.prefs)
     }
 
     /// Replaces the preferences and saves them.

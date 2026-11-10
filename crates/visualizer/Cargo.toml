@@ -1,0 +1,15 @@
+[package]
+name = "tunebox-visualizer"
+description = "TuneBox visualizers: the Visualizer trait, the audio meter that feeds it, and the built-in looks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tunebox-engine = { workspace = true }
+egui = { workspace = true }

@@ -158,6 +158,11 @@ impl Session {
         self.save_preferences();
     }
 
+    /// The last `frames` samples played (mono), for visualizers. `None` unless playing.
+    pub fn recent_audio(&self, frames: usize) -> Option<tunebox_playback::AudioTap> {
+        self.playback.player.recent_audio(frames)
+    }
+
     pub fn now_playing(&self) -> Option<NowPlaying> {
         let track = self.playback.current()?;
         let status = self.playback.player.status();

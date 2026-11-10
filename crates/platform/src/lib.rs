@@ -1,6 +1,6 @@
 //! tunebox-platform — the operating system, behind small functions.
 //!
-//! Where TuneBox keeps its files ([`app_paths`]), which volumes are mounted ([`volumes`]),
+//! Where TuneBox keeps its files ([`default_paths`]), which volumes are mounted ([`volumes`]),
 //! showing a file in the file manager ([`reveal`]) and ejecting a player or disc ([`eject`]).
 //! Nothing here holds state; the engine is told the results.
 
@@ -17,16 +17,28 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tunebox_engine::{SessionPaths, Volume};
 
-/// The folder TuneBox keeps its library in: `~/Music/TuneBox`, like a music app's own folder
-/// next to the music. Falls back to the home folder, then the current folder.
-pub fn tunebox_folder() -> PathBuf {
-    dirs::audio_dir()
-        .or_else(|| dirs::home_dir().map(|h| h.join("Music")))
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("TuneBox")
+/// Where TuneBox keeps its own files, out of the listener's music: the platform's application
+/// data folder (`~/.local/share/TuneBox`, `~/Library/Application Support/TuneBox`,
+/// `%APPDATA%\TuneBox`), falling back to the home folder.
+pub fn data_folder() -> PathBuf {
+    dirs::data_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")).join("TuneBox")
 }
 
-/// The session's files inside `folder` (normally [`tunebox_folder`]).
+/// The session's files where they normally live: the library and preferences in
+/// [`data_folder`], and the media folder (used only for copies and CD rips, created when first
+/// needed) as `~/Music/TuneBox Media`.
+pub fn default_paths() -> SessionPaths {
+    let data = data_folder();
+    let music =
+        dirs::audio_dir().or_else(|| dirs::home_dir().map(|h| h.join("Music"))).unwrap_or_else(|| PathBuf::from("."));
+    SessionPaths {
+        library_file: data.join("TuneBox Library.json"),
+        preferences_file: data.join("Preferences.json"),
+        default_media_folder: music.join("TuneBox Media"),
+    }
+}
+
+/// The session's files all inside `folder` (`--library-dir`, demos and tests).
 pub fn app_paths(folder: &Path) -> SessionPaths {
     SessionPaths {
         library_file: folder.join("TuneBox Library.json"),
