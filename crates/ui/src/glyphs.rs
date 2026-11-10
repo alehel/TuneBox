@@ -31,6 +31,8 @@ pub enum Glyph {
     Visualizer,
     Folder,
     Lock,
+    Pencil,
+    Info,
 }
 
 /// Paints `glyph` into `rect`.
@@ -130,6 +132,22 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
                 0.0,
                 Color32::from_white_alpha(90),
             );
+        }
+        Glyph::Pencil => {
+            painter.add(Shape::convex_polygon(
+                vec![r.at(0.62, 0.14), r.at(0.86, 0.38), r.at(0.38, 0.86), r.at(0.14, 0.86), r.at(0.14, 0.62)],
+                color,
+                Stroke::NONE,
+            ));
+            painter.line_segment(
+                [r.at(0.55, 0.25), r.at(0.75, 0.45)],
+                Stroke::new(r.size * 0.07, Color32::from_white_alpha(170)),
+            );
+        }
+        Glyph::Info => {
+            painter.circle_filled(r.at(0.5, 0.5), r.size * 0.46, color);
+            painter.circle_filled(r.at(0.5, 0.3), r.size * 0.07, Color32::WHITE);
+            painter.rect_filled(Rect::from_min_max(r.at(0.43, 0.42), r.at(0.57, 0.76)), r.size * 0.04, Color32::WHITE);
         }
         Glyph::Lock => {
             painter.circle_stroke(r.at(0.5, 0.38), r.size * 0.2, Stroke::new(r.size * 0.12, color));

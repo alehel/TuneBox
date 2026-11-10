@@ -3,11 +3,12 @@
 //! settings, with on/off settings as switches that carry their explanation beneath them.
 
 use crate::actions::Action;
-use crate::dialogs::window;
+use crate::dialogs::layout::{Tone, banner, card, muted, switch_row, value_row};
+use crate::dialogs::{layout, window};
 use crate::glyphs::{self, Glyph};
 use crate::panels::widgets;
 use crate::theme;
-use egui::{Align, Color32, Frame, Label, Layout, Margin, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Align, Color32, Frame, Layout, Rect, Sense, Stroke, Ui, pos2, vec2};
 use tunebox_engine::model::Column;
 use tunebox_engine::{LibraryFolder, LosslessFormat, Preferences};
 
@@ -18,26 +19,6 @@ pub enum Tab {
     Library,
     Importing,
     Columns,
-}
-
-impl Tab {
-    const ALL: [Tab; 3] = [Tab::Library, Tab::Importing, Tab::Columns];
-
-    fn label(self) -> &'static str {
-        match self {
-            Tab::Library => "Library",
-            Tab::Importing => "Importing",
-            Tab::Columns => "Columns",
-        }
-    }
-
-    fn glyph(self) -> Glyph {
-        match self {
-            Tab::Library => Glyph::Folder,
-            Tab::Importing => Glyph::Disc,
-            Tab::Columns => Glyph::ListView,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -58,8 +39,7 @@ impl PreferencesDialog {
     pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
         let (tab, draft) = (&mut self.tab, &mut self.draft);
         let result = window(ctx, "Preferences", WIDTH, "OK", |ui| {
-            tab_bar(ui, tab);
-            ui.add_space(14.0);
+            layout::tab_bar(ui, tab, &TABS);
             match tab {
                 Tab::Library => library(ui, draft, actions),
                 Tab::Importing => importing(ui, draft),
@@ -77,89 +57,13 @@ impl PreferencesDialog {
     }
 }
 
-// ----- layout pieces -----
+// ----- tabs -----
 
-/// The icon tabs, centred, in the manner of a classic preferences toolbar.
-fn tab_bar(ui: &mut Ui, current: &mut Tab) {
-    let size = vec2(92.0, 54.0);
-    let total = size.x * Tab::ALL.len() as f32;
-    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), size.y), Sense::hover());
-    let left = row.center().x - total / 2.0;
-    for (i, tab) in Tab::ALL.into_iter().enumerate() {
-        let rect = Rect::from_min_size(pos2(left + size.x * i as f32, row.top()), size);
-        let response = ui.interact(rect, ui.scope_id().with(("preferences-tab", i)), Sense::click());
-        let selected = *current == tab;
-        let painter = ui.painter();
-        if selected {
-            painter.rect_filled(rect.shrink2(vec2(6.0, 0.0)), 10.0, Color32::from_rgb(0xE4, 0xE9, 0xF2));
-        } else if response.hovered() {
-            painter.rect_filled(rect.shrink2(vec2(6.0, 0.0)), 10.0, Color32::from_black_alpha(10));
-        }
-        let color = if selected { theme::ACCENT } else { theme::GLYPH };
-        glyphs::paint(
-            painter,
-            Rect::from_center_size(rect.center() - vec2(0.0, 9.0), vec2(22.0, 22.0)),
-            tab.glyph(),
-            color,
-        );
-        let font = if selected { crate::fonts::bold(12.0) } else { egui::FontId::proportional(12.0) };
-        painter.text(rect.center() + vec2(0.0, 15.0), egui::Align2::CENTER_CENTER, tab.label(), font, color);
-        if response.clicked() {
-            *current = tab;
-        }
-    }
-}
-
-/// A rounded white card with a heading and one line of explanation.
-fn card(ui: &mut Ui, title: &str, description: &str, contents: impl FnOnce(&mut Ui)) {
-    Frame::new()
-        .fill(Color32::WHITE)
-        .stroke(Stroke::new(1.0, theme::GRID_LINE))
-        .corner_radius(10)
-        .inner_margin(Margin::symmetric(16, 14))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new(title).font(crate::fonts::bold(14.0)));
-            if description.is_empty() {
-                ui.add_space(4.0);
-            } else {
-                ui.add(Label::new(muted(description)).wrap());
-                ui.add_space(10.0);
-            }
-            contents(ui);
-        });
-    ui.add_space(12.0);
-}
-
-fn muted(text: &str) -> RichText {
-    RichText::new(text).size(12.0).color(theme::TEXT_MUTED)
-}
-
-/// A setting that is on or off: its name and explanation on the left, a switch on the right.
-fn switch_row(ui: &mut Ui, title: &str, detail: &str, value: &mut bool) {
-    ui.horizontal(|ui| {
-        let text_width = ui.available_width() - 58.0;
-        ui.allocate_ui_with_layout(vec2(text_width, 0.0), Layout::top_down(Align::Min), |ui| {
-            ui.set_width(text_width);
-            ui.label(RichText::new(title).size(13.0));
-            ui.add(Label::new(muted(detail)).wrap());
-        });
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            widgets::switch(ui, value, true);
-        });
-    });
-}
-
-/// A setting with a value: its name in a fixed-width column, then the control.
-fn value_row(ui: &mut Ui, title: &str, control: impl FnOnce(&mut Ui)) {
-    ui.horizontal(|ui| {
-        ui.allocate_ui_with_layout(vec2(130.0, 24.0), Layout::left_to_right(Align::Center), |ui| {
-            ui.set_width(130.0);
-            ui.label(RichText::new(title).size(13.0));
-        });
-        control(ui);
-    });
-}
+const TABS: [(Tab, Glyph, &str); 3] = [
+    (Tab::Library, Glyph::Folder, "Library"),
+    (Tab::Importing, Glyph::Disc, "Importing"),
+    (Tab::Columns, Glyph::ListView, "Columns"),
+];
 
 // ----- the panes -----
 
@@ -345,8 +249,10 @@ fn importing(ui: &mut Ui, prefs: &mut Preferences) {
         });
         if !tunebox_engine::files::may_write(prefs, &prefs.media_folder) {
             ui.add_space(6.0);
-            warning(
+            banner(
                 ui,
+                Tone::Warning,
+                Glyph::Lock,
                 "This folder is in a read-only library folder, so CDs cannot be imported there. Choose a writable folder.",
             );
         }
@@ -359,16 +265,6 @@ fn importing(ui: &mut Ui, prefs: &mut Preferences) {
             &mut prefs.lookup_cd_names_automatically,
         );
     });
-}
-
-fn warning(ui: &mut Ui, text: &str) {
-    Frame::new()
-        .fill(Color32::from_rgb(0xFD, 0xEE, 0xEC))
-        .corner_radius(6)
-        .inner_margin(Margin::symmetric(10, 6))
-        .show(ui, |ui| {
-            ui.add(Label::new(RichText::new(text).size(12.0).color(Color32::from_rgb(0xA3, 0x2A, 0x22))).wrap());
-        });
 }
 
 fn columns(ui: &mut Ui, prefs: &mut Preferences) {

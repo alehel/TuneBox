@@ -1,6 +1,7 @@
 //! Dialogs. One is open at a time; each edits a draft and turns it into actions on OK.
 
 mod get_info;
+mod layout;
 mod preferences;
 mod simple;
 mod smart_playlist;

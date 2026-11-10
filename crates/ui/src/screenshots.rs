@@ -19,12 +19,14 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 13] = [
+const SCENES: [Scene; 15] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-smart-playlist", setup: smart_playlist },
     Scene { name: "tunebox-smart-editor", setup: smart_editor },
     Scene { name: "tunebox-get-info", setup: get_info },
+    Scene { name: "tunebox-get-info-details", setup: get_info_details },
+    Scene { name: "tunebox-get-info-several", setup: get_info_several },
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
@@ -214,4 +216,21 @@ fn preferences_columns(app: &mut TuneBoxApp) {
     preferences(app);
     let prefs = app.session.preferences().clone();
     app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::Columns))));
+}
+
+fn get_info_details(app: &mut TuneBoxApp) {
+    get_info(app);
+    if let Some(Dialog::GetInfo(dialog)) = app.dialog.take() {
+        app.dialog = Some(Dialog::GetInfo(Box::new(dialog.on_details())));
+    }
+}
+
+/// Get Info on a whole album.
+fn get_info_several(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Music);
+    let rows = app.session.query(&TrackQuery::new(Source::Music));
+    let album: Vec<TrackId> =
+        rows.into_iter().filter(|id| app.session.track(*id).is_some_and(|t| t.meta.album == "Paper Boats")).collect();
+    app.view.selection.set(album.iter().copied());
+    app.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&app.session, album))));
 }

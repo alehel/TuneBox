@@ -1,17 +1,28 @@
-//! Get Info: a track's details, and editing them for one track or many at once.
+//! Get Info: a song's details, and editing them for one song or many at once. Two panes in the
+//! style of Preferences: Summary (artwork, rating, play history, the file) and Details (the tags,
+//! in cards).
 
 use crate::actions::Action;
 use crate::artwork::{self, ArtworkCache};
+use crate::dialogs::layout::{self, Tone, banner, card, fact_row, muted, switch_row, text_field, value_row};
 use crate::dialogs::window;
-use egui::{Grid, RichText, Ui, vec2};
+use crate::glyphs::Glyph;
+use crate::panels::widgets;
+use crate::theme;
+use egui::{Color32, RichText, Sense, Ui, vec2};
 use tunebox_engine::Session;
-use tunebox_engine::model::{Column, Track, TrackId, TrackMeta, format_bytes, format_clock};
+use tunebox_engine::model::{Column, Rating, Track, TrackId, TrackMeta, format_bytes, format_clock, format_total_time};
+
+const WIDTH: f32 = 600.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
     Summary,
-    Info,
+    Details,
 }
+
+const TABS: [(Tab, Glyph, &str); 2] =
+    [(Tab::Summary, Glyph::Info, "Summary"), (Tab::Details, Glyph::Pencil, "Details")];
 
 /// The editable fields as text. With several tracks a field holds the value they share, or is
 /// empty when they differ; only fields the listener changes are written.
@@ -128,8 +139,14 @@ impl GetInfoDialog {
         let drafts: Vec<Draft> =
             tracks.iter().filter_map(|id| session.track(*id)).map(|t| Draft::of(&t.meta)).collect();
         let original = Draft::common(&drafts);
-        let tab = if tracks.len() == 1 { Tab::Summary } else { Tab::Info };
+        let tab = if tracks.len() == 1 { Tab::Summary } else { Tab::Details };
         Self { tracks, tab, draft: original.clone(), original }
+    }
+
+    /// The same dialog, opened on the Details pane.
+    pub fn on_details(mut self) -> Self {
+        self.tab = Tab::Details;
+        self
     }
 
     pub fn show(
@@ -139,32 +156,24 @@ impl GetInfoDialog {
         artwork: &mut ArtworkCache,
         actions: &mut Vec<Action>,
     ) -> bool {
-        let single = (self.tracks.len() == 1).then(|| self.tracks.first().and_then(|id| session.track(*id))).flatten();
-        let title = match single {
-            Some(track) => track.title().to_owned(),
-            None => format!("{} songs", self.tracks.len()),
-        };
+        let tracks: Vec<&Track> = self.tracks.iter().filter_map(|id| session.track(*id)).collect();
+        let Some(first) = tracks.first().copied() else { return false };
+        let title = if tracks.len() == 1 { first.title().to_owned() } else { format!("{} Songs", tracks.len()) };
+        let protected =
+            tracks.iter().filter(|t| !tunebox_engine::files::may_write(session.preferences(), &t.location)).count();
         let (tab, draft) = (&mut self.tab, &mut self.draft);
-        let result = window(ctx, &title, 520.0, "OK", |ui| {
-            if single.is_some() {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(tab, Tab::Summary, "Summary");
-                    ui.selectable_value(tab, Tab::Info, "Info");
-                });
-                ui.separator();
-            }
-            match (*tab, single) {
-                (Tab::Summary, Some(track)) => summary(ui, track, artwork),
-                _ => info(ui, draft, single.is_none()),
-            }
+        let result = window(ctx, &title, WIDTH, "OK", |ui| {
+            layout::tab_bar(ui, tab, &TABS);
+            layout::scrolling_body(ui, |ui| match tab {
+                Tab::Summary => summary(ui, &tracks, artwork, actions),
+                Tab::Details => details(ui, draft, tracks.len(), protected),
+            });
         });
         match result {
             Some(true) => {
                 if self.draft != self.original {
-                    let edits = self
-                        .tracks
+                    let edits = tracks
                         .iter()
-                        .filter_map(|id| session.track(*id))
                         .map(|t| (t.id, self.draft.apply(&self.original, &t.meta)))
                         .filter(|(id, meta)| session.track(*id).is_some_and(|t| t.meta != *meta))
                         .collect();
@@ -178,87 +187,197 @@ impl GetInfoDialog {
     }
 }
 
-fn summary(ui: &mut Ui, track: &Track, artwork: &mut ArtworkCache) {
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(150.0, 150.0), egui::Sense::hover());
-        let texture = artwork.get(track);
-        artwork::paint(ui, rect, texture.as_ref());
-        ui.add_space(10.0);
-        ui.vertical(|ui| {
-            ui.label(RichText::new(track.title()).font(crate::fonts::bold(16.0)));
-            ui.label(&track.meta.artist);
-            ui.label(&track.meta.album);
-            ui.label(format_clock(track.file.duration));
+// ----- Summary -----
+
+fn summary(ui: &mut Ui, tracks: &[&Track], artwork: &mut ArtworkCache, actions: &mut Vec<Action>) {
+    let Some(first) = tracks.first().copied() else { return };
+    card(ui, "", "", |ui| header(ui, tracks, first, artwork, actions));
+    if let [track] = tracks {
+        card(ui, "File", "", |ui| file_facts(ui, track, actions));
+    } else {
+        let bytes: u64 = tracks.iter().map(|t| t.file.size_bytes).sum();
+        let duration = tracks.iter().map(|t| t.file.duration).sum();
+        card(ui, "Files", "", |ui| {
+            fact_row(ui, "Songs", &tracks.len().to_string());
+            fact_row(ui, "Total time", &format_total_time(duration));
+            fact_row(ui, "Total size", &format_bytes(bytes));
         });
-    });
-    ui.add_space(8.0);
-    Grid::new("summary").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
-        let mut row = |label: &str, value: String| {
-            ui.label(RichText::new(label).weak());
-            ui.label(value);
-            ui.end_row();
-        };
-        row("Kind", Column::Kind.text(track));
-        row("Size", format_bytes(track.file.size_bytes));
-        row("Bit Rate", Column::BitRate.text(track));
-        row("Sample Rate", Column::SampleRate.text(track));
-        row("Date Added", Column::DateAdded.text(track));
-        row("Play Count", track.stats.play_count.to_string());
-        row("Last Played", Column::LastPlayed.text(track));
-        ui.label(RichText::new("Where").weak());
-        ui.add(egui::Label::new(tunebox_platform::display_path(&track.location)).wrap());
-        ui.end_row();
+    }
+}
+
+/// Artwork beside the title, artist and album, the rating, and the play history as pills.
+fn header(ui: &mut Ui, tracks: &[&Track], first: &Track, artwork: &mut ArtworkCache, actions: &mut Vec<Action>) {
+    ui.horizontal_top(|ui| {
+        let (art, _) = ui.allocate_exact_size(vec2(140.0, 140.0), Sense::hover());
+        theme::soft_shadow(ui.painter(), art, 6.0, 10);
+        let texture = artwork.get(first);
+        artwork::paint(ui, art, texture.as_ref());
+        ui.add_space(16.0);
+        ui.vertical(|ui| {
+            ui.add_space(4.0);
+            let single = tracks.len() == 1;
+            let title = if single { first.title().to_owned() } else { format!("{} songs", tracks.len()) };
+            ui.label(RichText::new(title).font(crate::fonts::bold(19.0)));
+            ui.label(RichText::new(shared(tracks, |t| t.meta.artist.clone())).size(14.0));
+            let album = shared(tracks, |t| t.meta.album.clone());
+            let year = shared(tracks, |t| t.meta.year.map(|y| y.to_string()).unwrap_or_default());
+            let line = [album, year].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ");
+            ui.label(muted(&line));
+            ui.add_space(10.0);
+            rating(ui, tracks, actions);
+            if single {
+                ui.add_space(10.0);
+                history(ui, first);
+            }
+        });
     });
 }
 
-fn info(ui: &mut Ui, draft: &mut Draft, several: bool) {
-    if several {
-        ui.label(RichText::new("Fields left empty differ between the songs and are not changed.").weak().size(11.0));
-        ui.add_space(4.0);
+/// `pick` of every track if they all agree, else "Various".
+fn shared(tracks: &[&Track], pick: impl Fn(&Track) -> String) -> String {
+    let values: Vec<String> = tracks.iter().map(|t| pick(t)).collect();
+    match values.first() {
+        Some(first) if values.iter().all(|v| v == first) => first.clone(),
+        Some(_) => "Various".to_owned(),
+        None => String::new(),
     }
-    Grid::new("info").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-        let text = |ui: &mut Ui, label: &str, value: &mut String| {
-            ui.label(label);
-            ui.add(egui::TextEdit::singleline(value).desired_width(380.0));
-            ui.end_row();
-        };
-        if !several {
-            text(ui, "Name", &mut draft.title);
+}
+
+/// The stars, set straight away as in the song list.
+fn rating(ui: &mut Ui, tracks: &[&Track], actions: &mut Vec<Action>) {
+    let current = tracks
+        .first()
+        .map(|t| t.stats.rating)
+        .filter(|r| tracks.iter().all(|t| t.stats.rating == *r))
+        .unwrap_or(Rating::UNRATED);
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(62.0, 18.0), Sense::hover());
+        if let Some(rating) = widgets::rating(ui, rect, current, true, false) {
+            actions.push(Action::SetRating(tracks.iter().map(|t| t.id).collect(), rating));
         }
-        text(ui, "Artist", &mut draft.artist);
-        text(ui, "Album Artist", &mut draft.album_artist);
-        text(ui, "Album", &mut draft.album);
-        text(ui, "Genre", &mut draft.genre);
-        text(ui, "Composer", &mut draft.composer);
-        text(ui, "Grouping", &mut draft.grouping);
-        text(ui, "Comments", &mut draft.comments);
-        ui.label("Year");
-        ui.horizontal(|ui| {
+        ui.label(muted(if current.is_rated() { "Your rating" } else { "Not rated" }));
+    });
+}
+
+/// Plays, last played and date added, as small pills.
+fn history(ui: &mut Ui, track: &Track) {
+    let plays = match track.stats.play_count {
+        0 => "Never played".to_owned(),
+        1 => "Played once".to_owned(),
+        n => format!("Played {n} times"),
+    };
+    let last = track.stats.last_played.map(|d| format!("Last played {}", d.format("%-d %b %Y")));
+    let added = format!("Added {}", track.date_added.format("%-d %b %Y"));
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+        for text in std::iter::once(plays).chain(last).chain(std::iter::once(added)) {
+            pill(ui, &text);
+        }
+    });
+}
+
+fn pill(ui: &mut Ui, text: &str) {
+    let font = egui::FontId::proportional(11.5);
+    let width = ui.painter().layout_no_wrap(text.to_owned(), font.clone(), theme::TEXT).size().x + 18.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
+    ui.painter().rect_filled(rect, 11.0, Color32::from_rgb(0xEE, 0xF0, 0xF3));
+    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, font, theme::TEXT_MUTED);
+}
+
+/// Format, size, quality and where the file is.
+fn file_facts(ui: &mut Ui, track: &Track, actions: &mut Vec<Action>) {
+    fact_row(ui, "Kind", &Column::Kind.text(track));
+    fact_row(ui, "Length", &format_clock(track.file.duration));
+    fact_row(ui, "Size", &format_bytes(track.file.size_bytes));
+    let quality = [Column::BitRate.text(track), Column::SampleRate.text(track), channels(track.file.channels)]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    fact_row(ui, "Quality", &quality);
+    fact_row(ui, "Where", &tunebox_platform::display_path(&track.location));
+    value_row(ui, "", |ui| {
+        if ui.button("Show in Folder").clicked() {
+            actions.push(Action::ShowInFolder(track.id));
+        }
+    });
+}
+
+fn channels(count: Option<u8>) -> String {
+    match count {
+        Some(1) => "Mono".into(),
+        Some(2) => "Stereo".into(),
+        Some(n) => format!("{n} channels"),
+        None => String::new(),
+    }
+}
+
+// ----- Details -----
+
+fn details(ui: &mut Ui, draft: &mut Draft, count: usize, protected: usize) {
+    if count > 1 {
+        let text = format!(
+            "Editing {count} songs. Fields where they differ are empty and stay as they are unless you type in them."
+        );
+        banner(ui, Tone::Info, Glyph::Info, &text);
+    }
+    if protected > 0 {
+        let text = if count == 1 {
+            "This song is in a read-only library folder: changes are kept in TuneBox's library and the file is not touched."
+        } else {
+            "Some of these songs are in a read-only library folder: for them, changes are kept in TuneBox's library only."
+        };
+        banner(ui, Tone::Info, Glyph::Lock, text);
+    }
+    let several = count > 1;
+    card(ui, "Song", "", |ui| {
+        if !several {
+            text_field(ui, "Name", &mut draft.title, "");
+        }
+        text_field(ui, "Artist", &mut draft.artist, hint(several));
+        text_field(ui, "Composer", &mut draft.composer, hint(several));
+        text_field(ui, "Grouping", &mut draft.grouping, hint(several));
+    });
+    card(ui, "Album", "", |ui| {
+        text_field(ui, "Album", &mut draft.album, hint(several));
+        text_field(ui, "Album artist", &mut draft.album_artist, hint(several));
+        value_row(ui, "Genre", |ui| {
+            ui.add(egui::TextEdit::singleline(&mut draft.genre).hint_text(hint(several)).desired_width(200.0));
+            ui.add_space(12.0);
+            ui.label(RichText::new("Year").size(13.0).color(theme::TEXT_MUTED));
             ui.add(egui::TextEdit::singleline(&mut draft.year).desired_width(60.0));
-            ui.label("BPM");
+        });
+        value_row(ui, "Track", |ui| {
+            if !several {
+                ui.add(egui::TextEdit::singleline(&mut draft.track).desired_width(44.0));
+            }
+            ui.label(muted("of"));
+            ui.add(egui::TextEdit::singleline(&mut draft.track_total).desired_width(44.0));
+            ui.add_space(18.0);
+            ui.label(RichText::new("Disc").size(13.0).color(theme::TEXT_MUTED));
+            ui.add(egui::TextEdit::singleline(&mut draft.disc).desired_width(44.0));
+            ui.label(muted("of"));
+            ui.add(egui::TextEdit::singleline(&mut draft.disc_total).desired_width(44.0));
+            ui.add_space(18.0);
+            ui.label(RichText::new("BPM").size(13.0).color(theme::TEXT_MUTED));
             ui.add(egui::TextEdit::singleline(&mut draft.bpm).desired_width(50.0));
         });
-        ui.end_row();
-        ui.label("Track");
-        of_pair(ui, &mut draft.track, &mut draft.track_total, several);
-        ui.end_row();
-        ui.label("Disc");
-        of_pair(ui, &mut draft.disc, &mut draft.disc_total, false);
-        ui.end_row();
-        ui.label("");
-        ui.checkbox(&mut draft.compilation, "Part of a compilation");
-        ui.end_row();
+        ui.add_space(6.0);
+        switch_row(
+            ui,
+            "Part of a compilation",
+            "Filed under Compilations rather than the artist.",
+            &mut draft.compilation,
+        );
+    });
+    card(ui, "Comments", "", |ui| {
+        ui.add(egui::TextEdit::multiline(&mut draft.comments).desired_rows(3).desired_width(f32::INFINITY));
     });
 }
 
-fn of_pair(ui: &mut Ui, number: &mut String, total: &mut String, total_only: bool) {
-    ui.horizontal(|ui| {
-        if !total_only {
-            ui.add(egui::TextEdit::singleline(number).desired_width(40.0));
-        }
-        ui.label("of");
-        ui.add(egui::TextEdit::singleline(total).desired_width(40.0));
-    });
+/// The hint in an empty field when editing several songs: left empty, it is not changed.
+fn hint(several: bool) -> &'static str {
+    if several { "Keep as is" } else { "" }
 }
 
 #[cfg(test)]
