@@ -71,6 +71,8 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
         }
         let format = cx.session.preferences().rip_format.encoder_name();
         ui.label(RichText::new(format!("Imports with the {format}")).size(10.5).color(theme::TEXT_MUTED));
+        let offset = cx.session.cd_read_offset().map(|(_, offset)| offset).unwrap_or(0);
+        ui.label(RichText::new(format!("Drive read offset {offset:+} samples")).size(10.5).color(theme::TEXT_MUTED));
     });
 
     // Tracks.

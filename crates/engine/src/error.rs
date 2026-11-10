@@ -16,6 +16,8 @@ pub enum EngineError {
     Device(String),
     #[error("there is no disc in the drive")]
     NoDisc,
+    #[error("{0}")]
+    ReadOffset(String),
     #[error("{0} is already in progress")]
     Busy(&'static str),
     #[error("{0}")]

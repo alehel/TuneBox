@@ -10,7 +10,7 @@ use crate::panels::widgets;
 use crate::theme;
 use egui::{Align, Color32, Frame, Layout, Rect, Sense, Stroke, Ui, pos2, vec2};
 use tunebox_engine::model::{Column, FieldGroup};
-use tunebox_engine::{LibraryFolder, LosslessFormat, Preferences};
+use tunebox_engine::{DriveIdentity, LibraryFolder, LosslessFormat, Preferences};
 
 const WIDTH: f32 = 640.0;
 
@@ -26,30 +26,48 @@ pub enum Tab {
 pub struct PreferencesDialog {
     tab: Tab,
     draft: Preferences,
+    /// The drive holding a disc, whose read offset the Importing pane edits.
+    drive: Option<DriveIdentity>,
+    /// The read offset as typed, checked before it is saved.
+    offset_text: String,
 }
 
 impl PreferencesDialog {
-    pub fn new(current: &Preferences) -> Self {
-        Self::on_tab(current, Tab::Library)
+    pub fn new(current: &Preferences, drive: Option<DriveIdentity>) -> Self {
+        Self::on_tab(current, drive, Tab::Library)
     }
 
-    pub fn on_tab(current: &Preferences, tab: Tab) -> Self {
-        Self { tab, draft: current.clone() }
+    pub fn on_tab(current: &Preferences, drive: Option<DriveIdentity>, tab: Tab) -> Self {
+        let offset = drive.as_ref().map(|d| current.read_offset(d.key())).unwrap_or(0);
+        Self { tab, draft: current.clone(), drive, offset_text: format!("{offset:+}") }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
-        let (tab, draft) = (&mut self.tab, &mut self.draft);
+        let (tab, draft, drive, offset_text) = (&mut self.tab, &mut self.draft, &self.drive, &mut self.offset_text);
+        let mut offset = Ok(0);
         let result = window(ctx, "Preferences", WIDTH, "OK", |ui| {
             layout::tab_bar(ui, tab, &TABS);
+            offset = parse_offset(offset_text);
             layout::scrolling_body(ui, |ui| match tab {
                 Tab::Library => library(ui, draft, actions),
-                Tab::Importing => importing(ui, draft),
+                Tab::Importing => importing(ui, draft, drive.as_ref(), offset_text),
                 Tab::Columns => columns(ui, draft),
                 Tab::GetInfo => get_info_fields(ui, draft),
             });
         });
         match result {
+            // An offset no drive has: stay open on the Importing pane, which says why.
+            Some(true) if offset.is_err() => {
+                self.tab = Tab::Importing;
+                true
+            }
             Some(true) => {
+                if let (Some(drive), Ok(offset)) = (&self.drive, offset) {
+                    match offset {
+                        0 => self.draft.read_offsets.remove(drive.key()),
+                        n => self.draft.read_offsets.insert(drive.key().to_string(), n),
+                    };
+                }
                 actions.push(Action::SetPreferences(Box::new(self.draft.clone())));
                 false
             }
@@ -232,7 +250,21 @@ fn imports_badge(ui: &mut Ui) {
     ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, font, theme::ACCENT);
 }
 
-fn importing(ui: &mut Ui, prefs: &mut Preferences) {
+/// The read offset as typed: "+667", "667", "-1164"; blank means 0.
+fn parse_offset(text: &str) -> Result<i32, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(0);
+    }
+    let number: i64 = text
+        .strip_prefix('+')
+        .unwrap_or(text)
+        .parse()
+        .map_err(|_| format!("“{text}” is not a number of samples. Type a whole number such as +667 or -1164."))?;
+    tunebox_engine::check_read_offset(number)
+}
+
+fn importing(ui: &mut Ui, prefs: &mut Preferences, drive: Option<&DriveIdentity>, offset_text: &mut String) {
     card(ui, "CD import", "Every format here is lossless: every bit on the disc is kept.", |ui| {
         value_row(ui, "Import using", |ui| {
             egui::ComboBox::from_id_salt("rip-format")
@@ -275,7 +307,37 @@ fn importing(ui: &mut Ui, prefs: &mut Preferences) {
             &mut prefs.lookup_cd_names_automatically,
         );
     });
+    card(
+        ui,
+        "Drive read offset",
+        "Every CD drive reads audio a fixed number of samples early or late. Enter your drive's offset and TuneBox corrects it, so imports match the disc sample for sample. If your drive is not in the list, leave it at 0.",
+        |ui| read_offset(ui, drive, offset_text),
+    );
 }
+
+/// The read offset of the drive in use, with where to look it up.
+fn read_offset(ui: &mut Ui, drive: Option<&DriveIdentity>, offset_text: &mut String) {
+    let Some(drive) = drive else {
+        ui.label(muted("Insert a CD to set the read offset of the drive it is in."));
+        ui.add_space(4.0);
+        ui.hyperlink_to("Look up drive offsets (AccurateRip drive list)", DRIVE_OFFSET_LIST);
+        return;
+    };
+    value_row(ui, "Read offset", |ui| {
+        ui.add(egui::TextEdit::singleline(offset_text).desired_width(70.0));
+        ui.label(muted("samples"));
+        ui.hyperlink_to("Look up your drive", DRIVE_OFFSET_LIST);
+    });
+    ui.add_space(4.0);
+    ui.label(muted(&format!("Saved for {}.", drive.describe())));
+    if let Err(problem) = parse_offset(offset_text) {
+        ui.add_space(6.0);
+        banner(ui, Tone::Warning, Glyph::Disc, &problem);
+    }
+}
+
+/// AccurateRip's public list of drive read offsets. TuneBox links to it rather than copying it.
+const DRIVE_OFFSET_LIST: &str = "https://www.accuraterip.com/driveoffsets.htm";
 
 fn columns(ui: &mut Ui, prefs: &mut Preferences) {
     card(ui, "Song list columns", "Choose what the song list shows. Name is always shown.", |ui| {
@@ -332,4 +394,19 @@ fn get_info_fields(ui: &mut Ui, prefs: &mut Preferences) {
 fn group_heading(ui: &mut Ui, title: &str) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
     theme::spaced_caps(ui.painter(), rect.left_bottom() - vec2(0.0, 5.0), title, theme::TEXT_MUTED);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_offset;
+
+    #[test]
+    fn reads_typed_offsets() {
+        assert_eq!(parse_offset("+667"), Ok(667));
+        assert_eq!(parse_offset(" -1164 "), Ok(-1164));
+        assert_eq!(parse_offset("6"), Ok(6));
+        assert_eq!(parse_offset(""), Ok(0));
+        assert!(parse_offset("six").unwrap_err().contains("not a number"));
+        assert!(parse_offset("+66700").unwrap_err().contains("between"));
+    }
 }

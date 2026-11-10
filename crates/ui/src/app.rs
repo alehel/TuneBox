@@ -367,7 +367,10 @@ impl TuneBoxApp {
                 self.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&self.session, tracks))));
             }
             CommandId::Preferences => {
-                self.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(self.session.preferences()))))
+                self.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(
+                    self.session.preferences(),
+                    self.session.cd_read_offset().map(|(drive, _)| drive),
+                ))))
             }
             CommandId::Find => self.view.focus_search = true,
             CommandId::ShowBrowser => {

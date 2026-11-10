@@ -127,13 +127,40 @@ Where an offset can come from:
 The correction must be applied to the **ripped audio itself**, not only to the checksum: a
 "verified" result must describe the file that was written. Shifting by *n* samples means
 reading *n* samples of the neighbouring track (and padding with silence at the disc's start or
-end). TuneBox reads each track through `cd-da-reader`'s per-track stream (`CdDrive::read_track`),
-so offset correction needs either a sector-range read in `CdDrive` or carrying the tail of one
-track into the next when tracks are ripped in order. That is a change to `crates/rip/src/drive.rs`
-and `rip.rs` independent of AccurateRip, and useful on its own: it makes rips sample-exact.
+end).
 
-What TuneBox should do: a manual offset setting (default 0, explained), offset correction in the
-rip itself, and the drive list linked from the help text rather than fetched.
+### What TuneBox does (offset correction exists)
+
+TuneBox has option 2: a manual setting, default 0, applied to the rip itself.
+
+- **Sign.** An offset of +*n* means the drive delivers audio *n* samples early: asked for sample
+  *k*, it returns the sample that really sits at *k* − *n*. TuneBox therefore asks for the track
+  *n* samples later. A negative offset shifts the other way. One sample is one stereo frame
+  (4 bytes); a sector holds 588.
+- **Reading.** `CdDrive::read_sectors` reads any sector range (cd-da-reader's
+  `read_sector_range`, two seconds at a time). The pure function `shifted_read`
+  (`crates/rip/src/offset.rs`) plans each track: which sectors to read, how many samples to drop
+  at each end of the read, and how much silence to write where the shift reaches before sector 0
+  (the lead-in) or past the end of the disc's audio (the lead-out, or the end of the audio
+  session on an enhanced CD), which drives cannot read. Reading by range rather than carrying
+  one track's tail into the next works for any selection of tracks in any order.
+- **Which drive.** The offset is saved per drive in preferences (`read_offsets`). Offsets belong
+  to a make and model, so on Linux the drive is known by the vendor and model the kernel
+  publishes in sysfs (`/sys/class/block/sr0/device/vendor` and `model`, the SCSI inquiry
+  strings), e.g. "PLEXTOR DVDR PX-716A". cd-da-reader does not report the model, so on macOS
+  and Windows (and on Linux if sysfs has nothing) the drive is known by its device path, and the
+  setting says so.
+- **Where it is set.** Preferences ▸ Importing ▸ Drive read offset (for the drive holding a
+  disc), or `tunebox-cli cd-offset --set=+667`. Values beyond ±10,000 samples are refused with
+  an explanation. The CD page shows the offset the import will use. The help text links to
+  AccurateRip's drive list; TuneBox does not fetch or copy it.
+- **Tests.** `VirtualDrive` can simulate a read offset (`with_read_offset`) over a disc whose true
+  audio is fixed; rips with the matching correction equal the true audio sample for sample,
+  apart from the silence padded exactly where the shift reaches the lead-in or lead-out
+  (`crates/rip/src/rip.rs`, `crates/engine/tests/session.rs`).
+- **Not yet confirmed on a real drive:** the sign convention against a drive with a known
+  offset, reading of the lead-in and lead-out areas (some drives can; TuneBox always pads), and
+  the model strings on real hardware.
 
 ## Terms of use
 
@@ -196,7 +223,7 @@ If approval is given, the design follows TuneBox's layers and its MusicBrainz lo
 
 ## What TuneBox can do without the database
 
-- **Offset correction** (above): makes rips sample-exact regardless of AccurateRip.
+- **Offset correction** (above, built): makes rips sample-exact regardless of AccurateRip.
 - **Test and copy:** read each track twice and compare (TuneBox's own checksums, e.g. a CRC of
   the PCM), re-reading on a mismatch. This catches inconsistent reads entirely offline. It
   cannot catch an error the drive makes the same way twice, which is AccurateRip's strength.

@@ -1,6 +1,7 @@
 //! Preferences: the settings the Preferences window edits, saved next to the library.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tunebox_audio::LosslessFormat;
 use tunebox_model::{Column, TagField};
@@ -30,6 +31,10 @@ pub struct Preferences {
     /// Look up CD track names on MusicBrainz as soon as a disc is inserted. Off by default:
     /// TuneBox makes no network request the listener did not ask for.
     pub lookup_cd_names_automatically: bool,
+    /// Each CD drive's read offset in samples, corrected while ripping so rips are sample-exact.
+    /// Keyed by the drive's model, or its device path where the model is unknown
+    /// (`DriveIdentity::key`). A drive not listed reads with no correction.
+    pub read_offsets: BTreeMap<String, i32>,
     pub volume: f32,
     pub shuffle: bool,
     pub repeat: RepeatMode,
@@ -70,6 +75,11 @@ impl Preferences {
             // TagField orders as `ALL` lists the fields (a model test holds it to that).
             self.info_fields.sort();
         }
+    }
+
+    /// The read offset saved for the drive known as `drive_key`, 0 when none is.
+    pub fn read_offset(&self, drive_key: &str) -> i32 {
+        self.read_offsets.get(drive_key).copied().unwrap_or(0)
     }
 
     /// Stops listing `path` (its songs stay in the library).
@@ -113,6 +123,7 @@ impl Default for Preferences {
             library_folders: Vec::new(),
             rip_format: LosslessFormat::Flac,
             lookup_cd_names_automatically: false,
+            read_offsets: BTreeMap::new(),
             volume: 0.8,
             shuffle: false,
             repeat: RepeatMode::Off,
@@ -138,8 +149,11 @@ mod tests {
         let mut prefs = Preferences::with_media_folder(media.clone());
         prefs.rip_format = LosslessFormat::Wav;
         prefs.pin_info_field(TagField::Work, true);
+        prefs.read_offsets.insert("PLEXTOR DVDR PX-716A".into(), 30);
         prefs.save(&path).unwrap();
         assert_eq!(Preferences::load(&path, &media), prefs);
+        assert_eq!(prefs.read_offset("PLEXTOR DVDR PX-716A"), 30);
+        assert_eq!(prefs.read_offset("/dev/sr1"), 0);
         std::fs::write(&path, b"{{{").unwrap();
         assert_eq!(Preferences::load(&path, &media), Preferences::with_media_folder(media));
     }

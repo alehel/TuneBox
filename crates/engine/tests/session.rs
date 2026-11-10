@@ -4,12 +4,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tunebox_audio::{LosslessFormat, PcmWriter};
+use tunebox_engine::Preferences;
 use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, RenameBase,
-    RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode, SyncSettings,
-    TrackQuery, VirtualDrive, Volume,
+    Access, EngineError, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player,
+    RenameBase, RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode,
+    SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -254,6 +255,41 @@ fn rips_a_cd_into_the_library() {
     assert_eq!(cd.imported.iter().copied().collect::<Vec<_>>(), [1, 3]);
     let album: Vec<_> = f.session.library().tracks().map(|t| t.meta.album.clone()).collect();
     assert_eq!(album, ["Field Recordings", "Field Recordings"]);
+}
+
+#[test]
+fn rips_with_the_drive_read_offset_saved_in_preferences() {
+    let mut f = fixture(1.0);
+    // A drive that reads 667 samples early, holding a disc whose track 1 starts at sector 0.
+    let exact = VirtualDrive::new("Early Drive", vec![1, 1]).with_pregap(0);
+    f.session.read_disc(Arc::new(exact.clone().with_read_offset(667)));
+    tick_until(&mut f.session, |s| s.cd().is_some());
+    assert_eq!(f.session.cd_read_offset().map(|(_, offset)| offset), Some(0));
+    assert!(matches!(f.session.set_cd_read_offset(100_000), Err(EngineError::ReadOffset(_))));
+    f.session.set_cd_read_offset(667).unwrap();
+    let (drive, offset) = f.session.cd_read_offset().unwrap();
+    assert_eq!((drive.key(), offset), ("Early Drive", 667));
+
+    // Saved with the preferences.
+    let saved = Preferences::load(&paths_in(&f.dir).preferences_file, Path::new(""));
+    assert_eq!(saved.read_offset("Early Drive"), 667);
+
+    f.session.set_cd_track_included(1, false);
+    f.session.import_cd().unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 1);
+    let ripped = f.session.library().tracks().next().unwrap().location.clone();
+    let mut decoder = tunebox_audio::Decoder::open(&ripped).unwrap();
+    let mut samples = Vec::new();
+    while let Some(block) = decoder.next_block().unwrap() {
+        samples.extend(block.samples.iter().map(|s| (s * 32_768.0).round() as i16));
+    }
+    let truth: Vec<i16> =
+        exact.true_audio(0, 75 * 588).chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect();
+    assert_eq!(samples, truth, "track 1 is sample-exact");
+
+    // Setting 0 forgets the drive.
+    f.session.set_cd_read_offset(0).unwrap();
+    assert!(f.session.preferences().read_offsets.is_empty());
 }
 
 #[test]

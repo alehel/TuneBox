@@ -7,7 +7,7 @@ use crate::session::{Outcome, Session};
 use chrono::Utc;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use tunebox_rip::{CdDrive, DiscInfo, DiscToc, RipReport, RipRequest};
+use tunebox_rip::{CdDrive, DiscInfo, DiscToc, DriveIdentity, RipReport, RipRequest};
 
 /// A disc in a drive, and what the listener has decided about it.
 #[derive(Clone)]
@@ -161,6 +161,29 @@ impl Session {
         }
     }
 
+    /// The read offset the next import from the drive in use corrects, in samples, and which
+    /// drive it is saved for. `None` without a disc.
+    pub fn cd_read_offset(&self) -> Option<(DriveIdentity, i32)> {
+        let identity = self.cd.as_ref()?.drive.identity();
+        let offset = self.prefs.read_offset(identity.key());
+        Some((identity, offset))
+    }
+
+    /// Saves the read offset of the drive in use (see `docs/accuraterip.md`). Values far outside
+    /// any real drive's are refused with an explanation.
+    pub fn set_cd_read_offset(&mut self, samples: i64) -> Result<(), EngineError> {
+        let identity = self.cd.as_ref().ok_or(EngineError::NoDisc)?.drive.identity();
+        let offset = tunebox_rip::check_read_offset(samples).map_err(EngineError::ReadOffset)?;
+        let mut prefs = self.prefs.clone();
+        if offset == 0 {
+            prefs.read_offsets.remove(identity.key());
+        } else {
+            prefs.read_offsets.insert(identity.key().to_string(), offset);
+        }
+        self.set_preferences(prefs);
+        Ok(())
+    }
+
     /// Imports the checked tracks of the disc into the media folder and the library.
     pub fn import_cd(&mut self) -> Result<JobId, EngineError> {
         if self.jobs.is_running(JobKind::Rip) {
@@ -183,6 +206,7 @@ impl Session {
             info: cd.info.clone(),
             format: self.prefs.rip_format,
             media_folder: self.prefs.media_folder.clone(),
+            read_offset: self.prefs.read_offset(cd.drive.identity().key()),
         };
         let drive = Arc::clone(&cd.drive);
         let title = format!("Importing “{}”", cd.info.album);
