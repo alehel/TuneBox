@@ -83,8 +83,15 @@ fn tile(ui: &mut Ui, cx: &mut PanelContext, album: &Album, slot: Rect) {
     let title = if title.is_empty() { "Unknown Album" } else { title };
     let caption_top = slot.bottom() + REFLECTION - 6.0;
     let center_x = slot.center().x;
-    centered_text(painter, pos2(center_x, caption_top + 8.0), title, 12.5, theme::TEXT, TILE);
-    centered_text(painter, pos2(center_x, caption_top + 24.0), artist, 11.0, theme::TEXT_MUTED, TILE);
+    centered_text(painter, pos2(center_x, caption_top + 8.0), title, crate::fonts::bold(12.5), theme::TEXT, TILE);
+    centered_text(
+        painter,
+        pos2(center_x, caption_top + 24.0),
+        artist,
+        FontId::proportional(11.0),
+        theme::TEXT_MUTED,
+        TILE,
+    );
 
     let play_clicked = hovered && play_button(ui, art, album);
     if play_clicked || response.double_clicked() {
@@ -127,9 +134,16 @@ fn play_button(ui: &mut Ui, art: Rect, album: &Album) -> bool {
     response.on_hover_text("Play album").clicked()
 }
 
-fn centered_text(painter: &egui::Painter, center: egui::Pos2, text: &str, size: f32, color: Color32, max_width: f32) {
+fn centered_text(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    text: &str,
+    font: FontId,
+    color: Color32,
+    max_width: f32,
+) {
     let galley = painter.layout_job({
-        let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), FontId::proportional(size), color);
+        let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
         job.wrap =
             egui::text::TextWrapping { max_width, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
         job

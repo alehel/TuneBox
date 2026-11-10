@@ -59,7 +59,8 @@ fn track_info(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
     let text = |y: f32, text: &str, size: f32, color: Color32| {
         crate::theme::text_in_row(ui.painter(), pos2(left, card.top() + y), text, size, color, width);
     };
-    text(28.0, track.title(), 19.0, Color32::WHITE);
+    let title_left = pos2(left, card.top() + 28.0);
+    crate::theme::font_in_row(ui.painter(), title_left, track.title(), crate::fonts::bold(19.0), Color32::WHITE, width);
     text(54.0, &track.meta.artist, 14.0, Color32::from_white_alpha(210));
     text(74.0, &track.meta.album, 13.0, Color32::from_white_alpha(150));
 

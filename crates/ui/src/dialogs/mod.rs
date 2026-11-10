@@ -63,7 +63,7 @@ pub(crate) fn modal(ctx: &egui::Context, id: &str, contents: impl FnOnce(&mut eg
 pub(crate) fn title_heading(ui: &mut egui::Ui, title: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(2.0);
-        ui.label(egui::RichText::new(title).size(15.0).color(crate::theme::TEXT));
+        ui.label(egui::RichText::new(title).font(crate::fonts::bold(15.0)).color(crate::theme::TEXT));
     });
     ui.add_space(4.0);
     let rect = ui.available_rect_before_wrap();

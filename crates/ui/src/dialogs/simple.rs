@@ -70,7 +70,7 @@ pub fn about(ctx: &egui::Context) -> bool {
         ui.set_width(380.0);
         ui.vertical_centered(|ui| {
                 ui.add_space(6.0);
-                ui.label(RichText::new("TuneBox").size(24.0).strong());
+                ui.label(RichText::new("TuneBox").font(crate::fonts::bold(24.0)));
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
                 ui.add_space(8.0);
                 ui.label("Your music library, CD importing and player syncing,\nin a fast native app written in Rust.");

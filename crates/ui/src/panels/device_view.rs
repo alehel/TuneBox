@@ -55,7 +55,7 @@ fn summary(ui: &mut Ui, entry: &DeviceEntry) {
         pos2(left, rect.top() + 22.0),
         Align2::LEFT_CENTER,
         entry.name(),
-        FontId::proportional(22.0),
+        crate::fonts::bold(22.0),
         theme::TEXT,
     );
     let lines = [

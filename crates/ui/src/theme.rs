@@ -67,6 +67,7 @@ pub const BODY: f32 = 13.0;
 
 /// Installs TuneBox's visuals and text sizes.
 pub fn install(ctx: &egui::Context) {
+    crate::fonts::install(ctx);
     ctx.set_theme(egui::Theme::Light);
     let mut visuals = Visuals::light();
     visuals.panel_fill = WINDOW_BG;
@@ -217,23 +218,24 @@ pub fn selection_background(painter: &Painter, rect: Rect) {
 
 /// Text centred vertically at `left`, clipped to `max_width` with an ellipsis.
 pub fn text_in_row(painter: &Painter, left: Pos2, text: &str, size: f32, color: Color32, max_width: f32) {
-    let galley = painter.layout_job(elided_job(text, size, color, max_width, 0.0));
+    font_in_row(painter, left, text, FontId::proportional(size), color, max_width);
+}
+
+/// [`text_in_row`] in any font (the bold face, for titles).
+pub fn font_in_row(painter: &Painter, left: Pos2, text: &str, font: FontId, color: Color32, max_width: f32) {
+    let galley = painter.layout_job(elided_job(text, font, color, max_width, 0.0));
     painter.galley(left - egui::vec2(0.0, galley.size().y / 2.0), galley, color);
 }
 
 /// Small capitals with a little air between the letters: the source list's headings.
 pub fn spaced_caps(painter: &Painter, left_bottom: Pos2, text: &str, color: Color32) {
-    let galley = painter.layout_job(elided_job(&text.to_uppercase(), 10.0, color, f32::INFINITY, 0.9));
+    let galley =
+        painter.layout_job(elided_job(&text.to_uppercase(), FontId::proportional(10.0), color, f32::INFINITY, 0.9));
     painter.galley(left_bottom - egui::vec2(0.0, galley.size().y), galley, color);
 }
 
-fn elided_job(text: &str, size: f32, color: Color32, max_width: f32, spacing: f32) -> egui::text::LayoutJob {
-    let format = egui::TextFormat {
-        font_id: FontId::proportional(size),
-        color,
-        extra_letter_spacing: spacing,
-        ..Default::default()
-    };
+fn elided_job(text: &str, font_id: FontId, color: Color32, max_width: f32, spacing: f32) -> egui::text::LayoutJob {
+    let format = egui::TextFormat { font_id, color, extra_letter_spacing: spacing, ..Default::default() };
     let mut job = egui::text::LayoutJob::single_section(text.to_owned(), format);
     job.wrap = egui::text::TextWrapping {
         max_width: max_width.max(1.0),

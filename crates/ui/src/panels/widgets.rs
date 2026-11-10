@@ -46,7 +46,7 @@ pub fn paint_primary(ui: &Ui, rect: Rect, label: &str, enabled: bool, response: 
     theme::soft_shadow(painter, rect, radius, 4);
     theme::rounded_gradient(painter, rect, radius, top, bottom);
     painter.rect_stroke(rect, radius, Stroke::new(1.0, Color32::from_rgb(0x24, 0x5E, 0xB8)), egui::StrokeKind::Inside);
-    painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(13.0), Color32::WHITE);
+    painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, crate::fonts::bold(13.0), Color32::WHITE);
 }
 
 /// Five stars; clicking a star sets the rating, clicking the current one clears it.

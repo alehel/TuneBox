@@ -353,7 +353,7 @@ fn empty_state(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
         ("No songs", "Drag songs here from your library to add them.")
     };
     let center = rect.center() - vec2(0.0, 40.0);
-    ui.painter().text(center, Align2::CENTER_CENTER, title, FontId::proportional(18.0), theme::TEXT_MUTED);
+    ui.painter().text(center, Align2::CENTER_CENTER, title, crate::fonts::bold(18.0), theme::TEXT_MUTED);
     ui.painter().text(
         center + vec2(0.0, 26.0),
         Align2::CENTER_CENTER,

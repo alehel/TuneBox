@@ -21,6 +21,7 @@ mod app;
 mod artwork;
 mod demo;
 mod dialogs;
+mod fonts;
 mod glyphs;
 mod panels;
 mod screenshots;

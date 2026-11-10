@@ -185,7 +185,7 @@ fn summary(ui: &mut Ui, track: &Track, artwork: &mut ArtworkCache) {
         artwork::paint(ui, rect, texture.as_ref());
         ui.add_space(10.0);
         ui.vertical(|ui| {
-            ui.label(RichText::new(track.title()).size(16.0).strong());
+            ui.label(RichText::new(track.title()).font(crate::fonts::bold(16.0)));
             ui.label(&track.meta.artist);
             ui.label(&track.meta.album);
             ui.label(format_clock(track.file.duration));

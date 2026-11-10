@@ -133,11 +133,14 @@ fn text_lines(ui: &Ui, rect: Rect, lines: &[&str]) {
     let painter = ui.painter();
     let max_width = rect.width() - 80.0;
     for (i, line) in lines.iter().enumerate() {
-        let (size, color) = if i == 0 { (13.0, theme::LCD_TEXT) } else { (11.5, theme::LCD_TEXT_MUTED) };
+        let (font, color) = if i == 0 {
+            (crate::fonts::bold(13.0), theme::LCD_TEXT)
+        } else {
+            (FontId::proportional(11.5), theme::LCD_TEXT_MUTED)
+        };
         let y = rect.top() + 14.0 + i as f32 * 15.0;
         let galley = painter.layout_job({
-            let mut job =
-                egui::text::LayoutJob::simple_singleline((*line).to_owned(), FontId::proportional(size), color);
+            let mut job = egui::text::LayoutJob::simple_singleline((*line).to_owned(), font, color);
             job.wrap = egui::text::TextWrapping {
                 max_width,
                 max_rows: 1,
