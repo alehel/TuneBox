@@ -1,9 +1,10 @@
 //! tunebox-model — the vocabulary every other TuneBox crate speaks.
 //!
 //! Tracks, their metadata and play statistics, playlists (manual and smart), the columns a track
-//! list can show and sort by, search, and the folder layout of an organised media folder. The
-//! crate is pure: no file system, no threads, no clocks (callers pass "now" in), so everything
-//! here is deterministic and unit-tested.
+//! list can show and sort by, search, the folder layout of an organised media folder, and
+//! audiobooks being ripped from CDs ([`audiobook`]). The crate is pure: no file system, no
+//! threads, no clocks (callers pass "now" in), so everything here is deterministic and
+//! unit-tested.
 
 #![deny(
     clippy::unwrap_used,
@@ -14,6 +15,7 @@
     clippy::unreachable
 )]
 
+pub mod audiobook;
 mod column;
 mod display;
 mod fields;
