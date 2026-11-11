@@ -82,6 +82,9 @@ The biggest risk: these parts are built but have never run where it counts.
 - [x] Drive read offset correction, so rips are sample-exact (needed for AccurateRip, useful
       without it).
 - [ ] Test and copy: read each track twice and re-read on a mismatch.
+- [ ] Audiobooks from several CDs: chapters across discs, eject and ask for the next disc,
+      one chaptered `.m4b` or a file per chapter. Planned in
+      [docs/audiobooks.md](docs/audiobooks.md); the `.m4b` waits for craft-audio's AAC encoder.
 - [ ] Play a CD directly.
 - [x] Cover art from the Cover Art Archive: Get CD Cover (or an opt-in setting) on the CD page,
       Find Album Artwork… for library albums, `tunebox-cli artwork find/fetch` and
