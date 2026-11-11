@@ -15,13 +15,13 @@ still has to be decided.
    details and the track names of *every* disc in the set are filled in from the release.
    TuneBox does not ask how many discs there are, nor how to group the tracks.
 3. The disc's tracks start as one chapter. The listener may split them into chapters and leave
-   out tracks that are not part of the story now or later (see
-   [Editing the book](#editing-the-book)), then clicks **Rip Disc**. Nothing is ripped until
-   then.
+   out tracks that are not part of the story, before or while it rips (see
+   [Editing the book](#editing-the-book)). **Rip Disc** starts the rip; nothing is ripped
+   until then.
 4. When the disc is done, TuneBox ejects it and says which disc is next: "Disc 2 is ripped.
-   Insert disc 3." The new disc's tracks appear as one more chapter and wait for **Rip Disc**
-   again. TuneBox keeps asking for the next disc until the listener says **That Was the Last
-   Disc**.
+   Insert disc 3." The listener either inserts it or says **That Was the Last Disc**; there is
+   no third way out of that dialog. The new disc's tracks appear as one more chapter and wait
+   for **Rip Disc** again.
 5. Reviews the whole book as one list: moves chapter boundaries (a chapter that ran from one
    disc into the next), removes tracks ("Please insert disc 2"), and trims the start or end
    of a track.
@@ -91,9 +91,12 @@ kept so nothing has to be ripped again.
 
 ## Editing the book
 
-Chapters and removed tracks can be edited before a disc is ripped, while later discs are
-ripped, and after the last disc, over the whole book as one list; trims once a track is ripped. Nothing touches the staged audio: the edits are
-applied when the book is built, so each one can be undone until then.
+Chapters and removed tracks can be edited before a disc is ripped, **while it rips**, and
+after the last disc, over the whole book as one list; trims once a track is ripped. While a
+disc rips the page stays fully editable, and its tracks show their progress. Between discs,
+while TuneBox asks for the next one, nothing is edited (see [After each disc](#after-each-disc)).
+Nothing touches the staged audio: the edits are applied when the book is built, so each one
+can be undone until then.
 
 ### Chapters
 
@@ -201,7 +204,7 @@ shortcut, and are listed in the Audiobook menu, which appears while the book pag
 | **E** | Play the last 8 s of the selected track, where announcements are |
 | ⌘Z, ⇧⌘Z | Undo, redo any edit of the book |
 | ⌘R | Rip Disc |
-| ⌘D | That Was the Last Disc |
+| ⌘D | That Was the Last Disc, in the "Insert disc N" dialog |
 | ⇧⌘B | Build Audiobook… |
 | ⌥⌘1, ⌥⌘2, ⌥⌘3 | Regroup: one chapter per disc, one per track, from track names |
 
@@ -249,17 +252,23 @@ on their own.
 
 When a disc is ripped and ejected, a dialog says so and names the next disc:
 
-> **Disc 2 is ripped.** Insert disc 3.
-> Its tracks appear as soon as it is in. You can edit the chapters meanwhile, or stop and come
-> back later: the book is saved.
+> Disc 2 is ripped and ejected.
+> **Insert disc 3**
+> Its tracks appear as soon as it is in.
 >
-> [That Was the Last Disc] [Edit While Waiting]
+> [That Was the Last Disc]
 
-Inserting disc 3 closes the dialog by itself. **Edit While Waiting** closes it and leaves
-"Insert disc 3" above the book's tracks. **That Was the Last Disc** ends the ripping; when
-MusicBrainz lists more discs for the release than were ripped, TuneBox asks first ("MusicBrainz
-lists 12 discs for this release; 11 are ripped. Finish anyway?"). It can also be chosen from
-the Audiobook menu at any time, and undone by inserting another disc of the book.
+The dialog has two ways out and no others: inserting disc 3, which closes it by itself and
+shows the new disc's tracks ready to rip, or **That Was the Last Disc**, which ends the
+ripping. It cannot be dismissed to edit in between: editing happens while a disc rips, and
+after the last one. When MusicBrainz lists more discs for the release than were ripped, That
+Was the Last Disc asks first ("MusicBrainz lists 12 discs for this release; 11 are ripped.
+Finish anyway?").
+
+The book is saved after every disc, so quitting TuneBox at this point loses nothing: the
+dialog is shown again, for the same disc, when the book is next opened. A disc that is not the
+next one (see [Inserting the next disc](#inserting-the-next-disc)) is ejected or asked about
+from within the dialog, which then goes on asking for disc 3.
 
 ### Ejecting
 
@@ -393,8 +402,7 @@ other details too long for the header are edited in Get Info for the book.
 - The last column shows a track's state: ripping (with progress), ripped, failed, a trim
   ("−6.5 s at the end"), or the "Looks like an announcement" mark with its one-click removal.
   Trim… opens the waveform editor described under [Trimming](#trimming).
-- While waiting for a disc, the tracks so far stay in view, under a line in large type:
-  "Insert disc 3".
+- While a disc rips, each of its tracks shows its progress, and every edit keeps working.
 
 **Sharing with the CD header.** The pieces both headers need, the quiet field, the art (cover
 or disc), the details line and the button row, move out of `cd_header.rs` into a shared module,
@@ -467,7 +475,7 @@ A built book plays today as one long song. Listening comfortably needs more, pla
    virtual drive. Does not wait for anything.
 2. **The page.** Audiobooks under Music in the sidebar, the shared header pieces moved out of
    `cd_header.rs`, the book page, the trim editor, and new scenes in `cargo xtask screenshots`
-   (the book page while ripping and while waiting, the trim editor, the sidebar).
+   (the book page while ripping, the "Insert disc 3" dialog, the trim editor, the sidebar).
 3. **AAC.** When craft-audio has its encoder and craft-media writes chapters: the single `.m4b`
    and AAC files per chapter.
 4. **Listening**, above.
@@ -483,7 +491,8 @@ A built book plays today as one long song. Listening comfortably needs more, pla
   snapping to the nearest pause; chapter start times from tables of contents,
   removals and trims; output names; next-disc checks for each row of the table above.
 - Rip: three virtual discs swapped in turn, each waiting for Rip Disc, ejected after each,
-  with "Insert disc N" naming the right disc; That Was the Last Disc, also with MusicBrainz
+  with "Insert disc N" naming the right disc; edits made while a disc rips apply to it, and a
+  removed track is still ripped; the dialog comes back after a restart between discs; That Was the Last Disc, also with MusicBrainz
   listing more discs; a disc changed mid-rip; a
   cancelled disc leaves no staged `*.part` files and the project as before.
 - Resume: a project saved after disc 2, reloaded, continues with disc 3; a damaged
@@ -503,7 +512,8 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 
 - Ripping waits for **Rip Disc**, so the listener can group the new disc's tracks first.
 - TuneBox does not ask how many discs there are. After each disc it names the next ("Insert
-  disc 3") until the listener says That Was the Last Disc.
+  disc 3"); the only ways on are inserting it or That Was the Last Disc.
+- Editing happens before and while a disc rips, and after the last disc; not between discs.
 - TuneBox does not ask how to group: each disc starts as one chapter, edited from there.
 - Editing is keyboard first, with a key for every edit ([Shortcuts](#shortcuts)).
 - Default output: AAC at 64 kbit/s mono.
