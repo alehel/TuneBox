@@ -6,8 +6,9 @@
 //! 2. The table of contents gives the disc's MusicBrainz [`disc_id`], with which
 //!    [`musicbrainz::lookup`] finds album and track names (only when asked: it is the one
 //!    network call TuneBox makes).
-//! 3. [`rip`] reads the chosen tracks, encodes them losslessly into the media folder, tags them
-//!    and returns them as `NewTrack`s for the library.
+//! 3. [`rip`] reads the chosen tracks, corrected for the drive's read offset ([`shifted_read`]),
+//!    encodes them losslessly into the media folder, tags them and returns them as `NewTrack`s
+//!    for the library.
 
 #![deny(
     clippy::unwrap_used,
@@ -23,6 +24,7 @@ mod drive;
 mod info;
 #[cfg(feature = "musicbrainz")]
 pub mod musicbrainz;
+mod offset;
 mod rip;
 mod toc;
 mod virtual_drive;
@@ -30,8 +32,9 @@ mod virtual_drive;
 pub use discid::{disc_id, freedb_id};
 #[cfg(feature = "drives")]
 pub use drive::PhysicalDrive;
-pub use drive::{CdDrive, DriveError};
+pub use drive::{CdDrive, DriveError, DriveIdentity};
 pub use info::DiscInfo;
+pub use offset::{MAX_READ_OFFSET, SAMPLES_PER_SECTOR, ShiftedRead, check_read_offset, shifted_read};
 pub use rip::{RipProgress, RipReport, RipRequest, rip};
 pub use toc::{DiscToc, FRAMES_PER_SECOND, SECTOR_BYTES, TocTrack};
 pub use virtual_drive::VirtualDrive;

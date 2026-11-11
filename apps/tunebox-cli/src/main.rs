@@ -175,6 +175,14 @@ enum Command {
         #[arg(long)]
         lookup: bool,
     },
+    /// Show the read offset of the CD drive in use, or set it (in samples, e.g. --set=+667). Look
+    /// the drive up in the AccurateRip drive list: https://www.accuraterip.com/driveoffsets.htm
+    CdOffset {
+        #[arg(long, allow_hyphen_values = true, value_name = "SAMPLES")]
+        set: Option<i64>,
+        #[arg(long)]
+        virtual_disc: bool,
+    },
     /// List connected players: mounted ones by folder, MTP ones by an id starting "mtp:".
     Devices,
     /// Set up the player at ROOT (its folder, or its "mtp:" id from `devices`) for syncing.
@@ -324,6 +332,13 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             print_cd(session);
             session.import_cd().map_err(|e| e.to_string())?;
             wait_for_jobs(session);
+        }
+        Command::CdOffset { set, virtual_disc } => {
+            read_cd(session, virtual_disc, false)?;
+            if let Some(samples) = set {
+                session.set_cd_read_offset(samples).map_err(|e| e.to_string())?;
+            }
+            print_read_offset(session);
         }
         Command::Devices => {
             refresh_all_devices(session);
@@ -557,6 +572,12 @@ fn print_cd(session: &Session) {
         let length = cd.toc.duration(*number).map(format_clock).unwrap_or_default();
         println!("{number:>3}  {title:<40} {artist:<20} {length:>6}");
     }
+    print_read_offset(session);
+}
+
+fn print_read_offset(session: &Session) {
+    let Some((drive, offset)) = session.cd_read_offset() else { return };
+    println!("Read offset: {offset:+} samples, for {}.", drive.describe());
 }
 
 /// A folder as a drive of unknown size, for setting up or syncing folders the platform does

@@ -68,7 +68,7 @@ radio and sharing are out of scope.
 | Edit names before importing | Shipped | |
 | Import CD (choose tracks) | Shipped | FLAC, WAV or AIFF; tagged; atomic per track |
 | Lossy encoders (AAC, MP3) | Planned | No permissively licensed pure-Rust encoders yet |
-| Error correction / secure ripping | Partial | cd-da-reader retries failed reads; no offset correction; AccurateRip needs the database owner's approval ([investigation](accuraterip.md)) |
+| Error correction / secure ripping | Partial | cd-da-reader retries failed reads; drive read offset correction (a manual setting per drive, [how](accuraterip.md#what-tunebox-does-offset-correction-exists)); AccurateRip needs the database owner's approval ([investigation](accuraterip.md)) |
 | Play a CD directly | Planned | |
 | Cover art from the Cover Art Archive | Planned | |
 

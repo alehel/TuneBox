@@ -230,19 +230,30 @@ fn preferences(app: &mut TuneBoxApp) {
         prefs.add_library_folder(music.join("Vinyl Rips"), true);
         prefs.media_folder = music.join("Collection/Imports");
     }
-    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(&prefs))));
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::new(
+        &prefs,
+        app.session.cd_read_offset().map(|(drive, _)| drive),
+    ))));
 }
 
 fn preferences_importing(app: &mut TuneBoxApp) {
     preferences(app);
     let prefs = app.session.preferences().clone();
-    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::Importing))));
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(
+        &prefs,
+        app.session.cd_read_offset().map(|(drive, _)| drive),
+        PreferencesTab::Importing,
+    ))));
 }
 
 fn preferences_columns(app: &mut TuneBoxApp) {
     preferences(app);
     let prefs = app.session.preferences().clone();
-    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::Columns))));
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(
+        &prefs,
+        app.session.cd_read_offset().map(|(drive, _)| drive),
+        PreferencesTab::Columns,
+    ))));
 }
 
 fn get_info_details(app: &mut TuneBoxApp) {
@@ -286,7 +297,11 @@ fn get_info_with_all_fields(app: &mut TuneBoxApp, open: bool) {
 fn preferences_get_info(app: &mut TuneBoxApp) {
     preferences(app);
     let prefs = app.session.preferences().clone();
-    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(&prefs, PreferencesTab::GetInfo))));
+    app.dialog = Some(Dialog::Preferences(Box::new(PreferencesDialog::on_tab(
+        &prefs,
+        app.session.cd_read_offset().map(|(drive, _)| drive),
+        PreferencesTab::GetInfo,
+    ))));
 }
 
 /// Refresh from Files on an album, two of whose songs have edits kept in TuneBox only.

@@ -1,7 +1,12 @@
 //! Ripping: reading tracks off a disc into tagged lossless files in the media folder.
+//!
+//! Each track is read as the sector range [`shifted_read`] plans for the drive's read offset,
+//! so the file holds the track's audio sample for sample, whichever tracks are chosen and in
+//! whatever order.
 
-use crate::drive::CdDrive;
+use crate::drive::{CdDrive, DriveError};
 use crate::info::DiscInfo;
+use crate::offset::shifted_read;
 use crate::toc::DiscToc;
 use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
@@ -19,6 +24,8 @@ pub struct RipRequest {
     pub info: DiscInfo,
     pub format: LosslessFormat,
     pub media_folder: PathBuf,
+    /// The drive's read offset in samples, corrected while reading (0 reads as the drive does).
+    pub read_offset: i32,
 }
 
 /// Where a rip has got to.
@@ -105,29 +112,83 @@ fn rip_track(
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let mut writer = PcmWriter::create(&path, request.format, 44_100, 2).map_err(|e| e.to_string())?;
-    let mut write_error = None;
     progress(0.0);
-    let read = drive.read_track(&request.toc, number, &mut |chunk, fraction| {
-        if let Err(e) = writer.write(&cd_audio_to_planar(chunk)) {
-            write_error = Some(e.to_string());
-            return false;
+    let written = write_track(drive, request, number, &mut writer, cancel, progress);
+    match written {
+        Err(e) => {
+            writer.abandon();
+            Err(e)
         }
-        progress(fraction);
-        !cancel.load(Ordering::Relaxed)
-    });
-    if let Err(e) = read {
-        writer.abandon();
-        return Err(e.to_string());
+        Ok(()) if cancel.load(Ordering::Relaxed) => {
+            writer.abandon();
+            Ok(None)
+        }
+        Ok(()) => writer.finish().map(Some).map_err(|e| e.to_string()),
     }
-    if let Some(e) = write_error {
-        writer.abandon();
-        return Err(e);
+}
+
+/// Writes track `number`, offset-corrected, to `writer`: silence where the shift reaches into
+/// the lead-in, the drive's read trimmed to the track, then silence where it reaches the lead-out.
+fn write_track(
+    drive: &dyn CdDrive,
+    request: &RipRequest,
+    number: u8,
+    writer: &mut PcmWriter,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<(), String> {
+    let toc = &request.toc;
+    let no_track = || DriveError::NoSuchTrack(number).to_string();
+    let start = toc.track(number).ok_or_else(no_track)?.start_lba;
+    let end = toc.end_lba(number).ok_or_else(no_track)?;
+    let plan = shifted_read(start..end, 0..toc.audio_leadout(), request.read_offset);
+    let total = plan.total().max(1) as f32;
+    write_silence(writer, plan.silence_before)?;
+    if plan.sectors > 0 {
+        // Byte positions within the read of the samples to keep.
+        let keep = plan.skip * 4..(plan.skip + plan.keep) * 4;
+        let mut position: u64 = 0;
+        let mut write_error = None;
+        drive
+            .read_sectors(toc, plan.first_sector, plan.sectors, &mut |chunk, _| {
+                let chunk_start = position;
+                position += chunk.len() as u64;
+                let from = keep.start.clamp(chunk_start, position) - chunk_start;
+                let to = keep.end.clamp(chunk_start, position) - chunk_start;
+                let wanted = chunk.get(from as usize..to as usize).unwrap_or_default();
+                if wanted.is_empty() {
+                    // Nothing of the track in this chunk yet (the surplus before it).
+                } else if let Err(e) = writer.write(&cd_audio_to_planar(wanted)) {
+                    write_error = Some(e.to_string());
+                    return false;
+                }
+                let done = plan.silence_before + position.saturating_sub(keep.start).min(plan.keep * 4) / 4;
+                progress(done as f32 / total);
+                position < keep.end && !cancel.load(Ordering::Relaxed)
+            })
+            .map_err(|e| e.to_string())?;
+        if let Some(e) = write_error {
+            return Err(e);
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
     }
-    if cancel.load(Ordering::Relaxed) {
-        writer.abandon();
-        return Ok(None);
+    write_silence(writer, plan.silence_after)?;
+    progress(1.0);
+    Ok(())
+}
+
+/// Writes `samples` stereo samples of silence, a second at a time.
+fn write_silence(writer: &mut PcmWriter, samples: u64) -> Result<(), String> {
+    let mut left = samples;
+    while left > 0 {
+        let count = left.min(44_100);
+        let block = vec![0.0; count as usize];
+        writer.write(&[block.clone(), block]).map_err(|e| e.to_string())?;
+        left -= count;
     }
-    writer.finish().map(Some).map_err(|e| e.to_string())
+    Ok(())
 }
 
 /// Tags the new file and describes it for the library.
@@ -163,7 +224,14 @@ mod tests {
         info.album = "Test Pressing".into();
         info.artist = "Signal Path".into();
         info.tracks[0].0 = "Sine Language".into();
-        RipRequest { tracks: vec![1, 2], toc, info, format: LosslessFormat::Flac, media_folder: media.to_path_buf() }
+        RipRequest {
+            tracks: vec![1, 2],
+            toc,
+            info,
+            format: LosslessFormat::Flac,
+            media_folder: media.to_path_buf(),
+            read_offset: 0,
+        }
     }
 
     #[test]
@@ -203,6 +271,99 @@ mod tests {
         assert!(report.tracks.is_empty());
         let leftovers: Vec<_> = walk(media.path());
         assert!(leftovers.is_empty(), "{leftovers:?}");
+    }
+
+    /// Rips `tracks` from `drive`, correcting `correction` samples, and returns each file's
+    /// samples (interleaved stereo, 16-bit) by disc track number.
+    fn rip_samples(drive: &VirtualDrive, tracks: &[u8], correction: i32) -> Vec<(u8, Vec<i16>)> {
+        let media = tempfile::tempdir().unwrap();
+        let mut req = request(drive, media.path());
+        req.tracks = tracks.to_vec();
+        req.read_offset = correction;
+        let report = rip(drive, &req, Utc::now(), &AtomicBool::new(false), &mut |_| {});
+        assert!(report.failures.is_empty(), "{:?}", report.failures);
+        tracks.iter().copied().zip(report.tracks.iter().map(|t| decode(&t.location))).collect()
+    }
+
+    fn decode(path: &Path) -> Vec<i16> {
+        let mut decoder = tunebox_audio::Decoder::open(path).unwrap();
+        let mut samples = Vec::new();
+        while let Some(block) = decoder.next_block().unwrap() {
+            samples.extend(block.samples.iter().map(|s| (s * 32_768.0).round() as i16));
+        }
+        samples
+    }
+
+    /// Track `number`'s true audio, as an exact drive reads it.
+    fn true_track(drive: &VirtualDrive, number: u8) -> Vec<i16> {
+        let toc = drive.read_toc().unwrap();
+        let start = i64::from(toc.track(number).unwrap().start_lba) * 588;
+        let length = toc.sectors(number).unwrap() as usize * 588;
+        drive.true_audio(start, length).chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect()
+    }
+
+    #[test]
+    fn corrects_a_drive_that_reads_early() {
+        // Track 1 starts the disc, as on most real CDs; tracks are 1 s, 1 s and 2 s.
+        let exact = VirtualDrive::new("Virtual", vec![1, 1, 2]).with_pregap(0);
+        let drive = exact.clone().with_read_offset(667);
+        // A partial selection, out of order.
+        for (number, samples) in rip_samples(&drive, &[3, 1], 667) {
+            let truth = true_track(&exact, number);
+            assert_eq!(samples.len(), truth.len(), "track {number}");
+            if number == 3 {
+                // The last 667 samples lie in the lead-out, which the drive cannot read: silence.
+                let (audio, padding) = samples.split_at(samples.len() - 667 * 2);
+                assert_eq!(audio, &truth[..audio.len()]);
+                assert!(padding.iter().all(|s| *s == 0));
+                assert!(truth[audio.len()..].iter().any(|s| *s != 0), "the padding replaces real audio");
+            } else {
+                assert_eq!(samples, truth, "track {number}");
+            }
+        }
+        // Without the correction the files are shifted.
+        for (number, samples) in rip_samples(&drive, &[1, 3], 0) {
+            assert_ne!(samples, true_track(&exact, number), "track {number}");
+        }
+    }
+
+    #[test]
+    fn corrects_a_drive_that_reads_late() {
+        let exact = VirtualDrive::new("Virtual", vec![1, 1, 1]).with_pregap(0);
+        let drive = exact.clone().with_read_offset(-1164);
+        for (number, samples) in rip_samples(&drive, &[2, 1, 3], -1164) {
+            let truth = true_track(&exact, number);
+            assert_eq!(samples.len(), truth.len(), "track {number}");
+            if number == 1 {
+                // The first 1164 samples would come from the lead-in: silence.
+                let (padding, audio) = samples.split_at(1164 * 2);
+                assert!(padding.iter().all(|s| *s == 0));
+                assert_eq!(audio, &truth[1164 * 2..]);
+            } else {
+                assert_eq!(samples, truth, "track {number}");
+            }
+        }
+        for (number, samples) in rip_samples(&drive, &[2], 0) {
+            assert_ne!(samples, true_track(&exact, number), "track {number}");
+        }
+    }
+
+    #[test]
+    fn a_readable_pregap_needs_no_padding() {
+        // With the usual 2-second pregap, reading late into it is still real (silent) audio.
+        let exact = VirtualDrive::new("Virtual", vec![1, 1]);
+        let drive = exact.clone().with_read_offset(-1164);
+        for (number, samples) in rip_samples(&drive, &[1, 2], -1164) {
+            assert_eq!(samples, true_track(&exact, number), "track {number}");
+        }
+    }
+
+    #[test]
+    fn an_exact_drive_with_no_correction_rips_the_true_audio() {
+        let drive = VirtualDrive::new("Virtual", vec![1, 2]);
+        for (number, samples) in rip_samples(&drive, &[2, 1], 0) {
+            assert_eq!(samples, true_track(&drive, number), "track {number}");
+        }
     }
 
     #[test]
