@@ -34,6 +34,7 @@ pub enum JobKind {
     FindArtwork,
     /// Fetching the picker's thumbnails, one at a time.
     Thumbnail,
+    VisualizerPlugins,
 }
 
 impl JobKind {
@@ -52,6 +53,7 @@ impl JobKind {
             JobKind::FetchCover => "Getting a cover",
             JobKind::FindArtwork => "Looking for album artwork",
             JobKind::Thumbnail => "Getting cover thumbnails",
+            JobKind::VisualizerPlugins => "Loading visualizer plug-ins",
         }
     }
 }

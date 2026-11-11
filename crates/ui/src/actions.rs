@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::{Column, PlaylistId, Rating, SmartRules, TrackId, TrackMeta};
-use tunebox_engine::{DiscInfo, JobId, LibraryOnlyEdits, Preferences, SyncSettings};
+use tunebox_engine::{DiscInfo, JobId, LibraryOnlyEdits, Notice, Preferences, SyncSettings};
 
 #[derive(Clone, Debug)]
 pub enum Action {
@@ -44,6 +44,8 @@ pub enum Action {
     OpenDialog(Box<Dialog>),
     CancelJob(JobId),
     ShowInFolder(TrackId),
+    /// Tell the listener something (a visualizer plug-in that was turned off).
+    Notify(Notice),
     EditTracks(Vec<(TrackId, TrackMeta)>),
     RemoveTracks {
         tracks: Vec<TrackId>,

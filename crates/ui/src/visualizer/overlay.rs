@@ -7,16 +7,10 @@ use crate::panels::PanelContext;
 use egui::{Align2, Color32, FontId, Rect, Sense, Stroke, Ui, pos2, vec2};
 use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::format_clock;
+use tunebox_visualizer::LookEntry;
 
-/// `looks` are `(id, name)` pairs in picker order; `current` is the id of the look showing.
-pub fn show(
-    ui: &mut Ui,
-    rect: Rect,
-    cx: &mut PanelContext,
-    looks: &[(&'static str, &'static str)],
-    current: &str,
-    show_controls: bool,
-) {
+/// `looks` are in picker order; `current` is the id of the look showing.
+pub fn show(ui: &mut Ui, rect: Rect, cx: &mut PanelContext, looks: &[LookEntry], current: &str, show_controls: bool) {
     let show_info = cx.session.preferences().visualizer_track_info;
     if show_info {
         track_info(ui, rect, cx);
@@ -95,18 +89,11 @@ fn track_info(ui: &mut Ui, rect: Rect, cx: &mut PanelContext) {
 
 /// The bar along the bottom: one chip per look, the Track Info and Full Screen switches, and
 /// Done (in the window only: in full screen, the Full Screen switch is the way back).
-fn controls(
-    ui: &mut Ui,
-    rect: Rect,
-    cx: &mut PanelContext,
-    looks: &[(&'static str, &'static str)],
-    current: &str,
-    show_info: bool,
-) {
+fn controls(ui: &mut Ui, rect: Rect, cx: &mut PanelContext, looks: &[LookEntry], current: &str, show_info: bool) {
     let full_screen = cx.view.full_screen.is_on();
     let mut chips: Vec<(String, bool)> = looks
         .iter()
-        .map(|(id, name)| ((*name).to_owned(), *id == current))
+        .map(|look| (look.name.clone(), look.id == current))
         .chain([("Track Info".to_owned(), show_info), ("Full Screen".to_owned(), full_screen)])
         .collect();
     if !full_screen {
@@ -118,13 +105,16 @@ fn controls(
         .map(|(label, _)| ui.painter().layout_no_wrap(label.clone(), font.clone(), Color32::WHITE).size().x + 26.0)
         .collect();
     let gap = 8.0;
-    let total: f32 = widths.iter().sum::<f32>() + gap * (chips.len() as f32 + 1.0) + 14.0;
+    let first_plugin = looks.iter().position(|look| look.plugin);
+    let rules = if first_plugin.is_some() { 2.0 } else { 1.0 };
+    let total: f32 = widths.iter().sum::<f32>() + gap * (chips.len() as f32 + 1.0) + 7.0 + 7.0 * rules;
     let bar = Rect::from_center_size(pos2(rect.center().x, rect.bottom() - 32.0), vec2(total, 38.0));
     ui.painter().rect_filled(bar, 19.0, Color32::from_black_alpha(170));
     let mut x = bar.left() + gap;
     for (index, ((label, on), width)) in chips.iter().zip(&widths).enumerate() {
-        if index == looks.len() {
-            x += 7.0; // A little space between the looks and the switches.
+        // A rule between the built-in looks and the plug-ins, and between the looks and the switches.
+        if index == looks.len() || Some(index) == first_plugin {
+            x += 7.0;
             ui.painter().vline(
                 x - 4.0 - gap / 2.0,
                 bar.shrink(9.0).y_range(),
@@ -132,7 +122,10 @@ fn controls(
             );
         }
         let chip = Rect::from_min_size(pos2(x, bar.top() + 6.0), vec2(*width, bar.height() - 12.0));
-        let response = ui.interact(chip, ui.scope_id().with(("visualizer-chip", index)), Sense::click());
+        let mut response = ui.interact(chip, ui.scope_id().with(("visualizer-chip", index)), Sense::click());
+        if looks.get(index).is_some_and(|look| look.plugin) {
+            response = response.on_hover_text("A plug-in from the Visualizers folder");
+        }
         let fill = if *on {
             Color32::from_white_alpha(230)
         } else if response.hovered() {
@@ -151,10 +144,10 @@ fn controls(
 }
 
 /// A chip was clicked: a look, then Track Info, Full Screen and Done.
-fn choose(cx: &mut PanelContext, looks: &[(&'static str, &'static str)], index: usize) {
+fn choose(cx: &mut PanelContext, looks: &[LookEntry], index: usize) {
     let mut prefs = cx.session.preferences().clone();
     match (looks.get(index), index.saturating_sub(looks.len())) {
-        (Some((id, _)), _) => prefs.visualizer_style = (*id).to_owned(),
+        (Some(look), _) => prefs.visualizer_style = look.id.clone(),
         (None, 0) => prefs.visualizer_track_info = !prefs.visualizer_track_info,
         (None, 1) => {
             cx.act(Action::Run(CommandId::FullScreenVisualizer));

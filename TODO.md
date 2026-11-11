@@ -47,7 +47,7 @@ The biggest risk: these parts are built but have never run where it counts.
 - [x] Full-screen visualizer: View ▸ Full Screen Visualizer (⇧⌘F / Ctrl+Shift+F), the Full
       Screen control, or a double-click. Window bookkeeping tested in `crates/ui/src/full_screen.rs`;
       real full screen has not been tried on macOS or Windows, nor with several monitors.
-- [ ] Visualizer plug-ins loaded at run time (WebAssembly); today a new look is compiled in.
+- [x] Visualizer plug-ins loaded at run time (WebAssembly).
 
 ## Library and editing
 

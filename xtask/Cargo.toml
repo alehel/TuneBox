@@ -16,6 +16,8 @@ tunebox-library = { workspace = true }
 tunebox-tags = { workspace = true }
 tunebox-audio = { workspace = true }
 tunebox-sync = { workspace = true }
+# Where TuneBox looks for visualizer plug-ins (`cargo xtask plugins --install`).
+tunebox-platform = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }

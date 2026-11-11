@@ -30,6 +30,7 @@ tunebox-playback = { workspace = true }
 tunebox-rip = { workspace = true }
 tunebox-sync = { workspace = true }
 tunebox-metabrainz = { workspace = true }
+tunebox-plugins = { workspace = true }
 craft-atomic = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
@@ -39,6 +40,8 @@ log = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# Test plug-ins from WebAssembly text.
+wat = { workspace = true }
 # Making test pictures.
 image = { workspace = true }
 tunebox-sync = { workspace = true, features = ["simulator"] }

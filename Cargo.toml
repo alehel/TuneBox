@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/*", "xtask"]
+members = ["crates/*", "apps/*", "plugins/*", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,9 +22,11 @@ tunebox-rip = { path = "crates/rip", version = "0.1.0", default-features = false
 tunebox-mtp = { path = "crates/mtp", version = "0.1.0" }
 tunebox-metabrainz = { path = "crates/metabrainz", version = "0.1.0", default-features = false }
 tunebox-sync = { path = "crates/sync", version = "0.1.0" }
+tunebox-plugins = { path = "crates/plugins", version = "0.1.0" }
 tunebox-engine = { path = "crates/engine", version = "0.1.0", default-features = false }
 tunebox-platform = { path = "crates/platform", version = "0.1.0" }
 tunebox-visualizer = { path = "crates/visualizer", version = "0.1.0" }
+tunebox-visualizer-sdk = { path = "crates/visualizer-sdk", version = "0.1.0" }
 tunebox-ui = { path = "crates/ui", version = "0.1.0" }
 
 # Shared Craft libraries. craft-audio decodes every format we play (natively, or through
@@ -57,6 +59,15 @@ dirs = "6"
 notify = "8.2"
 # Mounted volumes, their labels and free space, on every platform.
 sysinfo = { version = "0.40", default-features = false, features = ["disk"] }
+
+# Visualizer plug-ins: a WebAssembly interpreter in pure Rust, with fuel metering and memory
+# limits (docs/visualizer-plugins.md says why not a JIT). `validate` checks every module before
+# it runs; of the defaults, `wat` (text parsing) and `memory64` (plug-ins don't need it) are left out.
+# `portable-dispatch`: the default dispatch relies on the compiler turning calls into jumps, and
+# where it does not (debug builds) an endless loop in a plug-in overflowed TuneBox's own stack.
+wasmi = { version = "2", default-features = false, features = ["std", "stable", "validate", "portable-dispatch"] }
+# WebAssembly text, for building test plug-ins without a wasm32 toolchain (tests only).
+wat = "1"
 
 # ui
 egui = "0.37"

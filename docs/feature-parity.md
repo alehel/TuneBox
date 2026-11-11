@@ -54,7 +54,7 @@ radio and sharing are out of scope.
 | Formats | Shipped | MP3, AAC, ALAC, FLAC, WAV, AIFF, Ogg Vorbis (through craft-audio and symphonia) |
 | Visualizer | Shipped | Five looks, track-info card, ⌘T / Ctrl+T; new looks are one file or a compile-time plug-in |
 | Full-screen visualizer | Shipped | View ▸ Full Screen Visualizer, ⇧⌘F / Ctrl+Shift+F, or the Full Screen control or a double-click on the visualizer. Only the visualizer shows; the pointer and controls hide when the mouse is still. Escape, the same command or a double-click puts the window back as it was. Tested on Linux under Xvfb only |
-| Run-time (WebAssembly) visualizer plug-ins | Planned | |
+| Visualizer plug-ins loaded at run time | Shipped | WebAssembly modules in the Visualizers folder, run sandboxed (wasmi: no imports, fuel and memory limits, every drawing checked); a failing plug-in is turned off with a notice. SDK and example plug-in; `tunebox-cli visualizer-plugins` checks them ([visualizer-plugins.md](visualizer-plugins.md)) |
 | Gapless playback | Shipped | The next song is opened ahead and follows in the same output stream, switching at the exact frame it is heard. A change of sample rate or channel count restarts the output, a short gap |
 | Crossfade, Sound Check, equaliser | Planned | |
 | Up Next / play queue editing, iTunes DJ | Planned | |

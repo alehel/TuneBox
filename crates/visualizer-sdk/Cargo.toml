@@ -1,0 +1,11 @@
+[package]
+name = "tunebox-visualizer-sdk"
+description = "Write TuneBox visualizer plug-ins: the WebAssembly ABI, the frame a look receives and a canvas to draw on."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

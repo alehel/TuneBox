@@ -7,11 +7,11 @@ use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, pos2};
 pub struct Scope;
 
 impl Visualizer for Scope {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "scope"
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "Oscilloscope"
     }
 

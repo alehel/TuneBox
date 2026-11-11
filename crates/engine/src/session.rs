@@ -41,6 +41,8 @@ pub struct SessionPaths {
     pub preferences_file: PathBuf,
     /// The media folder used until the listener picks another.
     pub default_media_folder: PathBuf,
+    /// Where visualizer plug-ins (`.wasm` files) are loaded from.
+    pub visualizer_plugins_folder: PathBuf,
 }
 
 /// What a finished job hands back.
@@ -68,6 +70,10 @@ pub(crate) enum Outcome {
     DeviceSaved {
         root: PathBuf,
         result: Result<(), String>,
+    },
+    VisualizerPlugins {
+        report: tunebox_plugins::FolderReport,
+        announce: bool,
     },
 }
 
@@ -104,6 +110,8 @@ pub struct Session {
     pub(crate) web: Arc<dyn WebClient>,
     /// "Find Album Artwork…": the search and the releases found, if one is open.
     pub(crate) artwork_search: Option<crate::album_artwork::ArtworkSearch>,
+    /// Visualizer plug-ins loaded and not yet taken by the frontend.
+    pub(crate) loaded_visualizer_plugins: Option<Vec<tunebox_plugins::Plugin>>,
     /// This process's hold on the library, for as long as the session lives.
     _lock: LibraryLock,
 }
@@ -154,6 +162,7 @@ impl Session {
             renaming: None,
             web: Arc::new(CachingClient::new(tunebox_metabrainz::default_client())),
             artwork_search: None,
+            loaded_visualizer_plugins: None,
             _lock: lock,
         };
         session.check_all_files();
@@ -252,6 +261,11 @@ impl Session {
     }
 
     fn apply_outcome(&mut self, outcome: Outcome) {
+        if let Outcome::VisualizerPlugins { report, announce } = outcome {
+            // Nothing in the library changed.
+            self.finish_visualizer_plugins(report, announce);
+            return;
+        }
         self.content_changed();
         match outcome {
             Outcome::Imported(report, origin) => self.finish_import(report, origin),
@@ -269,6 +283,7 @@ impl Session {
             Outcome::Renamed(report) => self.finish_rename(Some(report)),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
             Outcome::DeviceSaved { root, result } => self.finish_device_save(&root, result),
+            Outcome::VisualizerPlugins { .. } => {}
         }
     }
 

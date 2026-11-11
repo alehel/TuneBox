@@ -43,6 +43,7 @@ pub fn default_paths() -> SessionPaths {
         library_file: data.join("TuneBox Library.json"),
         preferences_file: data.join("Preferences.json"),
         default_media_folder: music.join("TuneBox Media"),
+        visualizer_plugins_folder: data.join("Visualizers"),
     }
 }
 
@@ -52,6 +53,7 @@ pub fn app_paths(folder: &Path) -> SessionPaths {
         library_file: folder.join("TuneBox Library.json"),
         preferences_file: folder.join("Preferences.json"),
         default_media_folder: folder.join("TuneBox Media"),
+        visualizer_plugins_folder: folder.join("Visualizers"),
     }
 }
 

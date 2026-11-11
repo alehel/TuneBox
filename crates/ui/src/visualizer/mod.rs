@@ -7,7 +7,9 @@ mod overlay;
 use crate::actions::Action;
 use crate::panels::PanelContext;
 use egui::Ui;
+use tunebox_engine::Notice;
 use tunebox_engine::commands::CommandId;
+use tunebox_engine::plugins::Plugin;
 use tunebox_visualizer::{Meter, Registry, Visualizer};
 
 /// Samples read from the player per frame.
@@ -42,6 +44,11 @@ impl VisualizerView {
         }
     }
 
+    /// Replaces the plug-in looks with a fresh scan's.
+    pub fn set_plugins(&mut self, plugins: Vec<Plugin>) {
+        self.registry.set_plugins(plugins);
+    }
+
     /// Draws the visualizer filling the space `ui` gives it.
     pub fn show(&mut self, ui: &mut Ui, cx: &mut PanelContext) {
         let rect = ui.max_rect();
@@ -54,10 +61,10 @@ impl VisualizerView {
         self.meter.update(cx.session.recent_audio(WINDOW).as_ref(), dt);
 
         let chosen = cx.session.preferences().visualizer_style.clone();
-        let current = self.registry.get_mut(&chosen).map(|look| {
-            look.paint(&ui.painter_at(rect), rect, &self.meter.frame());
-            look.id()
-        });
+        let painted = self.registry.paint(&chosen, &ui.painter_at(rect), rect, &self.meter.frame());
+        if let Some(notice) = painted.turned_off {
+            cx.act(Action::Notify(Notice::warning(notice)));
+        }
         // Made before the controls, so a click on a control is the control's, not this.
         let background = ui.interact(rect, ui.scope_id().with("visualizer-background"), egui::Sense::click());
         if background.double_clicked() {
@@ -68,7 +75,7 @@ impl VisualizerView {
             // Nothing should sit over the picture once the listener has stopped moving.
             ui.ctx().set_cursor_icon(egui::CursorIcon::None);
         }
-        overlay::show(ui, rect, cx, &self.registry.entries(), current.unwrap_or_default(), !idle);
+        overlay::show(ui, rect, cx, &self.registry.entries(), &painted.shown, !idle);
         ui.ctx().request_repaint();
     }
 }

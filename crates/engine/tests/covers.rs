@@ -62,6 +62,7 @@ fn fixture() -> Fixture {
         library_file: dir.path().join("TuneBox/Library.json"),
         preferences_file: dir.path().join("TuneBox/Preferences.json"),
         default_media_folder: dir.path().join("TuneBox/Media"),
+        visualizer_plugins_folder: dir.path().join("TuneBox/Visualizers"),
     };
     let mut session = Session::open(paths, Player::with_output(NullOutput { speed: 1.0 })).unwrap();
     let web = Arc::new(FakeWeb::default());

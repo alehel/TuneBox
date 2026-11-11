@@ -1,0 +1,18 @@
+[package]
+name = "tunebox-plugin-ripple"
+description = "An example TuneBox visualizer plug-in: rings that ripple out with the beat. Build with `cargo xtask plugins`."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+# cdylib: the .wasm TuneBox loads; rlib: so its look can be tested on the host.
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+tunebox-visualizer-sdk = { workspace = true }

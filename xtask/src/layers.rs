@@ -9,6 +9,8 @@ use serde_json::Value;
 /// Every workspace crate (without the `tunebox-` prefix) and its layer. `None`: exempt.
 const TABLE: &[(&str, Option<u8>)] = &[
     ("model", Some(0)),
+    // The plug-in ABI and the SDK plug-ins are written with: no dependencies.
+    ("visualizer-sdk", Some(0)),
     ("library", Some(1)),
     ("tags", Some(1)),
     ("audio", Some(1)),
@@ -18,6 +20,7 @@ const TABLE: &[(&str, Option<u8>)] = &[
     ("playback", Some(2)),
     ("rip", Some(2)),
     ("sync", Some(2)),
+    ("plugins", Some(2)),
     ("engine", Some(6)),
     ("platform", Some(7)),
     ("visualizer", Some(7)),
@@ -25,6 +28,8 @@ const TABLE: &[(&str, Option<u8>)] = &[
     ("tunebox", None),
     ("cli", None),
     ("xtask", None),
+    // Example plug-ins, built to WebAssembly.
+    ("plugin-ripple", None),
 ];
 
 /// Allowed same-layer edges.
