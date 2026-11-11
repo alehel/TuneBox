@@ -13,18 +13,20 @@ still has to be decided.
    series, year, publisher, description, how many discs the book has, and a cover. When the
    disc is on MusicBrainz, the details and the track names of *every* disc in the set are
    filled in from the release.
-3. Rips the disc. When the disc is done, TuneBox ejects it and asks for the next one:
-   "Insert disc 3 of 12." Putting it in starts the next rip. This repeats until the last disc,
-   or until the listener says "That was the last disc".
-4. Groups tracks into chapters, before, during or after ripping: select tracks and **Join into
-   One Chapter**, or **Split Chapter Here**, and name each chapter. A chapter may run from the
-   end of one disc into the next. Quick starts: one chapter per track, one per disc, or the
-   chapters suggested by MusicBrainz track names.
-5. Chooses the output and builds the book:
+3. Groups the disc's tracks into chapters and leaves out tracks that are not part of the
+   story (see [Editing the book](#editing-the-book)), then clicks **Rip Disc**. Nothing is
+   ripped until then.
+4. When the disc is done, TuneBox ejects it and asks for the next one: "Insert disc 3 of 12."
+   The new disc's tracks appear, ready to group, and wait for **Rip Disc** again. This repeats
+   until the last disc, or until the listener says "That Was the Last Disc".
+5. Reviews the whole book as one list: moves chapter boundaries (a chapter that ran from one
+   disc into the next), removes tracks ("Please insert disc 2"), and trims the start or end
+   of a track.
+6. Chooses the output and builds the book:
    - **One file with chapters**: a single `.m4b`.
    - **One file per chapter**: numbered files, tagged as parts of the same book.
 
-The book is added to the library, and the staged rip is deleted.
+The book is added to the library. Only then is the staged rip deleted.
 
 ### Why ripping and building are separate
 
@@ -35,9 +37,10 @@ files first and builds the book from them at the end. Reasons:
   across an hour or more of disc swapping. A crash, a quit, a full disk or a scratched disc on
   disc 11 would lose everything. Staged files survive all of these; the book resumes where it
   stopped.
-- **Chapters can change until the end.** Grouping happens on the staged tracks, so a chapter
-  that runs on into the next disc, or a mistake noticed on disc 7, is fixed by moving a
-  boundary, with no re-ripping.
+- **The book can be edited until the end.** Chapters, removed tracks and trims are notes in
+  the project, applied only when the book is built. A chapter that runs on into the next disc,
+  or a mistake noticed on disc 7, is fixed by moving a boundary, with no re-ripping, and every
+  edit can be undone until the build.
 - **The output can change until the end.** Single file or files per chapter, bit rate, mono or
   stereo: all decided at build time, from the same rip.
 - **Seamless chapters.** A chapter made of several CD tracks is fed to one encoder as one
@@ -70,7 +73,9 @@ not written through `files.rs`. The finished book is: it goes into the media fol
 | Part | Contents |
 |---|---|
 | Book | Title, author, narrator, series and number, year, publisher, genre (default "Audiobook"), description, cover, MusicBrainz release id |
-| Discs | Per disc, in book order: its disc id, table of contents, track names, which tracks are staged and which are left out of the book (a publisher's trailer, say) |
+| Discs | Per disc, in book order: its disc id, table of contents, track names, which tracks are staged |
+| Removed tracks | The tracks left out of the book, as (disc, track) |
+| Trims | Per track: how many samples to cut from its start and from its end |
 | Chapters | The tracks where a chapter starts, as (disc, track), and each chapter's name |
 | Output | Single file or per chapter; format, bit rate, mono or stereo |
 | Expected discs | How many discs the book has, if known |
@@ -82,6 +87,54 @@ special cases, and every track always belongs to exactly one chapter.
 A damaged `Project.json` is moved aside, like a damaged library file, and the staged audio is
 kept so nothing has to be ripped again.
 
+## Editing the book
+
+Chapters and removed tracks can be edited before a disc is ripped, while later discs are
+ripped, and after the last disc, over the whole book as one list; trims once a track is ripped. Nothing touches the staged audio: the edits are
+applied when the book is built, so each one can be undone until then.
+
+### Chapters
+
+Select tracks and **Join into One Chapter**, or choose a track and **Split Chapter Here**; name
+each chapter. Quick starts: one chapter per track, one per disc, or the chapters suggested by
+the MusicBrainz track names. After the last disc, the list shows the book across disc
+boundaries, so the last tracks of disc 1 and the first of disc 2 can be joined into the
+chapter they belong to.
+
+### Removing tracks
+
+**Remove from Book** leaves a track out: "Please insert disc 2", "This is the end of disc 1",
+the publisher's music. It stays in the list, greyed, and **Restore to Book** brings it back.
+Every track is still ripped and staged, so a removal can be undone after its disc has been
+put away.
+
+When a removed track was the first of a chapter, the chapter starts at its next kept track. A
+chapter with no kept tracks is left out of the output; its name is kept in case a track is
+restored.
+
+### Trimming
+
+Often the announcement is not a track of its own but the first or last seconds of one ("End
+of disc one. Please insert disc two."). **Trim…** cuts a stretch off the start or the end of a
+staged track:
+
+- A waveform of the start and the end of the track (craft-audio's peaks), with a handle for
+  each cut, and a time field for precise values.
+- **Play from Cut** plays the few seconds after the start cut, **Play to Cut** the few seconds
+  before the end cut, so the listener hears exactly what the book will contain.
+- The cuts are stored as sample counts and applied sample-exactly when the book is built. A
+  trim that would leave nothing of the track is refused with the advice to remove the track
+  instead.
+
+Trimming needs the track's audio, so it is offered once the track is ripped.
+
+### Chapter times
+
+Chapter start times are a pure function of the tables of contents, the removed tracks and the
+trims: every kept track contributes its sector count × 588 samples (which offset correction
+does not change), minus its trims. The same function names the files of a book built one file
+per chapter.
+
 ## Inserting the next disc
 
 The engine already looks for discs every few seconds (`Session::scan_drives`). While a project
@@ -89,10 +142,10 @@ is waiting for a disc, a newly read disc is checked before it is ripped:
 
 | The disc is | TuneBox says |
 |---|---|
-| The next one expected (MusicBrainz medium position matches, or unknown) | Rips it as the next disc |
+| The next one expected (MusicBrainz medium position matches, or unknown) | Shows it as the next disc, ready to group and rip |
 | One already ripped (same disc id) | "This is disc 2, which is already imported. Insert disc 3." Ejects it |
 | Another disc of the same release (MusicBrainz says disc 5, disc 3 expected) | Asks: rip it as disc 5, or as disc 3 anyway |
-| An earlier disc with tracks that failed | Offers to rip only the missing tracks |
+| An earlier disc with tracks that failed | Offers to rip only the missing tracks (or to remove them from the book) |
 | Unrelated (unknown disc, different release) | Asks whether it belongs to this book, since a disc without MusicBrainz data cannot be checked |
 
 The checks are a pure function of the project, the new disc's id and the lookup result, tested
@@ -115,13 +168,12 @@ ripped, on every system:
 
 ## Building the book
 
-Building is an engine job. It decodes the staged FLAC files in book order, feeds each chapter
-(or the whole book) to the encoder, and writes the result through a `*.part` file renamed on
+Building is an engine job. It decodes the staged FLAC files of the kept tracks in book order,
+drops the trimmed samples, feeds each chapter (or the whole book) to the encoder, and writes the result through a `*.part` file renamed on
 completion.
 
-Chapter start times come from the tables of contents alone: every track's length is its sector
-count × 588 samples, which offset correction does not change. They are a pure function, tested
-without audio.
+Chapter start times come from [Chapter times](#chapter-times). The build refuses to start
+while a kept track has not been ripped, naming the disc and tracks.
 
 ### One file with chapters (`.m4b`)
 
@@ -133,13 +185,12 @@ without audio.
 | Tags and cover | `tunebox-tags` (lofty) | lofty updates the `stco`/`co64` offsets of every track when it grows `moov`, so writing tags after muxing keeps the chapter track valid. To be proven by a test that writes tags to a chaptered file and reads the chapters back |
 | Media kind "Audiobook" | `tunebox-tags` | The `stik` atom set to 2, through lofty's generic atoms |
 
-Tag conventions to follow (observed in how audiobook players and tools behave; *confirm*
-against real players before relying on them): title and album = book title, artist and album
-artist = author, narrator in composer, genre "Audiobook", description in `desc`/`ldes`, series
-in grouping or the sort album. Track and disc numbers are left out of a single-file book.
+Tags: title and album = book title, artist and album artist = author, **narrator in composer**
+(decided), genre "Audiobook", description in `desc`/`ldes`. Series in grouping or the sort
+album is a convention seen in audiobook tools; *confirm* against real players. Track and disc numbers are left out of a single-file book.
 
-Encoding options: AAC at 64 kbit/s mono (the default proposed for speech), 96 or 128 kbit/s
-stereo. Mono mixes the two channels down before encoding.
+Encoding options: AAC at 64 kbit/s mono (the default, decided), 96 or 128 kbit/s stereo for
+dramatised productions. Mono mixes the two channels down before encoding.
 
 ### One file per chapter
 
@@ -153,12 +204,12 @@ track number = chapter number of the total, no disc number (chapters run across 
 
 | Layer | Crate | New |
 |---|---|---|
-| L0 | `model` | `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), chapter start times, output file names. Pure, tested next to it |
+| L0 | `model` | `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, chapter start times, output file names. Pure, tested next to it |
 | L1 | `tags` | Audiobook tags: media kind, narrator, description, chapters read back for tests |
 | L1 | `audio` | The AAC writer (and mono mixdown) over craft-audio once it lands |
 | L2 | `rip` | Rip into a given staging folder without tagging or the library (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
 | L2 | `audiobook` (new) | Builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
-| L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, commands. Re-exports what the frontends need |
+| L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, commands. Re-exports what the frontends need |
 | L7 | `ui` | The audiobook page and its sidebar item |
 | — | `tunebox-cli` | `audiobook` commands |
 
@@ -169,19 +220,23 @@ leaves the project as it was before the job.
 ### Commands
 
 Added to `crates/engine/src/commands.rs`, so menus, shortcuts and the CLI agree: Import as
-Audiobook…, Join into One Chapter, Split Chapter Here, That Was the Last Disc, Build Audiobook,
-Discard Audiobook.
+Audiobook…, Rip Disc, Join into One Chapter, Split Chapter Here, Remove from Book, Restore to
+Book, Trim…, That Was the Last Disc, Build Audiobook, Discard Audiobook.
 
 ### CLI
 
 ```text
 tunebox-cli audiobook start --title "…" --author "…" [--narrator "…"] [--discs 12] [--lookup]
 tunebox-cli audiobook rip                       # rips the disc in the drive as the next disc, ejects
+tunebox-cli audiobook done                      # that was the last disc
 tunebox-cli audiobook status
 tunebox-cli audiobook chapters [--per-track | --per-disc | --from-names]
 tunebox-cli audiobook join 1:14-2:3             # disc:track ranges
 tunebox-cli audiobook split 2:4
 tunebox-cli audiobook rename 7 "The Long Road"
+tunebox-cli audiobook remove 2:1                # leave a track out of the book
+tunebox-cli audiobook restore 2:1
+tunebox-cli audiobook trim 2:14 --end 6.5       # seconds cut off the end (--start for the start)
 tunebox-cli audiobook build --single | --per-chapter [--format aac|flac] [--bitrate 64] [--mono]
 tunebox-cli audiobook discard
 ```
@@ -192,10 +247,13 @@ An "Audiobook" item appears in the sidebar under the CD while a project exists (
 restart). Its page shows:
 
 - **The book**: cover, title, author, narrator and the other details, editable in place.
-- **The discs**: a strip of discs, each done, being ripped (with progress), waiting, or with
-  failed tracks. While waiting: "Insert disc 3 of 12" in large type.
+- **The discs**: a strip of discs, each done, being ripped (with progress), ready to rip,
+  waiting, or with failed tracks. While waiting: "Insert disc 3 of 12" in large type, then the
+  new disc's tracks and **Rip Disc**.
 - **The chapters**: the book's tracks grouped under chapter headings, with each chapter's name
-  and length; select rows to join, split at a row, rename a heading.
+  and length; select rows to join, split at a row, rename a heading. Removed tracks are greyed
+  and struck through; trimmed tracks show their cuts and their new length. Trim… opens the
+  waveform editor described under [Trimming](#trimming).
 - **The output**: single file or per chapter, the format options, the space needed, Build.
 
 ## Not in this plan: listening
@@ -212,34 +270,41 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 ## Phases
 
 1. **The loop, lossless.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
-   checks, CLI, and output as FLAC files per chapter. Fully testable with the virtual drive.
+   checks, chapters, removing and trimming, CLI, and output as FLAC files per chapter. Fully testable with the virtual drive.
    Does not wait for anything.
-2. **The page.** The audiobook page in the UI and screenshots in `cargo xtask screenshots`.
+2. **The page.** The audiobook page in the UI, the trim editor, and screenshots in
+   `cargo xtask screenshots`.
 3. **AAC.** When craft-audio has its encoder and craft-media writes chapters: the single `.m4b`
    and AAC files per chapter.
 4. **Listening**, above.
 
 ## Tests to write
 
-- Model: joining, splitting and renaming chapters, across disc boundaries; chapter start times
-  from tables of contents; output names; next-disc checks for each row of the table above.
-- Rip: three virtual discs swapped in turn, ejected after each; a disc changed mid-rip; a
+- Model: joining, splitting and renaming chapters, across disc boundaries; removing and
+  restoring tracks, including the first track of a chapter and every track of one; trims,
+  including ones that would leave nothing; chapter start times from tables of contents,
+  removals and trims; output names; next-disc checks for each row of the table above.
+- Rip: three virtual discs swapped in turn, each waiting for Rip Disc, ejected after each; a disc changed mid-rip; a
   cancelled disc leaves no staged `*.part` files and the project as before.
 - Resume: a project saved after disc 2, reloaded, continues with disc 3; a damaged
   `Project.json` is moved aside with the staged audio kept.
-- Build: a chapter of several tracks decodes to exactly the concatenated disc audio (FLAC per
-  chapter now; AAC within a tolerance later); the `.m4b` chapters read back at the computed
+- Build: a chapter of several tracks, with a removed track and trims, decodes to exactly the
+  kept, trimmed disc audio joined (FLAC per chapter now; AAC within a tolerance later); a
+  build with an unripped kept track is refused; the `.m4b` chapters read back at the computed
   times, before and after tags are written.
 - Space: a full disk during staging or building fails with an error the listener can act on.
 
+## Decided
+
+- Ripping waits for **Rip Disc**, so the listener can group the new disc's tracks first.
+- Default output: AAC at 64 kbit/s mono.
+- The staged FLAC is deleted once the book is in the library.
+- The narrator goes in the composer tag.
+- After the last disc the whole book stays editable: chapters across discs, removed tracks,
+  trims of a track's start and end.
+
 ## Open questions
 
-1. Rip on insertion, or wait for a click? This plan rips the next disc as soon as it is
-   recognised, since the listener is in the middle of a book. A Preferences switch could turn
-   that off.
-2. Default output: 64 kbit/s mono AAC is the usual choice for speech, but some listeners want
-   stereo (dramatised productions). Ask on the first build, or default and let them change it?
-3. Keep the staged FLAC after building (as an archive copy), or always delete it? This plan
-   deletes it once the book is in the library.
-4. Narrator in composer is a convention, not a standard. Check what the players we care about
-   (Apple Books, the Echo players, Android audiobook apps) actually show.
+1. Should TuneBox point out likely announcements, such as tracks under ten seconds at the start
+   or end of a disc, or the quiet moment nearest a trim handle? Helpful, but not needed for the
+   first version.
