@@ -55,6 +55,18 @@ pub enum Action {
     /// Make this image file the cover of these songs (a picture dropped on the artwork).
     SetArtwork(Vec<TrackId>, PathBuf),
     RemoveArtwork(Vec<TrackId>),
+    /// Open "Find Album Artwork…" for these songs, and start searching. An open dialog (Get
+    /// Info) comes back when it closes.
+    OpenFindArtwork(Vec<TrackId>),
+    /// Search MusicBrainz for the releases of an album, for these songs' cover.
+    FindArtwork {
+        tracks: Vec<TrackId>,
+        artist: String,
+        album: String,
+    },
+    /// Fetch the front cover of this release (one the search found) and use it.
+    UseFoundArtwork(String),
+    CloseArtworkSearch,
     /// Rename files as the dialog's preview shows (the dialog comes back if that fails).
     RenameFiles(Box<crate::dialogs::RenameFilesDialog>),
     /// Ask where a missing song's file is now, and link the song to it.

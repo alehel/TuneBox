@@ -15,6 +15,11 @@ pub struct DiscInfo {
     pub disc: NumberOf,
     /// Per track, in disc order: (title, artist). An empty artist means the album artist.
     pub tracks: Vec<(String, String)>,
+    /// The MusicBrainz release the names came from, when they were looked up: the key to its
+    /// cover in the Cover Art Archive.
+    pub release_id: Option<String>,
+    /// That release's release group (the album across its editions).
+    pub release_group_id: Option<String>,
 }
 
 impl DiscInfo {

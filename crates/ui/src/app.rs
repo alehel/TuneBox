@@ -5,8 +5,8 @@ use crate::actions::Action;
 use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
 use crate::dialogs::{
-    ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, RenameFilesDialog,
-    SetUpDrive, SmartPlaylistDialog,
+    ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, FindArtworkDialog, GetInfoDialog, PreferencesDialog,
+    RenameFilesDialog, SetUpDrive, SmartPlaylistDialog,
 };
 use crate::full_screen::{self, Effect, WindowBefore};
 use crate::library_watch::LibraryWatch;
@@ -198,6 +198,22 @@ impl TuneBoxApp {
         }
     }
 
+    /// Opens "Find Album Artwork…" for `tracks` and starts searching for their album. A dialog
+    /// already open (Get Info) comes back when the picker closes.
+    pub(crate) fn find_artwork(&mut self, tracks: Vec<TrackId>) {
+        if tracks.is_empty() {
+            return;
+        }
+        self.session.close_artwork_search();
+        let (artist, album) = self.session.album_search_terms(&tracks);
+        let return_to = self.dialog.take().map(Box::new);
+        let dialog = FindArtworkDialog::new(tracks, artist, album, return_to);
+        if !dialog.album_is_empty() {
+            self.apply(dialog.search_action());
+        }
+        self.dialog = Some(Dialog::FindArtwork(Box::new(dialog)));
+    }
+
     fn command_context(&self) -> Context {
         let selected = self.view.selected_tracks();
         Context {
@@ -245,6 +261,16 @@ impl TuneBoxApp {
                 let result = self.session.remove_artwork(&tracks);
                 self.report(result);
             }
+            Action::OpenFindArtwork(tracks) => self.find_artwork(tracks),
+            Action::FindArtwork { tracks, artist, album } => {
+                let result = self.session.find_album_artwork(&tracks, &artist, &album, true);
+                self.report(result);
+            }
+            Action::UseFoundArtwork(release) => {
+                let result = self.session.use_found_artwork(&release);
+                self.report(result);
+            }
+            Action::CloseArtworkSearch => self.session.close_artwork_search(),
             Action::RenameFiles(dialog) => self.rename_files(*dialog),
             Action::SetRating(ids, rating) => self.session.set_rating(&ids, rating),
             Action::SetChecked(ids, checked) => self.session.set_checked(&ids, checked),
@@ -354,6 +380,10 @@ impl TuneBoxApp {
                 self.report(result);
             }
             CommandId::GetTrackNames => self.get_track_names(),
+            CommandId::GetCdCover => {
+                let result = self.session.fetch_disc_cover();
+                self.report(result);
+            }
             CommandId::SyncDevice => {
                 if let SourceItem::Device(root) = &self.view.source {
                     let result = self.session.sync_device(&root.clone());
@@ -373,6 +403,7 @@ impl TuneBoxApp {
             CommandId::Delete => self.delete_selection(),
             CommandId::ChooseArtwork => self.choose_artwork(self.view.selected_tracks()),
             CommandId::RemoveArtwork => self.apply(Action::RemoveArtwork(self.view.selected_tracks())),
+            CommandId::FindAlbumArtwork => self.find_artwork(self.view.selected_tracks()),
             CommandId::GetInfo => {
                 let tracks = self.view.selected_tracks();
                 self.dialog = Some(Dialog::GetInfo(Box::new(GetInfoDialog::new(&self.session, tracks))));

@@ -35,6 +35,9 @@ pub struct Preferences {
     /// Keyed by the drive's model, or its device path where the model is unknown
     /// (`DriveIdentity::key`). A drive not listed reads with no correction.
     pub read_offsets: BTreeMap<String, i32>,
+    /// Fetch the cover from the Cover Art Archive as soon as a CD's names have been looked up
+    /// on MusicBrainz. Off by default, for the same reason.
+    pub fetch_cd_covers_automatically: bool,
     pub volume: f32,
     pub shuffle: bool,
     pub repeat: RepeatMode,
@@ -124,6 +127,7 @@ impl Default for Preferences {
             rip_format: LosslessFormat::Flac,
             lookup_cd_names_automatically: false,
             read_offsets: BTreeMap::new(),
+            fetch_cd_covers_automatically: false,
             volume: 0.8,
             shuffle: false,
             repeat: RepeatMode::Off,

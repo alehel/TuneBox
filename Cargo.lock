@@ -4368,6 +4368,7 @@ dependencies = [
  "tunebox-audio",
  "tunebox-import",
  "tunebox-library",
+ "tunebox-metabrainz",
  "tunebox-model",
  "tunebox-mtp",
  "tunebox-playback",
@@ -4400,6 +4401,17 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tunebox-model",
+]
+
+[[package]]
+name = "tunebox-metabrainz"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "ureq",
 ]
 
 [[package]]
@@ -4463,9 +4475,9 @@ dependencies = [
  "tunebox-audio",
  "tunebox-import",
  "tunebox-library",
+ "tunebox-metabrainz",
  "tunebox-model",
  "tunebox-tags",
- "ureq",
 ]
 
 [[package]]

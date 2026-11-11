@@ -15,7 +15,7 @@ default = ["drives", "musicbrainz"]
 # Physical CD drives through cd-da-reader. Without it only `VirtualDrive` exists.
 drives = ["dep:cd-da-reader"]
 # Track-name lookup on musicbrainz.org (only ever when the listener asks for it).
-musicbrainz = ["dep:ureq"]
+musicbrainz = ["dep:tunebox-metabrainz"]
 
 [dependencies]
 tunebox-model = { workspace = true }
@@ -32,7 +32,7 @@ base64 = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
 cd-da-reader = { workspace = true, optional = true }
-ureq = { workspace = true, optional = true }
+tunebox-metabrainz = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

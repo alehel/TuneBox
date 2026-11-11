@@ -23,6 +23,7 @@ browsing, rating and making playlists never touch a music file.
 | Add to Library | **Nothing.** Songs are played from where they are. If you turn on *Copy files to the TuneBox Media folder*, copies are made in the media folder; the originals are not touched |
 | Get Info ▸ edit details | The details are written into the song's tags. Only fields you changed are written: the additional fields (credits, label, sort names, lyrics…) you did not touch stay exactly as they are, and a field the format has no place for is not offered. The edit is made on a hidden copy next to the file (`.tunebox-edit-…`) that replaces the original only when complete, so a crash or full disk cannot damage the song |
 | Watching library folders | **Nothing.** New songs are added to the library, changed songs are read again, a moved song is relinked (keeping its ratings and plays), and a deleted song stays in the library |
+| Find Album Artwork… / Get CD Cover | The same as Choose Artwork, with a cover from the Cover Art Archive: nothing changes until you pick a release (or, for a CD, until its songs are imported). See [Covers from the internet](#covers-from-the-internet) |
 | Choose Artwork / Remove Artwork | The cover is written into (or every picture removed from) each chosen song's tags, through the same hidden copy as Get Info edits, one song at a time in the background. A song that cannot be written is reported and left as it is; the others carry on. JPEG and PNG pictures go in byte for byte; other images are converted, and pictures over 1400 pixels scaled down, so each song grows by a few hundred kilobytes at most. Missing songs and songs on a drive or share that is not connected are skipped, untouched. Songs in a read-only folder: see below |
 | Refresh from Files | **Nothing.** The songs' tags are read again and the library takes what they say |
 | Tasks ▸ Rename Files from Tags… | Renames the chosen songs' files, and moves them into folders, by a pattern built from their tags. Only after a preview, and only inside the library folder each song is in or inside the media folder. See [Renaming files](#renaming-files-from-tags) |
@@ -149,6 +150,31 @@ those songs alone too.
 `tunebox-cli missing` lists missing songs, and songs on each place that is not connected;
 `tunebox-cli locate <search> <file>` links one.
 
+## Covers from the internet
+
+TuneBox fetches covers only when you ask: **Find Album Artwork…** (album grid menu, Edit menu,
+Get Info's *Find Online…*), **Get CD Cover** on the CD page, or the Preferences ▸ Importing
+switch *Get the cover when track names are found*, which is off until you turn it on. What is
+sent, and to whom:
+
+| Request | Sent to | What it carries | When |
+|---|---|---|---|
+| CD names | musicbrainz.org | The disc id | Get Track Names, or *Look up track names when a disc is inserted* |
+| Album search | musicbrainz.org | The artist and album title in the search box | Find Album Artwork… (and Search in it) |
+| Thumbnails | coverartarchive.org, redirected to archive.org | The release ids MusicBrainz returned | While the picker shows them, one at a time |
+| The cover | coverartarchive.org, redirected to archive.org | The chosen release's id (or the CD's) | Use Cover, Get CD Cover, or the switch above |
+
+Every request names TuneBox in its user agent (as MusicBrainz asks), is spaced at least a
+second apart for MusicBrainz, and gives up after 40 seconds; replies larger than expected are
+refused. Nothing else about you or your library is sent, and replies are remembered only for
+the session (in memory), so going back and forth does not ask again.
+
+TuneBox keeps the 1200-pixel version of a cover: sharper than any player shows it, below the
+1400-pixel limit for covers so it is stored as served, and a few hundred kilobytes rather than
+the multi-megabyte original scan in every song. A release with no cover of its own gets its
+release group's (the album's cover, from another edition), and TuneBox says so. A cover then
+goes into the songs exactly as a picture you chose would, read-only folders included.
+
 ## Artwork from the command line
 
 ```sh
@@ -158,5 +184,14 @@ tunebox-cli artwork export "Lanterns" ~/Desktop/cover.jpg     # reads only: work
 ```
 
 `artwork export` saves the cover as it is stored (JPEG or PNG), and refuses to write into a
-read-only folder. The test `a_cover_goes_into_every_writable_song_and_is_kept_for_read_only_ones`
+read-only folder.
+
+```sh
+tunebox-cli artwork find "Paper Boats"              # the album's releases on MusicBrainz, with ids
+tunebox-cli artwork fetch "Paper Boats" --release 9a9e7b0a-…   # that release's cover into the songs
+tunebox-cli cd-import --lookup --cover              # names and cover from the internet, then import
+```
+
+`artwork find` changes nothing; `--artist` and `--album` search for other words than the
+songs' tags. The test `a_cover_goes_into_every_writable_song_and_is_kept_for_read_only_ones`
 (`crates/engine/tests/session.rs`) checks the read-only folder byte for byte.

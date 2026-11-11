@@ -13,6 +13,7 @@
 )]
 
 mod details;
+mod find_artwork;
 mod rename;
 
 use clap::{Parser, Subcommand};
@@ -69,6 +70,29 @@ enum ArtworkAction {
     Remove { search: String },
     /// Save the cover of the first song matching a search that has one to a file.
     Export { search: String, file: PathBuf },
+    /// List the MusicBrainz releases (editions) of the album of the songs matching a search,
+    /// with their ids. Asks musicbrainz.org; changes nothing.
+    Find {
+        search: String,
+        /// Search for this artist instead of the songs' album artist.
+        #[arg(long)]
+        artist: Option<String>,
+        /// Search for this album title instead of the songs' album.
+        #[arg(long)]
+        album: Option<String>,
+    },
+    /// Put the front cover of a release (an id from `artwork find`) from the Cover Art Archive
+    /// into the songs matching a search. A release without a cover of its own gets its
+    /// album's cover from another edition.
+    Fetch {
+        search: String,
+        #[arg(long)]
+        release: String,
+        #[arg(long)]
+        artist: Option<String>,
+        #[arg(long)]
+        album: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -167,6 +191,9 @@ enum Command {
         /// Look the names up on MusicBrainz.
         #[arg(long)]
         lookup: bool,
+        /// Then get the release's cover from the Cover Art Archive (needs --lookup).
+        #[arg(long, requires = "lookup")]
+        cover: bool,
     },
     /// Import the audio CD in the drive.
     CdImport {
@@ -174,6 +201,10 @@ enum Command {
         virtual_disc: bool,
         #[arg(long)]
         lookup: bool,
+        /// Get the release's cover from the Cover Art Archive and put it into the imported
+        /// songs (needs --lookup).
+        #[arg(long, requires = "lookup")]
+        cover: bool,
     },
     /// Show the read offset of the CD drive in use, or set it (in samples, e.g. --set=+667). Look
     /// the drive up in the AccurateRip drive list: https://www.accuraterip.com/driveoffsets.htm
@@ -323,18 +354,18 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             rename::apply(session, &search, &pattern, to, skip_conflicts)?
         }
         Command::Play { search, shuffle } => play(session, search.as_deref(), shuffle),
-        Command::CdInfo { virtual_disc, lookup } => {
-            read_cd(session, virtual_disc, lookup)?;
+        Command::CdInfo { virtual_disc, lookup, cover } => {
+            read_cd(session, virtual_disc, lookup, cover)?;
             print_cd(session);
         }
-        Command::CdImport { virtual_disc, lookup } => {
-            read_cd(session, virtual_disc, lookup)?;
+        Command::CdImport { virtual_disc, lookup, cover } => {
+            read_cd(session, virtual_disc, lookup, cover)?;
             print_cd(session);
             session.import_cd().map_err(|e| e.to_string())?;
             wait_for_jobs(session);
         }
         Command::CdOffset { set, virtual_disc } => {
-            read_cd(session, virtual_disc, false)?;
+            read_cd(session, virtual_disc, false, false)?;
             if let Some(samples) = set {
                 session.set_cd_read_offset(samples).map_err(|e| e.to_string())?;
             }
@@ -423,6 +454,12 @@ fn artwork(session: &mut Session, action: ArtworkAction) -> Result<(), String> {
         ArtworkAction::Remove { search } => (search, None),
         export @ ArtworkAction::Export { .. } => {
             return show(session.view(), Command::Artwork { action: export });
+        }
+        ArtworkAction::Find { search, artist, album } => {
+            return find_artwork::find(session, &find_artwork::Terms { search, artist, album });
+        }
+        ArtworkAction::Fetch { search, release, artist, album } => {
+            return find_artwork::fetch(session, &find_artwork::Terms { search, artist, album }, &release);
         }
     };
     let ids = search_ids(session.view(), Source::Music, Some(&search));
@@ -547,7 +584,7 @@ fn play(session: &mut Session, search: Option<&str>, shuffle: bool) {
     }
 }
 
-fn read_cd(session: &mut Session, virtual_disc: bool, lookup: bool) -> Result<(), String> {
+fn read_cd(session: &mut Session, virtual_disc: bool, lookup: bool, cover: bool) -> Result<(), String> {
     if virtual_disc {
         session.read_disc(Arc::new(VirtualDrive::new("Virtual Drive", vec![3, 4, 2, 5])));
     } else {
@@ -561,12 +598,26 @@ fn read_cd(session: &mut Session, virtual_disc: bool, lookup: bool) -> Result<()
         session.lookup_disc_names().map_err(|e| e.to_string())?;
         wait_for_jobs(session);
     }
+    if cover {
+        session.fetch_disc_cover().map_err(|e| e.to_string())?;
+        wait_for_jobs(session);
+    }
     Ok(())
 }
 
 fn print_cd(session: &Session) {
     let Some(cd) = session.cd() else { return };
     println!("{} — {}  (disc id {})", cd.info.artist, cd.info.album, cd.disc_id);
+    if let Some(release) = &cd.info.release_id {
+        let cover = match &cd.cover {
+            tunebox_engine::DiscCover::Found { artwork, .. } => {
+                format!(", cover found ({} kB)", artwork.data.len().div_ceil(1000))
+            }
+            tunebox_engine::DiscCover::NoneFound => ", no cover in the Cover Art Archive".to_owned(),
+            _ => String::new(),
+        };
+        println!("MusicBrainz release {release}{cover}");
+    }
     for (index, number) in cd.audio_numbers().iter().enumerate() {
         let (title, artist) = cd.info.tracks.get(index).cloned().unwrap_or_default();
         let length = cd.toc.duration(*number).map(format_clock).unwrap_or_default();
@@ -739,6 +790,9 @@ mod tests {
             &["refresh"],
             &["artwork", "set", "x", "/cover.jpg"],
             &["artwork", "remove", "x"],
+            &["artwork", "find", "x"],
+            &["artwork", "fetch", "x", "--release", "11111111-2222-3333-4444-555555555555"],
+            &["cd-import", "--lookup", "--cover"],
             &["rename", "--search", "x", "--pattern", "{title}", "--apply"],
             &["play"],
         ] {

@@ -319,6 +319,12 @@ fn artwork_well(
                 actions.push(Action::RemoveArtwork(ids.clone()));
             }
         });
+        let find = ui
+            .add_enabled(!busy, egui::Button::new("Find Online…").min_size(vec2(SIZE, 0.0)))
+            .on_hover_text("Search MusicBrainz and the Cover Art Archive for this album's cover");
+        if find.clicked() {
+            actions.push(Action::OpenFindArtwork(ids.clone()));
+        }
     });
 }
 

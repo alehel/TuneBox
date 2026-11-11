@@ -28,6 +28,12 @@ pub enum JobKind {
     Rename,
     /// Writing an MTP player's manifest after its settings changed.
     SaveDevice,
+    /// Fetching a cover from the Cover Art Archive (for the CD, or a chosen release).
+    FetchCover,
+    /// Searching MusicBrainz for an album's releases.
+    FindArtwork,
+    /// Fetching the picker's thumbnails, one at a time.
+    Thumbnail,
 }
 
 impl JobKind {
@@ -43,6 +49,9 @@ impl JobKind {
             JobKind::Artwork => "Changing covers",
             JobKind::SaveDevice => "Saving a player's settings",
             JobKind::Rename => "Renaming files",
+            JobKind::FetchCover => "Getting a cover",
+            JobKind::FindArtwork => "Looking for album artwork",
+            JobKind::Thumbnail => "Getting cover thumbnails",
         }
     }
 }

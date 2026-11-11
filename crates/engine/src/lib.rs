@@ -3,7 +3,7 @@
 //! A [`Session`] owns the library, the player, the devices, the CD in the drive and the
 //! background jobs. Frontends (the desktop app, the command line) call its methods and read its
 //! state; they never reach into the crates below. The session is single-threaded by design:
-//! slow work (importing, ripping, syncing, looking up track names) runs as a [`jobs`] job on a
+//! slow work (importing, ripping, syncing, looking up track names and covers) runs as a [`jobs`] job on a
 //! worker thread and hands its result back to [`Session::tick`], so the library only ever has
 //! one writer.
 //!
@@ -19,11 +19,13 @@
     clippy::unreachable
 )]
 
+mod album_artwork;
 mod artwork;
 mod availability;
 mod cd;
 pub mod commands;
 mod devices;
+mod disc_cover;
 mod error;
 mod file_check;
 pub mod files;
@@ -43,8 +45,10 @@ mod sources;
 mod view;
 mod watch;
 
+pub use album_artwork::{ArtworkSearch, CoverCandidate, SearchState, Thumbnail};
 pub use cd::CdState;
 pub use devices::{DeviceEntry, find_mtp_players};
+pub use disc_cover::DiscCover;
 pub use error::EngineError;
 pub use file_check::FileStatus;
 pub use jobs::{JobId, JobKind, JobStatus};
@@ -63,6 +67,7 @@ pub use view::LibraryView;
 // The types frontends need from the layers below, so they depend on the engine alone.
 pub use tunebox_audio::LosslessFormat;
 pub use tunebox_library::{BrowseFilter, Browser, Library, Summary};
+pub use tunebox_metabrainz::{CoverOf, ReleaseCandidate, ReleaseRef, WebClient, WebError, is_mbid};
 pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
 pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, DriveIdentity, VirtualDrive, check_read_offset};

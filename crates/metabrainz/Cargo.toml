@@ -1,0 +1,24 @@
+[package]
+name = "tunebox-metabrainz"
+description = "TuneBox's web requests: MusicBrainz (disc lookup, release search) and the Cover Art Archive, behind a small client boundary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["http"]
+# The real HTTPS client (ureq). Without it only the `WebClient` boundary and the parsing exist,
+# and the frontends get a client that says TuneBox was built without network access.
+http = ["dep:ureq"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+ureq = { workspace = true, optional = true }

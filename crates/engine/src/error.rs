@@ -18,6 +18,10 @@ pub enum EngineError {
     NoDisc,
     #[error("{0}")]
     ReadOffset(String),
+    #[error(
+        "TuneBox does not know which MusicBrainz release this disc is. Get Track Names first: the cover is found by the release they come from"
+    )]
+    NoRelease,
     #[error("{0} is already in progress")]
     Busy(&'static str),
     #[error("{0}")]

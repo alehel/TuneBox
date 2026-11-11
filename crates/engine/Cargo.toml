@@ -16,8 +16,9 @@ default = ["sound", "drives", "musicbrainz"]
 sound = ["tunebox-playback/cpal"]
 # Physical CD drives.
 drives = ["tunebox-rip/drives"]
-# "Get Track Names" from musicbrainz.org.
-musicbrainz = ["tunebox-rip/musicbrainz"]
+# Requests to MusicBrainz ("Get Track Names", finding album artwork) and the Cover Art
+# Archive, only ever when the listener asks. Without it the engine says it has no network.
+musicbrainz = ["tunebox-rip/musicbrainz", "tunebox-metabrainz/http"]
 
 [dependencies]
 tunebox-model = { workspace = true }
@@ -28,6 +29,7 @@ tunebox-import = { workspace = true }
 tunebox-playback = { workspace = true }
 tunebox-rip = { workspace = true }
 tunebox-sync = { workspace = true }
+tunebox-metabrainz = { workspace = true }
 craft-atomic = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }

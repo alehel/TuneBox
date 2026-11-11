@@ -20,6 +20,7 @@ tunebox-import = { path = "crates/import", version = "0.1.0" }
 tunebox-playback = { path = "crates/playback", version = "0.1.0", default-features = false }
 tunebox-rip = { path = "crates/rip", version = "0.1.0", default-features = false }
 tunebox-mtp = { path = "crates/mtp", version = "0.1.0" }
+tunebox-metabrainz = { path = "crates/metabrainz", version = "0.1.0", default-features = false }
 tunebox-sync = { path = "crates/sync", version = "0.1.0" }
 tunebox-engine = { path = "crates/engine", version = "0.1.0", default-features = false }
 tunebox-platform = { path = "crates/platform", version = "0.1.0" }

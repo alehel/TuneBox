@@ -20,6 +20,7 @@ pub enum CommandId {
     Locate,
     ImportCd,
     GetTrackNames,
+    GetCdCover,
     SyncDevice,
     SetUpDrive,
     Eject,
@@ -30,6 +31,7 @@ pub enum CommandId {
     GetInfo,
     ChooseArtwork,
     RemoveArtwork,
+    FindAlbumArtwork,
     Preferences,
     Find,
     // View
@@ -164,6 +166,8 @@ pub enum Needs {
     SingleSelection,
     /// A disc is in the drive.
     Disc,
+    /// A disc is in the drive and its names came from MusicBrainz.
+    LookedUpDisc,
     /// A managed player is selected.
     Device,
     /// A disc or a player is selected.
@@ -218,6 +222,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::Locate, "Locate…", Menu::File, None, Needs::MissingSelection),
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
+    spec(CommandId::GetCdCover, "Get CD Cover", Menu::File, None, Needs::LookedUpDisc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
     spec(CommandId::SetUpDrive, "Set Up Drive for Syncing…", Menu::File, None, Needs::Nothing),
     spec(CommandId::Eject, "Eject", Menu::File, Some(Shortcut::cmd(Key::Letter('e'))), Needs::Ejectable),
@@ -234,6 +239,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::GetInfo, "Get Info", Menu::Edit, Some(Shortcut::cmd(Key::Letter('i'))), Needs::Selection),
     spec(CommandId::ChooseArtwork, "Choose Artwork…", Menu::Edit, None, Needs::Selection),
     spec(CommandId::RemoveArtwork, "Remove Artwork", Menu::Edit, None, Needs::Selection),
+    spec(CommandId::FindAlbumArtwork, "Find Album Artwork…", Menu::Edit, None, Needs::Selection),
     spec(CommandId::Find, "Find", Menu::Edit, Some(Shortcut::cmd(Key::Letter('f'))), Needs::Nothing),
     after_separator(spec(
         CommandId::Preferences,
@@ -306,6 +312,7 @@ impl Session {
             Needs::Selection => context.selected_tracks > 0,
             Needs::SingleSelection => context.selected_tracks == 1,
             Needs::Disc => self.cd.is_some(),
+            Needs::LookedUpDisc => self.cd.as_ref().is_some_and(|cd| cd.info.release_id.is_some()),
             Needs::Device => context.device_selected,
             Needs::Ejectable => context.device_selected || context.cd_selected,
             Needs::LibraryFolders => !self.prefs.library_folders.is_empty(),
@@ -314,6 +321,8 @@ impl Session {
         let busy = match id {
             CommandId::ImportCd => self.jobs.is_running(JobKind::Rip),
             CommandId::GetTrackNames => self.jobs.is_running(JobKind::LookupNames) || !cfg!(feature = "musicbrainz"),
+            CommandId::GetCdCover => self.jobs.is_running(JobKind::FetchCover) || !cfg!(feature = "musicbrainz"),
+            CommandId::FindAlbumArtwork => self.jobs.is_running(JobKind::FindArtwork) || !cfg!(feature = "musicbrainz"),
             CommandId::SyncDevice => self.jobs.is_running(JobKind::Sync),
             CommandId::RefreshFromFiles => {
                 self.jobs.is_running(JobKind::Refresh) || self.jobs.is_running(JobKind::Rename)

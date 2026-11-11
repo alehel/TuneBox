@@ -83,7 +83,11 @@ The biggest risk: these parts are built but have never run where it counts.
       without it).
 - [ ] Test and copy: read each track twice and re-read on a mismatch.
 - [ ] Play a CD directly.
-- [ ] Cover art from the Cover Art Archive.
+- [x] Cover art from the Cover Art Archive: Get CD Cover (or an opt-in setting) on the CD page,
+      Find Album Artwork… for library albums, `tunebox-cli artwork find/fetch` and
+      `cd-import --cover`. Tested with a fake web in `crates/engine/tests/covers.rs` and the
+      parsers in `tunebox-metabrainz`; checked once against the live services (search and one
+      cover). The picker has not been tried on a real desktop, only in screenshots.
 
 ## Portable players
 
