@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use tunebox_model::{Track, format_bytes};
 use tunebox_sync::{
-    Candidate, Device, DeviceError, PlaylistFile, SyncItem, SyncMode, SyncReport, SyncSettings, Volume,
+    Candidate, Device, DeviceError, PlayerModel, PlaylistFile, SyncItem, SyncMode, SyncReport, SyncSettings, Volume,
 };
 
 /// A player in the source list.
@@ -70,6 +70,15 @@ impl Session {
     /// the platform for them every few seconds). MTP players are left as they are.
     pub fn refresh_devices(&mut self, volumes: &[Volume]) {
         let mut devices: Vec<DeviceEntry> = tunebox_sync::scan(volumes).into_iter().map(DeviceEntry::from).collect();
+        let drives: Vec<Volume> = volumes
+            .iter()
+            .filter(|v| v.removable && !devices.iter().any(|d| d.volume.root == v.root))
+            .cloned()
+            .collect();
+        if drives != self.drives {
+            self.drives = drives;
+            self.content_changed();
+        }
         devices.extend(self.devices.iter().filter(|d| d.volume.is_mtp()).cloned());
         self.set_devices(devices);
     }
@@ -93,13 +102,40 @@ impl Session {
         }
     }
 
-    /// Sets up the player at `root` for syncing under `name` ("Set up as a TuneBox device").
-    pub fn register_device(&mut self, root: &Path, name: &str) -> Result<(), EngineError> {
-        let volume = self.connected_volume(root)?;
-        let registered = volume.storage().and_then(|mut storage| Device::register_on(&mut *storage, root, name));
+    /// Removable drives that are not players yet (a blank microSD card in a card reader), which
+    /// "Set Up Drive for Syncing…" offers.
+    pub fn drives(&self) -> &[Volume] {
+        &self.drives
+    }
+
+    /// Sets up the player at `root` (a listed player, or one of [`Session::drives`]) for
+    /// syncing under `name`, for `player`. The choice is recorded on the device, so a card is
+    /// recognised in any reader. A device set up before keeps its record and settings; only its
+    /// name and player change.
+    pub fn register_device(&mut self, root: &Path, name: &str, player: PlayerModel) -> Result<(), EngineError> {
+        let volume = match self.drives.iter().find(|v| v.root == root) {
+            Some(drive) => drive.clone(),
+            None => self.connected_volume(root)?,
+        };
+        let registered = volume.storage().and_then(|mut storage| {
+            let mut device = Device::register_on(&mut *storage, root, name)?;
+            let settings = &mut device.manifest.settings;
+            if device.manifest.files.is_empty() && settings.player != player {
+                // Newly set up: start from that player's defaults.
+                *settings =
+                    SyncSettings { music_folder: settings.music_folder.clone(), ..SyncSettings::for_player(player) };
+            }
+            settings.player = player;
+            device.save_to(&mut *storage)?;
+            Ok(device)
+        });
         let device = registered.map_err(|e| EngineError::Device(device_message(&volume, e)))?;
-        if let Some(entry) = self.devices.iter_mut().find(|d| d.volume.root == root) {
-            entry.device = Some(device);
+        match self.devices.iter_mut().find(|d| d.volume.root == root) {
+            Some(entry) => entry.device = Some(device),
+            None => {
+                self.drives.retain(|d| d.root != root);
+                self.devices.push(DeviceEntry { volume, device: Some(device), problem: None });
+            }
         }
         self.content_changed();
         Ok(())
@@ -114,17 +150,63 @@ impl Session {
         self.change_device(root, |device| device.manifest.name = name.trim().to_owned())
     }
 
-    /// Changes a managed player's manifest and saves it on the player.
+    /// Changes a managed player's manifest and saves it on the player. A mounted player is
+    /// written at once. An MTP player must be opened over USB first, which can take seconds, so
+    /// the change applies here at once and is written by a job (see [`Session::save_device`]).
     fn change_device(&mut self, root: &Path, change: impl FnOnce(&mut Device)) -> Result<(), EngineError> {
         let volume = self.connected_volume(root)?;
         let device = self.managed_device_mut(root)?;
         change(device);
+        if volume.is_mtp() {
+            self.content_changed();
+            self.save_device(root);
+            return Ok(());
+        }
         let saved = volume
             .storage()
             .and_then(|mut storage| device.save_to(&mut *storage))
             .map_err(|e| EngineError::Device(device_message(&volume, e)));
         self.content_changed();
         saved
+    }
+
+    /// Writes an MTP player's manifest as it is now, in the background. One save runs at a
+    /// time (the player can only be opened once); a player changed meanwhile is saved again
+    /// when it ends, with its latest settings.
+    fn save_device(&mut self, root: &Path) {
+        if self.jobs.is_running(JobKind::SaveDevice) {
+            if !self.unsaved_devices.iter().any(|r| r == root) {
+                self.unsaved_devices.push(root.to_path_buf());
+            }
+            return;
+        }
+        let Some(entry) = self.device(root) else { return };
+        let Some(device) = entry.device.clone() else { return };
+        let volume = entry.volume.clone();
+        let root = root.to_path_buf();
+        let title = format!("Saving the settings of “{}”", device.manifest.name);
+        self.jobs.spawn(JobKind::SaveDevice, title, move |_| {
+            let result = volume
+                .storage()
+                .and_then(|mut storage| device.save_to(&mut *storage))
+                .map_err(|e| device_message(&volume, e));
+            Outcome::DeviceSaved { root, result }
+        });
+    }
+
+    pub(crate) fn finish_device_save(&mut self, root: &Path, result: Result<(), String>) {
+        if let Err(message) = result {
+            let name = self.device(root).map_or_else(|| "the player".to_owned(), |d| format!("“{}”", d.name()));
+            // The session keeps the change, and a sync writes the whole manifest.
+            self.notices.push(Notice::warning(format!(
+                "The settings were not saved on {name}. {message} They will be saved with the next sync."
+            )));
+        }
+        // Players that went away meanwhile are no longer listed and are skipped.
+        if !self.unsaved_devices.is_empty() {
+            let next = self.unsaved_devices.remove(0);
+            self.save_device(&next);
+        }
     }
 
     /// The volume of a connected player, ready to be written. An MTP player is held by a sync
@@ -158,6 +240,10 @@ impl Session {
     pub fn sync_device(&mut self, root: &Path) -> Result<JobId, EngineError> {
         if self.jobs.is_running(JobKind::Sync) {
             return Err(EngineError::Busy("A sync"));
+        }
+        // A save holds an MTP player open; the sync would find it busy.
+        if self.jobs.is_running(JobKind::SaveDevice) || !self.unsaved_devices.is_empty() {
+            return Err(EngineError::Busy("Saving a player's settings"));
         }
         let entry =
             self.device(root).ok_or_else(|| EngineError::Device("The player is no longer connected.".into()))?;
@@ -254,6 +340,15 @@ impl Session {
                 } else {
                     format!("“{name}” is up to date. {} songs copied, {} removed.", report.copied, report.deleted)
                 };
+                let text = match report.unplayable {
+                    0 => text,
+                    n => {
+                        let player = device_player(self.device(root));
+                        let songs = if n == 1 { "1 song was".to_owned() } else { format!("{n} songs were") };
+                        let their = if n == 1 { "its" } else { "their" };
+                        format!("{text} {songs} left off: the {player} cannot play {their} format.")
+                    }
+                };
                 let text = match report.unavailable {
                     0 => text,
                     1 => format!(
@@ -272,6 +367,14 @@ impl Session {
             }
             Err(message) => self.notices.push(Notice::error(format!("The sync did not complete. {message}"))),
         }
+    }
+}
+
+/// The name of the player a device is synced for, for messages.
+fn device_player(entry: Option<&DeviceEntry>) -> &'static str {
+    match entry.and_then(|e| e.device.as_ref()).map(|d| d.manifest.settings.player) {
+        Some(model) if model != PlayerModel::Generic => model.label(),
+        _ => "player",
     }
 }
 

@@ -6,7 +6,7 @@ use crate::artwork::ArtworkCache;
 use crate::demo::Demo;
 use crate::dialogs::{
     ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, RenameFilesDialog,
-    SmartPlaylistDialog,
+    SetUpDrive, SmartPlaylistDialog,
 };
 use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
@@ -264,8 +264,11 @@ impl TuneBoxApp {
                 self.report(result);
             }
             Action::EditSmartPlaylist(id) => self.edit_smart_playlist(id),
-            Action::RegisterDevice { root, name } => {
-                let result = self.session.register_device(&root, &name);
+            Action::RegisterDevice { root, name, player } => {
+                let result = self.session.register_device(&root, &name, player);
+                if result.is_ok() {
+                    self.view.select_source(SourceItem::Device(root));
+                }
                 self.report(result);
             }
             Action::SetDeviceSettings { root, settings } => {
@@ -396,6 +399,7 @@ impl TuneBoxApp {
                 self.dialog = Some(Dialog::RenameFiles(Box::new(dialog)));
             }
             CommandId::About => self.dialog = Some(Dialog::About),
+            CommandId::SetUpDrive => self.dialog = Some(Dialog::SetUpDrive(SetUpDrive::new(&self.session))),
             CommandId::Quit => self.ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }

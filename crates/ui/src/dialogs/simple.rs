@@ -1,4 +1,4 @@
-//! The small dialogs: rename, confirm removal, confirm refresh, about.
+//! The small dialogs: rename, confirm removal, confirm refresh, set up a drive, about.
 
 use crate::actions::Action;
 use crate::dialogs::window;
@@ -148,4 +148,86 @@ pub fn about(ctx: &egui::Context) -> bool {
             });
     });
     open && !ctx.input(|i| i.key_pressed(egui::Key::Escape))
+}
+
+/// "Set Up Drive for Syncing…": makes a removable drive that does not look like a player yet
+/// (a blank microSD card for a Snowsky Echo, say) a player TuneBox syncs.
+#[derive(Clone, Debug)]
+pub struct SetUpDrive {
+    pub root: Option<std::path::PathBuf>,
+    pub name: String,
+    pub player: tunebox_engine::PlayerModel,
+}
+
+impl SetUpDrive {
+    pub fn new(session: &tunebox_engine::Session) -> Self {
+        let first = session.drives().first();
+        Self {
+            root: first.map(|d| d.root.clone()),
+            name: first.map(|d| d.label.clone()).unwrap_or_default(),
+            player: tunebox_engine::PlayerModel::Generic,
+        }
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context, session: &tunebox_engine::Session, actions: &mut Vec<Action>) -> bool {
+        let drives = session.drives();
+        if self.root.as_ref().is_none_or(|root| !drives.iter().any(|d| &d.root == root)) {
+            self.root = drives.first().map(|d| d.root.clone());
+        }
+        let (root, name, player) = (&mut self.root, &mut self.name, &mut self.player);
+        let result = window(ctx, "Set Up Drive for Syncing", 440.0, "Set Up", |ui| {
+            if drives.is_empty() {
+                ui.label(
+                    "No drive to set up. Insert the player's memory card (or connect the player), and it appears here.",
+                );
+                return;
+            }
+            ui.label("Choose the drive or memory card, and the player that will play it. TuneBox notes both on the drive, so it knows the card in the player or in a card reader.");
+            ui.add_space(6.0);
+            egui::Grid::new("set-up-drive").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
+                ui.label("Drive:");
+                let shown = drives.iter().find(|d| Some(&d.root) == root.as_ref()).map(drive_label).unwrap_or_default();
+                egui::ComboBox::from_id_salt("drive").selected_text(shown).width(280.0).show_ui(ui, |ui| {
+                    for drive in drives {
+                        ui.selectable_value(root, Some(drive.root.clone()), drive_label(drive));
+                    }
+                });
+                ui.end_row();
+                ui.label("Player:");
+                player_choice(ui, "player", player);
+                ui.end_row();
+                ui.label("Name:");
+                ui.add(egui::TextEdit::singleline(name).desired_width(280.0));
+                ui.end_row();
+            });
+        });
+        match result {
+            Some(true) => match self.root.clone() {
+                Some(root) if !self.name.trim().is_empty() => {
+                    actions.push(Action::RegisterDevice {
+                        root,
+                        name: self.name.trim().to_owned(),
+                        player: self.player,
+                    });
+                    false
+                }
+                _ => true,
+            },
+            Some(false) => false,
+            None => true,
+        }
+    }
+}
+
+fn drive_label(drive: &tunebox_engine::Volume) -> String {
+    format!("{}  ({}, {})", drive.label, drive.root.display(), tunebox_engine::model::format_bytes(drive.total_bytes))
+}
+
+/// A menu of the players TuneBox knows.
+pub(crate) fn player_choice(ui: &mut egui::Ui, id: &str, player: &mut tunebox_engine::PlayerModel) {
+    egui::ComboBox::from_id_salt(id).selected_text(player.label()).width(280.0).show_ui(ui, |ui| {
+        for model in tunebox_engine::PlayerModel::ALL {
+            ui.selectable_value(player, model, model.label());
+        }
+    });
 }

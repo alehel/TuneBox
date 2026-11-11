@@ -178,7 +178,13 @@ enum Command {
     /// List connected players: mounted ones by folder, MTP ones by an id starting "mtp:".
     Devices,
     /// Set up the player at ROOT (its folder, or its "mtp:" id from `devices`) for syncing.
-    SetupDevice { root: PathBuf, name: String },
+    SetupDevice {
+        root: PathBuf,
+        name: String,
+        /// The player that will play the files: generic, rockbox, echo-mini or echo-nano.
+        #[arg(long, default_value = "generic")]
+        player: String,
+    },
     /// Sync the player at ROOT (its folder or "mtp:" id; optionally only these playlists).
     Sync {
         root: PathBuf,
@@ -321,6 +327,9 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         }
         Command::Devices => {
             refresh_all_devices(session);
+            for drive in session.drives() {
+                println!("{:<24} {}  (a drive: `setup-device` it to sync)", drive.label, drive.root.display());
+            }
             for device in session.devices() {
                 let state = match (&device.problem, &device.device) {
                     (Some(problem), _) => problem.as_str(),
@@ -330,15 +339,19 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
                 println!("{:<24} {}  ({state})", device.name(), device.volume.root.display());
             }
         }
-        Command::SetupDevice { root, name } => {
+        Command::SetupDevice { root, name, player } => {
+            let model = tunebox_engine::PlayerModel::from_id(&player).ok_or_else(|| {
+                let known: Vec<&str> = tunebox_engine::PlayerModel::ALL.iter().map(|m| m.id()).collect();
+                format!("Unknown player “{player}”. Choose one of: {}.", known.join(", "))
+            })?;
             refresh_all_devices(session);
-            if session.device(&root).is_some() {
-                session.register_device(&root, &name).map_err(|e| e.to_string())?;
-            } else {
-                // Not a volume the platform reports (a folder, for example): set it up anyway.
-                tunebox_engine::Device::register(&root, &name).map_err(|e| e.to_string())?;
+            let listed = session.device(&root).is_some() || session.drives().iter().any(|d| d.root == root);
+            if !listed {
+                // Not a drive the platform reports (a folder, for example): set it up anyway.
+                session.refresh_devices(&[folder_volume(&root)]);
             }
-            println!("“{name}” is ready to sync.");
+            session.register_device(&root, &name, model).map_err(|e| e.to_string())?;
+            println!("“{name}” is ready to sync, for {}.", model.label());
         }
         Command::Sync { root, playlists } => sync(session, &root, &playlists)?,
         Command::Folders { action } => folders(session, action)?,
@@ -546,6 +559,19 @@ fn print_cd(session: &Session) {
     }
 }
 
+/// A folder as a drive of unknown size, for setting up or syncing folders the platform does
+/// not list.
+fn folder_volume(root: &std::path::Path) -> tunebox_engine::Volume {
+    tunebox_engine::Volume {
+        root: root.to_path_buf(),
+        label: String::new(),
+        total_bytes: u64::MAX,
+        free_bytes: u64::MAX,
+        removable: true,
+        access: tunebox_engine::Access::Folder,
+    }
+}
+
 /// Mounted players and MTP players, as the app's source list shows them. MTP players are
 /// opened to be read, which takes a moment.
 fn refresh_all_devices(session: &mut Session) {
@@ -560,15 +586,7 @@ fn sync(session: &mut Session, root: &std::path::Path, playlists: &[String]) -> 
     }
     if session.device(root).is_none() {
         // Not a removable volume the platform reports (a folder, for example): sync it anyway.
-        let volume = tunebox_engine::Volume {
-            root: root.to_path_buf(),
-            label: String::new(),
-            total_bytes: u64::MAX,
-            free_bytes: u64::MAX,
-            removable: true,
-            access: tunebox_engine::Access::Folder,
-        };
-        session.refresh_devices(&[volume]);
+        session.refresh_devices(&[folder_volume(root)]);
     }
     if !playlists.is_empty() {
         let ids = playlists.iter().map(|name| find_playlist(session.view(), name)).collect::<Result<Vec<_>, _>>()?;

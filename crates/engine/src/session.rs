@@ -59,6 +59,10 @@ pub(crate) enum Outcome {
         root: PathBuf,
         result: Result<(Device, SyncReport), String>,
     },
+    DeviceSaved {
+        root: PathBuf,
+        result: Result<(), String>,
+    },
 }
 
 /// One listener's TuneBox: the library and everything acting on it.
@@ -69,6 +73,10 @@ pub struct Session {
     pub(crate) jobs: Jobs<Outcome>,
     pub(crate) playback: PlaybackState,
     pub(crate) devices: Vec<DeviceEntry>,
+    /// Removable drives that are not players (yet): a blank microSD card in a reader, say.
+    pub(crate) drives: Vec<tunebox_sync::Volume>,
+    /// MTP players whose settings changed while another save was running: saved when it ends.
+    pub(crate) unsaved_devices: Vec<PathBuf>,
     pub(crate) cd: Option<CdState>,
     pub(crate) notices: Vec<Notice>,
     /// When the library first changed since it was last saved.
@@ -122,6 +130,8 @@ impl Session {
             jobs: Jobs::new(),
             playback,
             devices: Vec::new(),
+            drives: Vec::new(),
+            unsaved_devices: Vec::new(),
             cd: None,
             notices,
             unsaved_since: None,
@@ -232,6 +242,7 @@ impl Session {
             Outcome::ArtworkChanged(report) => self.finish_artwork(report),
             Outcome::Renamed(report) => self.finish_rename(Some(report)),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
+            Outcome::DeviceSaved { root, result } => self.finish_device_save(&root, result),
         }
     }
 

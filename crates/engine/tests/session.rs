@@ -7,9 +7,9 @@ use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_engine::model::TrackId;
 use tunebox_engine::model::{Column, NumberOf, Rating, SortOrder, TagField, TrackMeta};
 use tunebox_engine::{
-    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, RenameBase,
-    RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode, SyncSettings,
-    TrackQuery, VirtualDrive, Volume,
+    Access, FileStatus, LibraryOnlyEdits, LibrarySnapshot, NullOutput, Planned, PlayState, Player, PlayerModel,
+    RenameBase, RenameConflicts, RenameRequest, RepeatMode, Session, SessionPaths, SkipReason, Source, SyncMode,
+    SyncSettings, TrackQuery, VirtualDrive, Volume,
 };
 
 struct Fixture {
@@ -272,7 +272,7 @@ fn syncs_a_player() {
     };
     f.session.refresh_devices(&[volume]);
     assert_eq!(f.session.devices().len(), 1);
-    f.session.register_device(&player_root, "Pocket").unwrap();
+    f.session.register_device(&player_root, "Pocket", PlayerModel::Generic).unwrap();
 
     let all = f.session.query(&TrackQuery::new(Source::Music));
     let only_first = f.session.create_playlist("Commute", &[all[0]]).unwrap();
@@ -285,6 +285,94 @@ fn syncs_a_player() {
     assert!(!player_root.join("Music/Quiet Harbour/Lanterns/02 Second Light.flac").exists());
     assert!(player_root.join("Playlists/Commute.m3u8").exists());
     assert_eq!(f.session.query(&TrackQuery::new(Source::Device(player_root))), [all[0]]);
+}
+
+#[test]
+fn a_blank_card_is_set_up_for_a_snowsky_echo_and_synced_for_it() {
+    let mut f = fixture(1.0);
+    import_two_songs(&mut f);
+    // An AIFF song, which the Echo players do not play.
+    let aiff = f.dir.path().join("More/c.aiff");
+    std::fs::create_dir_all(aiff.parent().unwrap()).unwrap();
+    let mut writer = PcmWriter::create(&aiff, LosslessFormat::Aiff, 8_000, 1).unwrap();
+    writer.write(&[vec![0.1; 4_000]]).unwrap();
+    writer.finish().unwrap();
+    f.session.import(vec![aiff.parent().unwrap().to_path_buf()]).unwrap();
+    tick_until(&mut f.session, |s| s.library().len() == 3);
+
+    // A blank microSD card in a reader: removable, but nothing marks it as a player.
+    let card = f.dir.path().join("CARD");
+    std::fs::create_dir_all(&card).unwrap();
+    let volume = Volume {
+        root: card.clone(),
+        label: "NO NAME".into(),
+        total_bytes: 1 << 30,
+        free_bytes: 1 << 30,
+        removable: true,
+        access: Access::Folder,
+    };
+    f.session.refresh_devices(std::slice::from_ref(&volume));
+    assert!(f.session.devices().is_empty(), "a blank card is not listed as a player");
+    assert_eq!(f.session.drives().len(), 1, "but can be set up as one");
+
+    f.session.register_device(&card, "Echo", PlayerModel::SnowskyEchoMini).unwrap();
+    assert!(f.session.drives().is_empty());
+    let settings = f.session.devices()[0].device.as_ref().unwrap().manifest.settings.clone();
+    assert_eq!(settings.player, PlayerModel::SnowskyEchoMini);
+    assert!(!settings.write_playlists, "the Echo may not read playlists: off by default");
+    // Taken out and put back: the card says what it is.
+    f.session.refresh_devices(&[]);
+    f.session.refresh_devices(&[volume]);
+    assert_eq!(f.session.devices()[0].name(), "Echo");
+
+    f.session.sync_device(&card).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    assert!(card.join("Music/Quiet Harbour/Lanterns/01 First Light.flac").exists());
+    assert!(card.join("Music/Quiet Harbour/Lanterns/02 Second Light.flac").exists());
+    assert!(!card.join("Playlists").exists());
+    let manifest = tunebox_engine::Device::open(&card).unwrap().unwrap().manifest;
+    assert_eq!(manifest.files.len(), 2, "the AIFF song is left off");
+    let notices: Vec<String> = f.session.take_notices().into_iter().map(|n| n.text).collect();
+    assert!(
+        notices.iter().any(|n| n.contains("1 song was left off: the Snowsky Echo Mini cannot play its format.")),
+        "{notices:?}"
+    );
+}
+
+#[test]
+fn mtp_settings_are_saved_in_the_background_latest_last() {
+    use tunebox_mtp::simulator::SimulatedDevice;
+    use tunebox_sync::mtp::{MtpLink, probe};
+
+    let mut f = fixture(1.0);
+    let player = SimulatedDevice::new("NW-A306", 1 << 30);
+    f.session.refresh_mtp_devices(&probe(&MtpLink::Simulated(player.clone())));
+    let root = f.session.devices()[0].volume.root.clone();
+    f.session.register_device(&root, "Walkman", PlayerModel::Generic).unwrap();
+    let on_player = || probe(&MtpLink::Simulated(player.clone())).remove(0).device.unwrap().manifest;
+
+    // Both return at once and show at once; the player is written by jobs, one at a time.
+    f.session.rename_device(&root, "First").unwrap();
+    f.session.rename_device(&root, "Second").unwrap();
+    let settings = SyncSettings { only_checked: false, ..SyncSettings::default() };
+    f.session.set_device_settings(&root, settings.clone()).unwrap();
+    assert_eq!(f.session.devices()[0].name(), "Second");
+    assert!(f.session.is_busy(tunebox_engine::JobKind::SaveDevice));
+    assert!(f.session.sync_device(&root).is_err(), "a sync waits for the save, which holds the player");
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let manifest = on_player();
+    assert_eq!((manifest.name.as_str(), &manifest.settings), ("Second", &settings), "the latest change wins");
+
+    // A save that fails says so, and that the next sync will write it.
+    player.hold(true);
+    f.session.rename_device(&root, "Third").unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    let notices: Vec<String> = f.session.take_notices().into_iter().map(|n| n.text).collect();
+    assert!(notices.iter().any(|n| n.contains("will be saved with the next sync")), "{notices:?}");
+    player.hold(false);
+    f.session.sync_device(&root).unwrap();
+    tick_until(&mut f.session, |s| s.jobs().is_empty());
+    assert_eq!(on_player().name, "Third");
 }
 
 #[test]
@@ -302,7 +390,7 @@ fn syncs_an_mtp_player() {
     assert_eq!(f.session.devices().len(), 1);
     let root = f.session.devices()[0].volume.root.clone();
     assert_eq!(f.session.devices()[0].name(), "Simulated NW-A306");
-    f.session.register_device(&root, "Walkman").unwrap();
+    f.session.register_device(&root, "Walkman", PlayerModel::Generic).unwrap();
     // The watcher keeps reporting what it found at plug-in; the session keeps what it knows.
     f.session.refresh_mtp_devices(&found);
     assert_eq!(f.session.devices()[0].name(), "Walkman");

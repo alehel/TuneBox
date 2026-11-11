@@ -81,4 +81,5 @@ radio and sharing are out of scope.
 | Eject | Shipped | macOS (diskutil), Linux (gio); Windows asks you to use Safely Remove Hardware |
 | Transcode for the player | Planned | |
 | Manually manage music on the device | Planned | |
+| Players that read files off a card | Built | Set up any removable drive (File ▸ Set Up Drive for Syncing…) and say which player plays it: Snowsky Echo Mini and Echo Nano get only formats they play, playlists off by default, songs copied in album order. Recorded on the card; not yet tried on a real Echo ([docs/file-players.md](file-players.md)) |
 | MTP players | Built (Linux, macOS) | Android-based players and phones, recent Walkmans: found over USB, set up and synced like mass-storage players, each storage (internal, SD card) a player of its own. Built and tested against a simulated device; not yet run with real hardware. Windows needs Windows Portable Devices: not yet ([docs/mtp.md](mtp.md)) |

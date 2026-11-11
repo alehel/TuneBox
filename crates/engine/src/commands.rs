@@ -21,6 +21,7 @@ pub enum CommandId {
     ImportCd,
     GetTrackNames,
     SyncDevice,
+    SetUpDrive,
     Eject,
     ShowInFolder,
     // Edit
@@ -217,6 +218,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::ImportCd, "Import CD", Menu::File, None, Needs::Disc),
     spec(CommandId::GetTrackNames, "Get Track Names", Menu::File, None, Needs::Disc),
     after_separator(spec(CommandId::SyncDevice, "Sync Device", Menu::File, None, Needs::Device)),
+    spec(CommandId::SetUpDrive, "Set Up Drive for Syncing…", Menu::File, None, Needs::Nothing),
     spec(CommandId::Eject, "Eject", Menu::File, Some(Shortcut::cmd(Key::Letter('e'))), Needs::Ejectable),
     after_separator(spec(
         CommandId::ShowInFolder,
