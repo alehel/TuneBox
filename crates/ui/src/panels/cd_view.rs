@@ -2,15 +2,10 @@
 //! Art Archive (shown in place of the disc), and importing them.
 
 use crate::actions::Action;
-use crate::panels::{PanelContext, widgets};
+use crate::panels::{PanelContext, cd_header, widgets};
 use crate::theme;
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
-use tunebox_engine::commands::CommandId;
-use tunebox_engine::model::format_clock;
-use tunebox_engine::{DiscCover, JobKind};
-
-const HEADER_HEIGHT: f32 = 140.0;
-const ART: f32 = 108.0;
+use tunebox_engine::model::{format_clock, format_total_time};
 
 pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     let Some(cd) = cx.session.cd() else {
@@ -27,92 +22,14 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     let rect = ui.max_rect();
 
     // Header: the disc and its names.
-    let header = Rect::from_min_size(rect.min, vec2(rect.width(), HEADER_HEIGHT));
-    theme::vertical_gradient(
-        ui.painter(),
-        header,
-        Color32::from_rgb(0xFA, 0xFA, 0xFB),
-        Color32::from_rgb(0xEC, 0xEE, 0xF1),
-    );
-    ui.painter().hline(header.x_range(), header.bottom() - 0.5, Stroke::new(1.0, theme::BORDER));
-    let art = Rect::from_min_size(header.min + vec2(20.0, 16.0), vec2(ART, ART));
     let cover = cd.cover.clone();
     let release = cd.info.release_id.clone().unwrap_or_default();
-    match &cover {
-        DiscCover::Found { artwork, .. } => {
-            let texture = cx.artwork.picture(ui.ctx(), &format!("cd:{release}"), &artwork.data);
-            theme::soft_shadow(ui.painter(), art, 6.0, 10);
-            crate::artwork::paint(ui, art, texture.as_ref());
-            ui.painter().rect_stroke(
-                art,
-                6.0,
-                Stroke::new(1.0, Color32::from_black_alpha(25)),
-                egui::StrokeKind::Inside,
-            );
-        }
-        _ => paint_disc(ui.painter(), art),
-    }
-    let mut changed = false;
-    let fields =
-        Rect::from_min_max(header.min + vec2(146.0, 16.0), pos2(header.right() - 210.0, header.bottom() - 10.0));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(fields), |ui| {
-        ui.spacing_mut().item_spacing.y = 7.0;
-        let wide = (fields.width() - 70.0).clamp(160.0, 420.0);
-        changed |= field(ui, "Album", &mut info.album, wide);
-        changed |= field(ui, "Artist", &mut info.artist, wide);
-        ui.horizontal(|ui| {
-            ui.add_sized(vec2(LABEL_WIDTH, 20.0), egui::Label::new(RichText::new("Genre").color(theme::TEXT_MUTED)));
-            changed |= ui.add(egui::TextEdit::singleline(&mut info.genre).desired_width(150.0)).changed();
-            ui.label(RichText::new("Year").color(theme::TEXT_MUTED));
-            let mut year = info.year.map(|y| y.to_string()).unwrap_or_default();
-            if ui.add(egui::TextEdit::singleline(&mut year).desired_width(50.0)).changed() {
-                info.year = year.trim().parse().ok();
-                changed = true;
-            }
-            changed |= ui.checkbox(&mut info.compilation, "Compilation").changed();
-        });
-        let note = match &cover {
-            DiscCover::NotAsked | DiscCover::Found { from: tunebox_engine::CoverOf::Release, .. } => None,
-            DiscCover::Found { .. } => Some("Cover from another edition of this album".to_owned()),
-            DiscCover::Fetching => Some("Getting the cover from the Cover Art Archive…".to_owned()),
-            DiscCover::NoneFound => Some("The Cover Art Archive has no cover for this release.".to_owned()),
-            DiscCover::Failed(reason) => Some(format!("The cover could not be fetched: {reason}.")),
-        };
-        if let Some(note) = note {
-            ui.add_space(2.0);
-            ui.add(egui::Label::new(RichText::new(note).size(11.0).color(theme::TEXT_MUTED)).truncate());
-        }
-    });
-
-    let buttons = Rect::from_min_max(
-        pos2(header.right() - 196.0, header.top() + 18.0),
-        pos2(header.right() - 16.0, header.bottom() - 14.0),
-    );
-    ui.scope_builder(egui::UiBuilder::new().max_rect(buttons).layout(egui::Layout::top_down(egui::Align::Max)), |ui| {
-        let busy = cx.session.is_busy(JobKind::Rip);
-        let label = if busy { "Importing…" } else { "Import CD" };
-        if widgets::primary_button(ui, label, !busy, vec2(150.0, 30.0)).clicked() {
-            cx.act(Action::Run(CommandId::ImportCd));
-        }
-        let looking = cx.session.is_busy(JobKind::LookupNames);
-        if secondary_button(ui, "Get Track Names", !looking).clicked() {
-            cx.act(Action::Run(CommandId::GetTrackNames));
-        }
-        let can_fetch = cx.session.is_enabled(CommandId::GetCdCover, Default::default());
-        let button = secondary_button(ui, "Get CD Cover", can_fetch).on_disabled_hover_text(
-            "Get Track Names first: the cover is found by the MusicBrainz release they come from.",
-        );
-        if button.clicked() {
-            cx.act(Action::Run(CommandId::GetCdCover));
-        }
-        let format = cx.session.preferences().rip_format.encoder_name();
-        ui.label(RichText::new(format!("Imports with the {format}")).size(10.5).color(theme::TEXT_MUTED));
-        let offset = cx.session.cd_read_offset().map(|(_, offset)| offset).unwrap_or(0);
-        ui.label(RichText::new(format!("Drive read offset {offset:+} samples")).size(10.5).color(theme::TEXT_MUTED));
-    });
+    let summary = format!("{} songs, {}", numbers.len(), format_total_time(toc.total_duration()));
+    let disc = cd_header::Disc { info: &mut info, cover: &cover, release: &release, summary: &summary };
+    let (mut changed, header_bottom) = cd_header::show(ui, cx, rect, disc);
 
     // Tracks.
-    let table = Rect::from_min_max(pos2(rect.left(), header.bottom()), rect.max);
+    let table = Rect::from_min_max(pos2(rect.left(), header_bottom), rect.max);
     ui.painter().rect_filled(table, 0.0, theme::LIST_BG);
     let columns = [("", 26.0), ("#", 34.0), ("Name", 0.5), ("Time", 60.0), ("Artist", 0.5), ("", 40.0)];
     let widths = resolve(&columns, table.width());
@@ -195,23 +112,6 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     }
 }
 
-const LABEL_WIDTH: f32 = 50.0;
-
-fn field(ui: &mut Ui, label: &str, value: &mut String, width: f32) -> bool {
-    ui.horizontal(|ui| {
-        ui.add_sized(vec2(LABEL_WIDTH, 20.0), egui::Label::new(RichText::new(label).color(theme::TEXT_MUTED)));
-        ui.add(egui::TextEdit::singleline(value).desired_width(width)).changed()
-    })
-    .inner
-}
-
-/// A plain button as wide as Import CD above it. `add_sized` centres the label; a button
-/// added straight into the right-aligned column would push its label to the right edge,
-/// because egui aligns a button's text with the surrounding layout.
-fn secondary_button(ui: &mut Ui, label: &str, enabled: bool) -> egui::Response {
-    ui.add_enabled_ui(enabled, |ui| ui.add_sized(vec2(150.0, 24.0), egui::Button::new(label))).inner
-}
-
 /// Turns fixed widths (> 1) and shares (≤ 1) into pixel widths.
 fn resolve(columns: &[(&str, f32)], total: f32) -> Vec<f32> {
     let fixed: f32 = columns.iter().map(|c| c.1).filter(|w| *w > 1.0).sum();
@@ -220,7 +120,7 @@ fn resolve(columns: &[(&str, f32)], total: f32) -> Vec<f32> {
 }
 
 /// A compact disc: a silver platter with a faint rainbow sheen, the clear hub and the hole.
-fn paint_disc(painter: &egui::Painter, rect: Rect) {
+pub(crate) fn paint_disc(painter: &egui::Painter, rect: Rect) {
     let center = rect.center();
     let radius = rect.width() / 2.0;
     theme::soft_shadow(painter, rect, radius, 10);
