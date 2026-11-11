@@ -53,7 +53,7 @@ TuneBox that moves your files, so it is careful:
 | Another drive | Refused, not copied: renaming only ever moves a file within its drive |
 | A rename fails | That song is reported and stays where it was; the others go on. However the rename ends (finished, cancelled, stopped by an error, or TuneBox quitting), the library points at where each file really is |
 
-<img src="images/tunebox-rename-files-conflicts.png" alt="Rename Files from Tags with songs in conflict">
+<img src="images/tunebox-rename-files-conflicts.webp" alt="Rename Files from Tags with songs in conflict">
 
 While a rename runs, the folder watcher, imports and refreshes wait for it, so renamed files are
 never taken for new songs. Renaming happens only when you ask; TuneBox does not yet rename files
