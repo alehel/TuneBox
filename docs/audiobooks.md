@@ -1,7 +1,9 @@
 # Audiobooks from CDs: plan
 
-Status: **planned, not built.** The single-file `.m4b` output waits for the AAC encoder that
-craft-audio is getting. Most of the rest can be built before it arrives (see [Phases](#phases)).
+Status: **planned, not built.** Nothing waits on another project any more: craft-libs now has
+the AAC encoder, an Apple Lossless (ALAC) encoder and MP4 chapter lists (see
+[What craft-libs provides](#what-craft-libs-provides)). TuneBox pins an older craft-libs
+commit, so the first step is to move to the current one.
 This document says what the audiobook builder does, how it fits TuneBox's layers, and what
 still has to be decided.
 
@@ -294,30 +296,63 @@ completion.
 Chapter start times come from [Chapter times](#chapter-times). The build refuses to start
 while a kept track has not been ripped, naming the disc and tracks.
 
+### What craft-libs provides
+
+Checked against craft-libs `main` (`9f10d43`, November 2026). TuneBox pins `0e4943c`, which
+has none of the encoders or chapters below.
+
+| Piece | Where | What it does |
+|---|---|---|
+| AAC encoding | craft-audio `aac::Encoder` (feature `aac-encode`, part of `encode`) | AAC-LC, constant (`EncoderConfig::cbr`) or variable (`vbr`) bit rate, 1–8 channels, 44.1 kHz among the 13 AAC rates. A packet encoder: it returns access units and the `AudioSpecificConfig`, and the app muxes them. `priming_samples()` (1024) goes into the edit list, so files are gapless. No HE-AAC encoding, which matters only below about 48 kbit/s. Optional `rayon` feature encodes in parallel |
+| Apple Lossless | craft-audio `alac::Encoder` (`alac-encode`) | Lossless packets and the magic cookie, muxed into MP4 the same way. Ported from Apple's Apache-2.0 reference, bit-exact with it and ffmpeg |
+| MP4 container | craft-media `isobmff::Mp4Writer` (re-exported as `craft_audio::craft_media`, same commit) | 64-bit durations when needed (a 30-hour book overflows 32 bits at 44.1 kHz), edit lists (`TrackConfig::media_start` for the priming), `moov` in front ("fast start"), `mp4a` and `alac` sample entries |
+| Chapters | craft-media `WriterOptions::chapters` (`Chapter { start, title }`) | Both forms players read: a disabled QuickTime chapter text track referenced by `tref/chap` (Apple's players) and a Nero `udta/chpl` list (VLC, ffprobe; checked against ffprobe in craft-media's tests). `read_chapters` reads them back, for tests and for listening later. **At most 255 chapters per file and 255 bytes per title** (`MAX_CHAPTERS`, `MAX_CHAPTER_TITLE_BYTES`) |
+| Waveforms | craft-audio `peaks` | The trim editor's waveform |
+| Opus, AC-3, MP1/MP2, ALAC decoding | craft-audio, native | Not needed here; Opus playback fixes an open TODO item |
+
+Moving to the new commit: TuneBox already uses the API's current shape (`EncodeOptions::new`,
+sample rate before channels). The changes to check are `FileEncoder::write` refusing short or
+missing channels instead of padding them, `DecodeOptions` no longer being `Copy`, and native
+decoders replacing symphonia for AAC and ALAC (MP4 files now decode to their presentation
+length, which is what gapless playback wants). `craft-atomic` moves to the same commit.
+
 ### One file with chapters (`.m4b`)
 
-| Piece | Who provides it | State |
-|---|---|---|
-| AAC encoding | craft-audio | Coming |
-| MP4 container | craft-media `isobmff::Mp4Writer` | Exists: writes 64-bit durations when needed (a 30-hour book overflows 32 bits at 44.1 kHz), edit lists for AAC priming, `moov` in front ("fast start") |
-| Chapters | craft-media | **To add**: a disabled text track with one sample per chapter, referenced from the audio track by `tref/chap` (what Apple's players read), plus a Nero `chpl` box in `moov/udta` (what many other players read). Both written, since players differ |
-| Tags and cover | `tunebox-tags` (lofty) | lofty updates the `stco`/`co64` offsets of every track when it grows `moov`, so writing tags after muxing keeps the chapter track valid. To be proven by a test that writes tags to a chaptered file and reads the chapters back |
-| Media kind "Audiobook" | `tunebox-tags` | The `stik` atom set to 2, through lofty's generic atoms |
+| Piece | How |
+|---|---|
+| Audio | AAC from `aac::Encoder`, or Apple Lossless from `alac::Encoder`, fed one continuous stream for the whole book |
+| Container and chapters | `Mp4Writer` with `media_start` = the encoder's priming and `WriterOptions::chapters` from [Chapter times](#chapter-times), finished with fast start |
+| Tags and cover | `tunebox-tags` (lofty), after muxing. lofty updates the `stco`/`co64` offsets of every track when it grows `moov`, so the chapter track stays valid; a test writes tags to a chaptered file and reads the chapters back with `read_chapters` |
+| Media kind "Audiobook" | The `stik` atom set to 2, through lofty's generic atoms |
+
+**The 255-chapter limit.** Both chapter forms are capped at 255 per file (the `chpl` count is one
+byte). A single-file book with more chapters cannot be built as it is: Build Audiobook… says so
+("This book has 312 chapters; one file holds at most 255. Join some chapters, or build one
+file per chapter.") instead of dropping chapters silently. The chapter count is shown in the
+header's details line, so the limit is visible while editing. One file per chapter has no
+limit. Chapter names longer than 255 bytes are refused where they are typed.
 
 Tags: title and album = book title, artist and album artist = author, **narrator in composer**
 (decided), genre "Audiobook", description in `desc`/`ldes`. Series in grouping or the sort
 album is a convention seen in audiobook tools; *confirm* against real players. Track and disc numbers are left out of a single-file book.
 
-Encoding options: AAC at 64 kbit/s mono (the default, decided), 96 or 128 kbit/s stereo for
-dramatised productions. Mono mixes the two channels down before encoding.
+Encoding options:
+
+| Format | Settings | A 14-hour book |
+|---|---|---|
+| AAC (default) | 64 kbit/s mono (the default, decided); 96 or 128 kbit/s stereo for dramatised productions | about 400 MB mono |
+| Apple Lossless | Stereo, as on the disc | several GB (about half the CD audio, less for quiet speech) |
+
+Mono mixes the two channels down before encoding. AAC uses constant bit rate, so the size shown
+before building is exact to within the container's overhead.
 
 ### One file per chapter
 
 Each chapter becomes one file: `Author/Book Title/NN Chapter Name.ext`, album = book title,
 track number = chapter number of the total, no disc number (chapters run across discs). Format:
 
-- AAC in `.m4b` or `.m4a`, tagged as an audiobook, once the encoder exists.
-- **FLAC, possible today.** This lets the whole multi-disc loop ship before the AAC encoder.
+- AAC or Apple Lossless in `.m4b`, tagged as an audiobook.
+- FLAC, for listeners who keep lossless files outside Apple's world.
 
 ## How it fits the layers
 
@@ -326,7 +361,7 @@ track number = chapter number of the total, no disc number (chapters run across 
 | L0 | `model` | `MediaKind` on tracks, and a Media Kind smart playlist rule. `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, likely announcements, chapter start times, output file names. Pure, tested next to it |
 | L1 | `library` | The media kind in the library file, and books recognised by `.m4b` when loading an older file |
 | L1 | `tags` | Audiobook tags: media kind (read on import, written on build and from Get Info), narrator, description, chapters read back for tests |
-| L1 | `audio` | The AAC writer (and mono mixdown) over craft-audio once it lands |
+| L1 | `audio` | An MP4 audio writer over craft-audio's AAC and ALAC encoders and craft-media's muxer, with chapters (writes through a `*.part` file, like `PcmWriter`); mono mixdown. The craft-libs commit moves forward |
 | L2 | `rip` | Rip into a given staging folder without tagging or the library, handing each track's samples to a loudness meter as they are written (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
 | L2 | `audiobook` (new) | Finding pauses in a loudness envelope; builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
 | L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, `Source::Audiobooks`, commands. Re-exports what the frontends need |
@@ -463,22 +498,22 @@ What changes for Music:
 A built book plays today as one long song. Listening comfortably needs more, planned separately:
 
 - Remember the playback position of each book.
-- Chapters in playback: read them from `.m4b` files (craft-media's demuxer), show them, skip
-  between them.
+- Chapters in playback: read them from `.m4b` files (craft-media's `read_chapters`, already
+  there), show them, skip between them.
 - Speed (1.25×, 1.5×), which needs time stretching.
 
 ## Phases
 
-1. **The loop, lossless.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
+0. **craft-libs.** Move to the current commit, with `cargo xtask ci` and a check that AAC, ALAC
+   and FLAC files still play gaplessly. A change of its own, before any audiobook code.
+1. **The loop and the build.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
    checks, chapters, removing and trimming, suggestions, the media kind and
-   `Source::Audiobooks`, CLI, and output as FLAC files per chapter. Fully testable with the
-   virtual drive. Does not wait for anything.
+   `Source::Audiobooks`, CLI, and every output: the chaptered `.m4b` (AAC or Apple Lossless)
+   and files per chapter. Fully testable with the virtual drive.
 2. **The page.** Audiobooks under Music in the sidebar, the shared header pieces moved out of
    `cd_header.rs`, the book page, the trim editor, and new scenes in `cargo xtask screenshots`
    (the book page while ripping, the "Insert disc 3" dialog, the trim editor, the sidebar).
-3. **AAC.** When craft-audio has its encoder and craft-media writes chapters: the single `.m4b`
-   and AAC files per chapter.
-4. **Listening**, above.
+3. **Listening**, above.
 
 ## Tests to write
 
@@ -498,7 +533,10 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 - Resume: a project saved after disc 2, reloaded, continues with disc 3; a damaged
   `Project.json` is moved aside with the staged audio kept.
 - Build: a chapter of several tracks, with a removed track and trims, decodes to exactly the
-  kept, trimmed disc audio joined (FLAC per chapter now; AAC within a tolerance later); a
+  kept, trimmed disc audio joined (FLAC and Apple Lossless sample-exact; AAC within a
+  tolerance, with the priming trimmed); a `.m4b` reads back its chapters with `read_chapters` at
+  the computed times; 256 chapters in one file are refused with the advice, and accepted per
+  chapter; a
   build with an unripped kept track is refused; the `.m4b` chapters read back at the computed
   times, before and after tags are written.
 - Library: Music without books and Audiobooks with only books; `.m4b` and `stik` imports
