@@ -87,7 +87,7 @@ impl Session {
     /// disc is being read or imported. Frontends call it every few seconds.
     #[cfg(feature = "drives")]
     pub fn scan_drives(&mut self) -> Option<JobId> {
-        if self.jobs.is_running(JobKind::ReadDisc) || self.jobs.is_running(JobKind::Rip) {
+        if [JobKind::ReadDisc, JobKind::Rip, JobKind::RipBookDisc].into_iter().any(|kind| self.jobs.is_running(kind)) {
             return None;
         }
         Some(self.jobs.spawn(JobKind::ReadDisc, "Looking for discs".into(), |_| {
@@ -103,20 +103,28 @@ impl Session {
             Ok(Some(disc)) if self.cd.as_ref().is_some_and(|cd| cd.disc_id == disc.disc_id) => {}
             Ok(Some(disc)) => {
                 self.cd = Some(disc);
+                self.audiobook_disc_arrived();
                 #[cfg(feature = "musicbrainz")]
-                if self.prefs.lookup_cd_names_automatically {
+                if self.prefs.lookup_cd_names_automatically && self.audiobook_question().is_none() {
                     let _ = self.lookup_disc_names();
                 }
             }
-            Ok(None) if !self.jobs.is_running(JobKind::Rip) => self.cd = None,
+            Ok(None) if !self.jobs.is_running(JobKind::Rip) && !self.jobs.is_running(JobKind::RipBookDisc) => {
+                self.cd = None
+            }
             Ok(None) => {}
             Err(message) => self.notices.push(Notice::error(format!("Could not read the disc: {message}"))),
         }
     }
 
-    /// Forgets the disc (after the frontend ejects it).
+    /// Ejects the disc and forgets it. A drive that does not open is told to the listener, who
+    /// takes the disc out by hand.
     pub fn eject_disc(&mut self) {
-        self.cd = None;
+        if let Some(cd) = self.cd.take()
+            && let Err(e) = cd.drive.eject()
+        {
+            self.notices.push(Notice::info(format!("The drive did not open ({e}). Take the disc out by hand.")));
+        }
         self.content_changed();
     }
 

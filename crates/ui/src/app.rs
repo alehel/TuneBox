@@ -572,12 +572,7 @@ impl TuneBoxApp {
 
     fn eject(&mut self) {
         match self.view.source.clone() {
-            SourceItem::Cd => {
-                if self.demo.is_none() {
-                    tunebox_platform::eject_disc();
-                }
-                self.session.eject_disc();
-            }
+            SourceItem::Cd => self.session.eject_disc(),
             SourceItem::Device(root) => {
                 // TuneBox lets go of an MTP player after every sync: there is nothing to unmount.
                 let is_mtp = self.session.device(&root).is_some_and(|d| d.volume.is_mtp());

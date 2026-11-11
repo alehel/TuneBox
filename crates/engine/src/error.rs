@@ -37,4 +37,10 @@ pub enum EngineError {
         .0.display()
     )]
     Protected(std::path::PathBuf),
+    #[error("There is no audiobook in progress. Start one from the disc in the drive with Import as Audiobook.")]
+    NoAudiobook,
+    #[error("{0}")]
+    Audiobook(String),
+    #[error("MusicBrainz lists {listed} discs for this book, and {ripped} are ripped. Finish anyway?")]
+    MoreDiscsListed { listed: usize, ripped: usize },
 }

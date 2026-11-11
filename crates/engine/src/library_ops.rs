@@ -8,7 +8,7 @@ use chrono::Utc;
 use std::path::PathBuf;
 use tunebox_import::{ImportOptions, ImportReport, KnownFiles};
 use tunebox_library::MovedSongs;
-use tunebox_model::{PlaylistId, Rating, SmartRules, Track, TrackId, TrackMeta};
+use tunebox_model::{MediaKind, PlaylistId, Rating, SmartRules, Track, TrackId, TrackMeta};
 
 impl Session {
     pub fn track(&self, id: TrackId) -> Option<&Track> {
@@ -166,6 +166,33 @@ impl Session {
     pub fn set_rating(&mut self, ids: &[TrackId], rating: Rating) {
         for id in ids {
             let _ = self.library.set_rating(*id, rating);
+        }
+        self.library_changed();
+    }
+
+    /// Makes tracks music or audiobooks. MP4 files are marked too, so other players agree;
+    /// other formats have no standard tag for it, and files in read-only library folders are
+    /// left alone: there the kind lives in the library only.
+    pub fn set_media_kind(&mut self, ids: &[TrackId], kind: MediaKind) {
+        let mut failed = 0;
+        for id in ids {
+            let Some(track) = self.library.track(*id) else { continue };
+            if track.kind == kind {
+                continue;
+            }
+            let location = track.location.clone();
+            if crate::files::may_write(&self.prefs, &location)
+                && tunebox_tags::write_media_kind(&location, kind).is_err()
+            {
+                failed += 1;
+            }
+            let _ = self.library.set_kind(*id, kind);
+        }
+        if failed > 0 {
+            self.notices.push(Notice::warning(format!(
+                "{failed} files could not be marked as {}; TuneBox keeps the change in the library.",
+                kind.name().to_lowercase()
+            )));
         }
         self.library_changed();
     }

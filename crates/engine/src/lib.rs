@@ -3,7 +3,7 @@
 //! A [`Session`] owns the library, the player, the devices, the CD in the drive and the
 //! background jobs. Frontends (the desktop app, the command line) call its methods and read its
 //! state; they never reach into the crates below. The session is single-threaded by design:
-//! slow work (importing, ripping, syncing, looking up track names and covers) runs as a [`jobs`] job on a
+//! slow work (importing, ripping, syncing, building audiobooks, looking up track names and covers) runs as a [`jobs`] job on a
 //! worker thread and hands its result back to [`Session::tick`], so the library only ever has
 //! one writer.
 //!
@@ -21,6 +21,7 @@
 
 mod album_artwork;
 mod artwork;
+mod audiobook;
 mod availability;
 mod cd;
 pub mod commands;
@@ -47,6 +48,7 @@ mod visualizer_plugins;
 mod watch;
 
 pub use album_artwork::{ArtworkSearch, CoverCandidate, SearchState, Thumbnail};
+pub use audiobook::DiscQuestion;
 pub use cd::CdState;
 pub use devices::{DeviceEntry, find_mtp_players};
 pub use disc_cover::DiscCover;
@@ -72,7 +74,7 @@ pub use tunebox_metabrainz::{CoverOf, ReleaseCandidate, ReleaseRef, WebClient, W
 pub use tunebox_model as model;
 pub use tunebox_playback::{AudioTap, NullOutput, PlayState, Player, RepeatMode, analysis};
 pub use tunebox_plugins as plugins;
-pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, DriveIdentity, VirtualDrive, check_read_offset};
+pub use tunebox_rip::{CdDrive, DiscInfo, DiscToc, DriveIdentity, VirtualChanger, VirtualDrive, check_read_offset};
 pub use tunebox_sync::mtp::{MtpLink, mtp_links, probe as probe_mtp_link};
 pub use tunebox_sync::{Access, Candidate, Device, MtpAddress, PlayerModel, SyncMode, SyncSettings, Volume};
 pub use tunebox_tags::{Artwork, MAX_COVER_SIDE, can_store};

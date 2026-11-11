@@ -1,7 +1,7 @@
 //! tunebox-platform — the operating system, behind small functions.
 //!
 //! Where TuneBox keeps its files ([`default_paths`]), which volumes are mounted ([`volumes`]),
-//! which MTP players are connected ([`MtpPlayers`]), showing a file in the file manager ([`reveal`]), ejecting a player or disc ([`eject`]) and
+//! which MTP players are connected ([`MtpPlayers`]), showing a file in the file manager ([`reveal`]), ejecting a player ([`eject`]) and
 //! watching the library folders ([`FolderWatcher`]). The engine is told the results.
 
 #![deny(
@@ -141,20 +141,6 @@ pub fn eject(root: &Path) -> Result<(), String> {
         Ok(out) if out.status.success() => Ok(()),
         Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_owned()),
         Err(e) => Err(e.to_string()),
-    }
-}
-
-/// Opens the system's CD tray, best effort.
-pub fn eject_disc() {
-    let result = if cfg!(target_os = "macos") {
-        Command::new("drutil").arg("tray").arg("eject").status()
-    } else if cfg!(windows) {
-        return;
-    } else {
-        Command::new("eject").arg("/dev/cdrom").status()
-    };
-    if let Err(e) = result {
-        log::info!("could not open the disc tray: {e}");
     }
 }
 

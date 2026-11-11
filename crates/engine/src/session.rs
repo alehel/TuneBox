@@ -62,6 +62,13 @@ pub(crate) enum Outcome {
     ReleasesFound(crate::album_artwork::SearchReply),
     ThumbnailFetched(crate::album_artwork::ThumbnailReply),
     ReleaseCoverFetched(crate::album_artwork::ReleaseCoverReply),
+    BookDiscRipped {
+        disc: u16,
+        report: tunebox_rip::StageReport,
+        /// Whether the disc came out; an error says why the drive did not open.
+        ejected: Result<bool, String>,
+    },
+    BookBuilt(Result<Vec<tunebox_library::NewTrack>, String>),
     Renamed(crate::rename::RenameReport),
     Synced {
         root: PathBuf,
@@ -90,6 +97,8 @@ pub struct Session {
     /// MTP players whose settings changed while another save was running: saved when it ends.
     pub(crate) unsaved_devices: Vec<PathBuf>,
     pub(crate) cd: Option<CdState>,
+    /// The audiobook being ripped and edited, if any.
+    pub(crate) audiobook: Option<crate::audiobook::AudiobookState>,
     pub(crate) notices: Vec<Notice>,
     /// When the library first changed since it was last saved.
     unsaved_since: Option<Instant>,
@@ -152,6 +161,7 @@ impl Session {
             drives: Vec::new(),
             unsaved_devices: Vec::new(),
             cd: None,
+            audiobook: None,
             notices,
             unsaved_since: None,
             revision: 0,
@@ -166,6 +176,7 @@ impl Session {
             _lock: lock,
         };
         session.check_all_files();
+        session.load_audiobook();
         Ok(session)
     }
 
@@ -280,6 +291,8 @@ impl Session {
             Outcome::ReleasesFound(reply) => self.finish_release_search(reply),
             Outcome::ThumbnailFetched(reply) => self.finish_thumbnail(reply),
             Outcome::ReleaseCoverFetched(reply) => self.finish_release_cover(reply),
+            Outcome::BookDiscRipped { disc, report, ejected } => self.finish_audiobook_rip(disc, report, ejected),
+            Outcome::BookBuilt(result) => self.finish_audiobook_build(result),
             Outcome::Renamed(report) => self.finish_rename(Some(report)),
             Outcome::Synced { root, result } => self.finish_sync(&root, result),
             Outcome::DeviceSaved { root, result } => self.finish_device_save(&root, result),

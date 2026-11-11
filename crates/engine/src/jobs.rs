@@ -35,6 +35,10 @@ pub enum JobKind {
     /// Fetching the picker's thumbnails, one at a time.
     Thumbnail,
     VisualizerPlugins,
+    /// Ripping a disc of the audiobook in progress into its staging folder.
+    RipBookDisc,
+    /// Building the audiobook into the library.
+    BuildBook,
 }
 
 impl JobKind {
@@ -54,6 +58,8 @@ impl JobKind {
             JobKind::FindArtwork => "Looking for album artwork",
             JobKind::Thumbnail => "Getting cover thumbnails",
             JobKind::VisualizerPlugins => "Loading visualizer plug-ins",
+            JobKind::RipBookDisc => "Ripping an audiobook disc",
+            JobKind::BuildBook => "Building the audiobook",
         }
     }
 }
