@@ -3,6 +3,7 @@
 
 pub mod album_grid;
 pub mod browser;
+pub mod cd_header;
 pub mod cd_view;
 pub mod device_view;
 pub mod lcd;
