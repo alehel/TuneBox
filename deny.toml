@@ -31,7 +31,7 @@ allow = [
 confidence-threshold = 0.9
 
 # MPL-2.0 is weak, file-level copyleft: these crates are used unmodified, as the Craft libraries
-# use them. symphonia decodes MP3, FLAC, ALAC and Vorbis inside craft-audio until native decoders
+# use them. symphonia decodes MP3, FLAC and Vorbis inside craft-audio until native decoders
 # replace it; option-ext comes in through `dirs`.
 [[licenses.exceptions]]
 allow = ["MPL-2.0"]

@@ -936,7 +936,7 @@ dependencies = [
 [[package]]
 name = "craft-atomic"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d#0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d"
+source = "git+https://github.com/storytold/craft-libs?rev=9f10d434d99e4afe0097b092633aae592612e33d#9f10d434d99e4afe0097b092633aae592612e33d"
 dependencies = [
  "rustix 1.1.6",
 ]
@@ -944,7 +944,7 @@ dependencies = [
 [[package]]
 name = "craft-audio"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d#0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d"
+source = "git+https://github.com/storytold/craft-libs?rev=9f10d434d99e4afe0097b092633aae592612e33d#9f10d434d99e4afe0097b092633aae592612e33d"
 dependencies = [
  "craft-media",
  "log",
@@ -955,7 +955,7 @@ dependencies = [
 [[package]]
 name = "craft-media"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d#0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d"
+source = "git+https://github.com/storytold/craft-libs?rev=9f10d434d99e4afe0097b092633aae592612e33d#9f10d434d99e4afe0097b092633aae592612e33d"
 dependencies = [
  "thiserror 2.0.21",
 ]

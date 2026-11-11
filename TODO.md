@@ -29,9 +29,11 @@ The biggest risk: these parts are built but have never run where it counts.
       rewritten about 2 seconds after each change, and the startup file check looks at every
       song.
 - [ ] Check gapless joins of real MP3 and AAC albums. Encoder delay and padding are trimmed by
-      craft-audio, but only WAV and FLAC fixtures exist (no encoder to make others).
-- [ ] Check Opus playback. Opus files import and their tags are read, but the decoder
-      (symphonia, through craft-audio) has no Opus support, so they probably do not play.
+      craft-audio, but the tests have only WAV, FLAC and silent Opus fixtures. craft-audio's AAC
+      encoder could now make AAC ones; MP3 still has no encoder.
+- [x] Opus playback. craft-audio decodes Opus natively (craft-libs `9f10d43`). A libopus file
+      decodes to its exact length, with pre-skip and end trimming applied, and a test in
+      `tunebox-audio` checks a generated one. Not yet listened to on a real sound device.
 
 ## Playback
 
@@ -74,8 +76,10 @@ The biggest risk: these parts are built but have never run where it counts.
 
 ## CD import
 
-- [ ] AAC and MP3 encoding (lossless only today: FLAC, WAV, AIFF). Waits for permissively
-      licensed pure-Rust encoders.
+- [ ] AAC and ALAC rip formats (only FLAC, WAV and AIFF today). craft-audio now has pure-Rust
+      AAC and ALAC encoders (`aac::Encoder`, `alac::Encoder`); what remains is the import
+      setting and writing the result into an `.m4a` file.
+- [ ] MP3 encoding. Waits for a permissively licensed pure-Rust encoder.
 - [ ] AccurateRip verification that a rip is error-free. Blocked: the database is for approved
       programs only and TuneBox needs Illustrate's prior agreement; see
       [docs/accuraterip.md](docs/accuraterip.md).

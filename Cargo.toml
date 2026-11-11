@@ -30,10 +30,10 @@ tunebox-visualizer-sdk = { path = "crates/visualizer-sdk", version = "0.1.0" }
 tunebox-ui = { path = "crates/ui", version = "0.1.0" }
 
 # Shared Craft libraries. craft-audio decodes every format we play (natively, or through
-# symphonia for MP3, FLAC, ALAC and Vorbis) and encodes the lossless rip formats. craft-atomic
+# symphonia for MP3, FLAC and Vorbis) and encodes the lossless rip formats. craft-atomic
 # makes every library, preference and device-manifest save crash-safe.
-craft-audio = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d", features = ["decode", "encode"] }
-craft-atomic = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "0e4943cb5e7b50bd4eb01e8c580b97603c8f9e3d" }
+craft-audio = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "9f10d434d99e4afe0097b092633aae592612e33d", features = ["decode", "encode"] }
+craft-atomic = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "9f10d434d99e4afe0097b092633aae592612e33d" }
 
 # audio
 lofty = "0.25"
