@@ -88,7 +88,7 @@ The biggest risk: these parts are built but have never run where it counts.
 - [ ] Test and copy: read each track twice and re-read on a mismatch.
 - [ ] Audiobooks from several CDs: chapters across discs, eject and ask for the next disc,
       one chaptered `.m4b` or a file per chapter. Planned in
-      [docs/audiobooks.md](docs/audiobooks.md). Needs the current craft-libs (AAC, ALAC, chapters).
+      [docs/audiobooks.md](docs/audiobooks.md). craft-libs has what it needs (AAC, ALAC, chapters).
 - [ ] Play a CD directly.
 - [x] Cover art from the Cover Art Archive: Get CD Cover (or an opt-in setting) on the CD page,
       Find Album Artwork… for library albums, `tunebox-cli artwork find/fetch` and

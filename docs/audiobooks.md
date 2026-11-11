@@ -2,8 +2,8 @@
 
 Status: **planned, not built.** Nothing waits on another project any more: craft-libs now has
 the AAC encoder, an Apple Lossless (ALAC) encoder and MP4 chapter lists (see
-[What craft-libs provides](#what-craft-libs-provides)). TuneBox pins an older craft-libs
-commit, so the first step is to move to the current one.
+[What craft-libs provides](#what-craft-libs-provides)), and TuneBox uses that commit since
+`aa75839` on main. The work can start with phase 1.
 This document says what the audiobook builder does, how it fits TuneBox's layers, and what
 still has to be decided.
 
@@ -298,8 +298,8 @@ while a kept track has not been ripped, naming the disc and tracks.
 
 ### What craft-libs provides
 
-Checked against craft-libs `main` (`9f10d43`, November 2026). TuneBox pins `0e4943c`, which
-has none of the encoders or chapters below.
+craft-libs `9f10d43`, which TuneBox uses since `aa75839` (it pinned `0e4943c` before, which had
+none of the encoders or chapters below).
 
 | Piece | Where | What it does |
 |---|---|---|
@@ -308,13 +308,12 @@ has none of the encoders or chapters below.
 | MP4 container | craft-media `isobmff::Mp4Writer` (re-exported as `craft_audio::craft_media`, same commit) | 64-bit durations when needed (a 30-hour book overflows 32 bits at 44.1 kHz), edit lists (`TrackConfig::media_start` for the priming), `moov` in front ("fast start"), `mp4a` and `alac` sample entries |
 | Chapters | craft-media `WriterOptions::chapters` (`Chapter { start, title }`) | Both forms players read: a disabled QuickTime chapter text track referenced by `tref/chap` (Apple's players) and a Nero `udta/chpl` list (VLC, ffprobe; checked against ffprobe in craft-media's tests). `read_chapters` reads them back, for tests and for listening later. **At most 255 chapters per file and 255 bytes per title** (`MAX_CHAPTERS`, `MAX_CHAPTER_TITLE_BYTES`) |
 | Waveforms | craft-audio `peaks` | The trim editor's waveform |
-| Opus, AC-3, MP1/MP2, ALAC decoding | craft-audio, native | Not needed here; Opus playback fixes an open TODO item |
+| Opus, AC-3, MP1/MP2, ALAC decoding | craft-audio, native | Not needed here; Opus files now play (`aa75839`) |
 
-Moving to the new commit: TuneBox already uses the API's current shape (`EncodeOptions::new`,
-sample rate before channels). The changes to check are `FileEncoder::write` refusing short or
-missing channels instead of padding them, `DecodeOptions` no longer being `Copy`, and native
-decoders replacing symphonia for AAC and ALAC (MP4 files now decode to their presentation
-length, which is what gapless playback wants). `craft-atomic` moves to the same commit.
+The move to this commit is done (`aa75839`): TuneBox compiled unchanged, and `PcmWriter::write`
+now refuses a block whose channels differ in length, as `FileEncoder::write` no longer pads
+them. The audiobook build must hand the encoders equal channels, which the mono mixdown and
+the trims (applied to both channels alike) do; a test covers it.
 
 ### One file with chapters (`.m4b`)
 
@@ -361,7 +360,7 @@ track number = chapter number of the total, no disc number (chapters run across 
 | L0 | `model` | `MediaKind` on tracks, and a Media Kind smart playlist rule. `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, likely announcements, chapter start times, output file names. Pure, tested next to it |
 | L1 | `library` | The media kind in the library file, and books recognised by `.m4b` when loading an older file |
 | L1 | `tags` | Audiobook tags: media kind (read on import, written on build and from Get Info), narrator, description, chapters read back for tests |
-| L1 | `audio` | An MP4 audio writer over craft-audio's AAC and ALAC encoders and craft-media's muxer, with chapters (writes through a `*.part` file, like `PcmWriter`); mono mixdown. The craft-libs commit moves forward |
+| L1 | `audio` | An MP4 audio writer over craft-audio's AAC and ALAC encoders and craft-media's muxer, with chapters (writes through a `*.part` file, like `PcmWriter`); mono mixdown. Without chapters, the same writer gives the CD import its AAC and ALAC formats (an `.m4a` per track), a TODO item of its own: build it once for both |
 | L2 | `rip` | Rip into a given staging folder without tagging or the library, handing each track's samples to a loudness meter as they are written (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
 | L2 | `audiobook` (new) | Finding pauses in a loudness envelope; builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
 | L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, `Source::Audiobooks`, commands. Re-exports what the frontends need |
@@ -504,8 +503,7 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 
 ## Phases
 
-0. **craft-libs.** Move to the current commit, with `cargo xtask ci` and a check that AAC, ALAC
-   and FLAC files still play gaplessly. A change of its own, before any audiobook code.
+0. **craft-libs.** Done on main (`aa75839`): craft-libs `9f10d43`, Opus playback.
 1. **The loop and the build.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
    checks, chapters, removing and trimming, suggestions, the media kind and
    `Source::Audiobooks`, CLI, and every output: the chaptered `.m4b` (AAC or Apple Lossless)
