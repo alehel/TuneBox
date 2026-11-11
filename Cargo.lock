@@ -4419,6 +4419,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tunebox-audio",
+ "tunebox-audiobook",
  "tunebox-import",
  "tunebox-library",
  "tunebox-metabrainz",
