@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_library::NewTrack;
-use tunebox_model::{TrackMeta, organize};
+use tunebox_model::{MediaKind, TrackMeta, organize};
 
 /// What to rip, and where.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -195,7 +195,7 @@ fn write_silence(writer: &mut PcmWriter, samples: u64) -> Result<(), String> {
 fn finish_track(path: &Path, meta: &TrackMeta, now: DateTime<Utc>) -> Result<NewTrack, String> {
     tunebox_tags::write(path, meta).map_err(|e| e.to_string())?;
     let file = tunebox_tags::read(path).map_err(|e| e.to_string())?.file;
-    Ok(NewTrack { location: path.to_path_buf(), meta: meta.clone(), file, date_added: now })
+    Ok(NewTrack { location: path.to_path_buf(), meta: meta.clone(), file, date_added: now, kind: MediaKind::Music })
 }
 
 /// 16-bit little-endian stereo bytes to planar `f32`. A trailing partial frame is dropped.

@@ -60,7 +60,7 @@ pub fn edit(session: &mut Session, search: &str, assignments: &[String]) -> Resu
 pub fn refresh(session: &mut Session, search: Option<&str>, replace_library_edits: bool) -> Result<(), String> {
     let ids = match search {
         Some(search) => matching(session.view(), search)?,
-        None => search_ids(session.view(), Source::Music, None),
+        None => search_ids(session.view(), Source::Library, None),
     };
     let edits = if replace_library_edits { LibraryOnlyEdits::Replace } else { LibraryOnlyEdits::Keep };
     session.refresh_from_files(&ids, edits).map_err(|e| e.to_string())?;
@@ -99,7 +99,7 @@ pub fn print_info_fields(prefs: &Preferences) {
 }
 
 fn matching(view: LibraryView<'_>, search: &str) -> Result<Vec<TrackId>, String> {
-    let ids = search_ids(view, Source::Music, Some(search));
+    let ids = search_ids(view, Source::Library, Some(search));
     if ids.is_empty() {
         return Err(format!("no songs match “{search}”"));
     }

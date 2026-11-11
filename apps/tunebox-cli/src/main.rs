@@ -26,7 +26,7 @@ use std::time::Duration;
 use tunebox_engine::Place;
 use tunebox_engine::commands::COMMANDS;
 use tunebox_engine::model::search::SearchScope;
-use tunebox_engine::model::{Column, Rating, TrackId, format_clock};
+use tunebox_engine::model::{Column, MediaKind, Rating, TrackId, format_clock};
 use tunebox_engine::{
     FileStatus, LibrarySnapshot, LibraryView, NoticeLevel, Player, Session, Source, SyncMode, TrackQuery, VirtualDrive,
 };
@@ -108,6 +108,9 @@ enum Command {
         /// Only tracks matching these words.
         #[arg(long)]
         search: Option<String>,
+        /// Only music, or only audiobooks ("music", "audiobook").
+        #[arg(long, value_parser = parse_kind)]
+        kind: Option<MediaKind>,
     },
     /// Add files or folders to the library.
     Import { paths: Vec<PathBuf> },
@@ -304,15 +307,20 @@ fn run(cli: Cli) -> Result<(), String> {
 fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
     match command {
         Command::Stats => {
-            let all = view.query(&TrackQuery::new(Source::Music));
+            let all = view.query(&TrackQuery::new(Source::Library));
             println!("{}", view.summary(&all).label());
         }
-        Command::List { playlist, search } => {
-            let source = match playlist {
-                Some(name) => Source::Playlist(find_playlist(view, &name)?),
-                None => Source::Music,
+        Command::List { playlist, search, kind } => {
+            let source = match (playlist, kind) {
+                (Some(name), _) => Source::Playlist(find_playlist(view, &name)?),
+                (None, Some(MediaKind::Music)) => Source::Music,
+                (None, Some(MediaKind::Audiobook)) => Source::Audiobooks,
+                (None, None) => Source::Library,
             };
-            let ids = search_ids(view, source, search.as_deref());
+            let mut ids = search_ids(view, source, search.as_deref());
+            if let Some(kind) = kind {
+                ids.retain(|id| view.library().track(*id).is_some_and(|t| t.kind == kind));
+            }
             print_tracks(view, &ids);
         }
         Command::Playlists => {
@@ -348,12 +356,12 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
             wait_for_jobs(session);
         }
         Command::NewPlaylist { name, search } => {
-            let ids = search_ids(session.view(), Source::Music, search.as_deref());
+            let ids = search_ids(session.view(), Source::Library, search.as_deref());
             session.create_playlist(&name, &ids).map_err(|e| e.to_string())?;
             println!("Created “{name}” with {} songs.", ids.len());
         }
         Command::Rate { search, stars } => {
-            let ids = search_ids(session.view(), Source::Music, Some(&search));
+            let ids = search_ids(session.view(), Source::Library, Some(&search));
             session.set_rating(&ids, Rating::from_stars(stars));
             println!("Rated {} songs.", ids.len());
         }
@@ -451,7 +459,7 @@ fn locate(session: &mut Session, search: &str, file: PathBuf) -> Result<(), Stri
     // A fresh look, waited for: the songs found missing are the ones missing now.
     session.set_network_mounts(tunebox_platform::network_mounts());
     session.check_files_now();
-    let matches: Vec<TrackId> = search_ids(session.view(), Source::Music, Some(search))
+    let matches: Vec<TrackId> = search_ids(session.view(), Source::Library, Some(search))
         .into_iter()
         .filter(|id| *session.file_status(*id) == FileStatus::Missing)
         .collect();
@@ -480,7 +488,7 @@ fn artwork(session: &mut Session, action: ArtworkAction) -> Result<(), String> {
             return find_artwork::fetch(session, &find_artwork::Terms { search, artist, album }, &release);
         }
     };
-    let ids = search_ids(session.view(), Source::Music, Some(&search));
+    let ids = search_ids(session.view(), Source::Library, Some(&search));
     if ids.is_empty() {
         return Err(format!("no song matches “{search}”"));
     }
@@ -499,7 +507,7 @@ fn artwork(session: &mut Session, action: ArtworkAction) -> Result<(), String> {
 /// Saves the cover of the first song matching `search` that has one. Songs whose files cannot
 /// be reached now are passed over, so a disconnected share cannot stall the command.
 fn export_artwork(view: LibraryView<'_>, search: &str, file: &std::path::Path) -> Result<(), String> {
-    let ids = search_ids(view, Source::Music, Some(search));
+    let ids = search_ids(view, Source::Library, Some(search));
     if ids.is_empty() {
         return Err(format!("no song matches “{search}”"));
     }
@@ -585,7 +593,7 @@ fn print_notices(session: &mut Session) {
 }
 
 fn play(session: &mut Session, search: Option<&str>, shuffle: bool) {
-    let ids = search_ids(session.view(), Source::Music, search);
+    let ids = search_ids(session.view(), Source::Library, search);
     session.set_shuffle(shuffle);
     session.play_tracks(&ids, 0);
     let mut last = None;
@@ -768,6 +776,11 @@ fn watch(session: &mut Session) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+}
+
+/// Reads a media kind: "music" or "audiobook".
+fn parse_kind(text: &str) -> Result<MediaKind, String> {
+    MediaKind::from_name(text).ok_or_else(|| format!("“{text}” is not a kind: write music or audiobook"))
 }
 
 #[cfg(test)]

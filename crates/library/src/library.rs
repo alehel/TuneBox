@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use tunebox_model::{
-    FileInfo, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, TagField, Track, TrackId, TrackMeta,
+    FileInfo, MediaKind, PlayStats, Playlist, PlaylistId, PlaylistKind, Rating, SmartRules, TagField, Track, TrackId,
+    TrackMeta,
 };
 
 /// A file to add: everything about a track except what the library assigns.
@@ -15,6 +16,7 @@ pub struct NewTrack {
     pub meta: TrackMeta,
     pub file: FileInfo,
     pub date_added: DateTime<Utc>,
+    pub kind: MediaKind,
 }
 
 /// The music library.
@@ -138,6 +140,7 @@ impl Library {
         {
             existing.meta = new.meta;
             existing.file = new.file;
+            existing.kind = new.kind;
             return id;
         }
         let id = TrackId(self.allocate_id());
@@ -153,6 +156,7 @@ impl Library {
             // New tracks come from reading the file (or writing it, for CD imports).
             extra_fields_read: true,
             library_only_edits: false,
+            kind: new.kind,
         };
         self.tracks.insert(id, track);
         id
@@ -226,6 +230,12 @@ impl Library {
 
     pub fn set_rating(&mut self, id: TrackId, rating: Rating) -> Result<(), LibraryError> {
         self.track_mut(id)?.stats.rating = rating;
+        Ok(())
+    }
+
+    /// Makes the track music or an audiobook (in the library; the caller writes the file).
+    pub fn set_kind(&mut self, id: TrackId, kind: MediaKind) -> Result<(), LibraryError> {
+        self.track_mut(id)?.kind = kind;
         Ok(())
     }
 
@@ -402,6 +412,7 @@ pub(crate) mod tests {
                 channels: Some(2),
             },
             date_added: DateTime::<Utc>::UNIX_EPOCH,
+            kind: MediaKind::Music,
         }
     }
 

@@ -4,7 +4,7 @@
 use crate::Library;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tunebox_model::{Playlist, Track};
+use tunebox_model::{MediaKind, Playlist, Track};
 
 /// Identifies the file's contents.
 const FORMAT: &str = "tunebox-library";
@@ -32,6 +32,10 @@ struct LibraryFile {
     /// Added after version 1 shipped; older files have none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     network_places: Vec<std::path::PathBuf>,
+    /// Whether tracks carry their media kind. Files written before media kinds existed have
+    /// none; their `.m4b` tracks are audiobooks, decided once when such a file is read.
+    #[serde(default)]
+    media_kinds: bool,
 }
 
 /// Reads the library at `path`. A missing file is a new, empty library with the default
@@ -54,7 +58,13 @@ pub fn from_json(bytes: &[u8]) -> Result<Library, StoreError> {
     if file.version > VERSION {
         return Err(StoreError::TooNew(file.version));
     }
-    Ok(Library::from_parts(file.tracks, file.playlists, file.next_id).with_network_places(file.network_places))
+    let mut tracks = file.tracks;
+    if !file.media_kinds {
+        for track in &mut tracks {
+            track.kind = MediaKind::from_path(&track.location);
+        }
+    }
+    Ok(Library::from_parts(tracks, file.playlists, file.next_id).with_network_places(file.network_places))
 }
 
 /// The library as file bytes.
@@ -66,6 +76,7 @@ pub fn to_json(library: &Library) -> Result<Vec<u8>, StoreError> {
         tracks: library.tracks().cloned().collect(),
         playlists: library.playlists().to_vec(),
         network_places: library.network_places().to_vec(),
+        media_kinds: true,
     };
     serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Damaged(e.to_string()))
 }
@@ -103,6 +114,24 @@ mod tests {
         assert_eq!(back.playlists(), lib.playlists());
         assert_eq!(back.playlist_tracks(list, Utc::now()).unwrap(), [id]);
         assert_eq!(back.next_id(), lib.next_id());
+    }
+
+    #[test]
+    fn an_older_library_has_its_m4b_tracks_marked_as_audiobooks_once() {
+        let mut lib = Library::with_default_playlists();
+        let book = lib.add_track(new_track("/b/Book.m4b", "Book", "A", "B"));
+        let song = lib.add_track(new_track("/s/Song.m4a", "Song", "A", "S"));
+        // Written before media kinds: no marker, no kinds.
+        let mut json: serde_json::Value = serde_json::from_slice(&to_json(&lib).unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("media_kinds");
+        let older = from_json(&serde_json::to_vec(&json).unwrap()).unwrap();
+        assert_eq!(older.track(book).unwrap().kind, MediaKind::Audiobook);
+        assert_eq!(older.track(song).unwrap().kind, MediaKind::Music);
+        // From then on the kinds are the listener's: an .m4b made music stays music.
+        let mut lib = older;
+        lib.set_kind(book, MediaKind::Music).unwrap();
+        let again = from_json(&to_json(&lib).unwrap()).unwrap();
+        assert_eq!(again.track(book).unwrap().kind, MediaKind::Music);
     }
 
     #[test]

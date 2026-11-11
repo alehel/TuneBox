@@ -20,7 +20,7 @@ pub enum RenameTo {
 }
 
 fn request(view: LibraryView<'_>, search: &str, pattern: &str, to: RenameTo) -> Result<RenameRequest, String> {
-    let tracks = search_ids(view, Source::Music, Some(search));
+    let tracks = search_ids(view, Source::Library, Some(search));
     if tracks.is_empty() {
         return Err(format!("no songs match “{search}”"));
     }

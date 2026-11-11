@@ -77,6 +77,7 @@ mod tests {
                 channels: None,
             },
             date_added: Utc::now(),
+            kind: tunebox_model::MediaKind::Music,
         }
     }
 

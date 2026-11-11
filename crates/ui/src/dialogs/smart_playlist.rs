@@ -17,7 +17,7 @@ enum Field {
     Date(DateField),
 }
 
-const FIELDS: [(Field, &str); 19] = [
+const FIELDS: [(Field, &str); 20] = [
     (Field::Text(TextField::Name), "Name"),
     (Field::Text(TextField::Artist), "Artist"),
     (Field::Text(TextField::AlbumArtist), "Album Artist"),
@@ -27,6 +27,7 @@ const FIELDS: [(Field, &str); 19] = [
     (Field::Text(TextField::Grouping), "Grouping"),
     (Field::Text(TextField::Comments), "Comments"),
     (Field::Text(TextField::Kind), "Kind"),
+    (Field::Text(TextField::MediaKind), "Media Kind"),
     (Field::Number(NumberField::Rating), "Rating (stars)"),
     (Field::Number(NumberField::Plays), "Plays"),
     (Field::Number(NumberField::Skips), "Skips"),

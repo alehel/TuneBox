@@ -32,6 +32,8 @@ pub enum TextField {
     Grouping,
     Comments,
     Kind,
+    /// Music or Audiobook.
+    MediaKind,
 }
 
 /// How a text rule compares (case-insensitive).
@@ -216,6 +218,7 @@ fn text_value(field: TextField, track: &Track) -> &str {
         TextField::Grouping => &m.grouping,
         TextField::Comments => &m.comments,
         TextField::Kind => track.file.format.kind_label(),
+        TextField::MediaKind => track.kind.name(),
     }
 }
 
@@ -423,6 +426,17 @@ mod tests {
         assert!(rules.evaluate(&lib, now()).is_empty());
         rules.match_mode = MatchMode::Any;
         assert_eq!(ids(&rules.evaluate(&lib, now())), [1, 2]);
+    }
+
+    #[test]
+    fn media_kind_rules_tell_music_from_audiobooks() {
+        let mut lib = library();
+        lib[1].kind = crate::MediaKind::Audiobook;
+        let rules = SmartRules {
+            rules: vec![Rule::Text { field: TextField::MediaKind, op: TextOp::Is, value: "audiobook".into() }],
+            ..SmartRules::default()
+        };
+        assert_eq!(ids(&rules.evaluate(&lib, now())), [2]);
     }
 
     #[test]

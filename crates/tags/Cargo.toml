@@ -18,4 +18,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 craft-audio = { workspace = true }
+tunebox-audio = { workspace = true }
 tempfile = { workspace = true }

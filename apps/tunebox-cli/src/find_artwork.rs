@@ -61,7 +61,7 @@ pub(crate) fn fetch(session: &mut Session, terms: &Terms, release: &str) -> Resu
 }
 
 fn songs(session: &Session, search: &str) -> Result<Vec<TrackId>, String> {
-    let ids = search_ids(session.view(), Source::Music, Some(search));
+    let ids = search_ids(session.view(), Source::Library, Some(search));
     if ids.is_empty() {
         return Err(format!("no song matches “{search}”"));
     }

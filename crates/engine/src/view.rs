@@ -9,7 +9,7 @@ use crate::sources::{Source, TrackQuery};
 use chrono::Utc;
 use tunebox_library::{Browser, Library, Summary};
 use tunebox_model::search::Query;
-use tunebox_model::{Column, SortOrder, Track, TrackId, compare_tracks};
+use tunebox_model::{Column, MediaKind, SortOrder, Track, TrackId, compare_tracks};
 
 /// A read-only look at a library. It cannot change anything.
 #[derive(Clone, Copy)]
@@ -38,7 +38,9 @@ impl<'a> LibraryView<'a> {
     /// A source's tracks in its own order. Playlists may list a track more than once.
     pub fn source_tracks(&self, source: &Source) -> Vec<TrackId> {
         match source {
-            Source::Music => self.in_album_order(self.library.tracks().map(|t| t.id).collect()),
+            Source::Music => self.in_album_order(self.of_kind(Some(MediaKind::Music))),
+            Source::Audiobooks => self.in_album_order(self.of_kind(Some(MediaKind::Audiobook))),
+            Source::Library => self.in_album_order(self.of_kind(None)),
             Source::Playlist(id) => self.library.playlist_tracks(*id, Utc::now()).unwrap_or_default(),
             Source::Device(root) => {
                 let on_device = self
@@ -51,6 +53,11 @@ impl<'a> LibraryView<'a> {
                 self.in_album_order(on_device)
             }
         }
+    }
+
+    /// The tracks of one media kind, or all of them.
+    fn of_kind(&self, kind: Option<MediaKind>) -> Vec<TrackId> {
+        self.library.tracks().filter(|t| kind.is_none_or(|k| t.kind == k)).map(|t| t.id).collect()
     }
 
     fn in_album_order(&self, mut ids: Vec<TrackId>) -> Vec<TrackId> {

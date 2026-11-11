@@ -1,6 +1,6 @@
 //! A track: one audio file, what it contains, and how it has been listened to.
 
-use crate::{AudioFormat, Rating, TrackId, TrackMeta};
+use crate::{AudioFormat, MediaKind, Rating, TrackId, TrackMeta};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -53,6 +53,9 @@ pub struct Track {
     /// it asks first.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub library_only_edits: bool,
+    /// Music or an audiobook. Added after version 1 of the library file; absent means music.
+    #[serde(default, skip_serializing_if = "MediaKind::is_music")]
+    pub kind: MediaKind,
 }
 
 fn checked_default() -> bool {
@@ -123,6 +126,7 @@ pub(crate) mod fixtures {
             checked: true,
             extra_fields_read: true,
             library_only_edits: false,
+            kind: MediaKind::Music,
         }
     }
 }

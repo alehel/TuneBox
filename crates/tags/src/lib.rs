@@ -1,7 +1,7 @@
 //! tunebox-tags — metadata in and out of audio files.
 //!
 //! [`read`] turns a file into a [`TrackMeta`] and [`FileInfo`]; [`write`] puts edited metadata
-//! back. The cover picture is `artwork`'s ([`read_artwork`], [`write_artwork`],
+//! back. [`write_media_kind`] marks an MP4 file as an audiobook (`media_kind`). The cover picture is `artwork`'s ([`read_artwork`], [`write_artwork`],
 //! [`remove_artwork`]), and `picture` turns an image the listener chose into one fit to be a
 //! cover. The tag formats (ID3v2, MP4 atoms, Vorbis comments, RIFF INFO…) are lofty's business;
 //! this crate maps them onto TuneBox's model and nothing else.
@@ -17,10 +17,12 @@
 
 mod artwork;
 mod fields;
+mod media_kind;
 mod picture;
 
 pub use artwork::{Artwork, read_artwork, remove_artwork, write_artwork};
 pub use fields::can_store;
+pub use media_kind::write_media_kind;
 pub use picture::{MAX_COVER_SIDE, PictureError, looks_like_image, prepare_cover};
 
 use lofty::config::WriteOptions;
@@ -28,7 +30,7 @@ use lofty::file::FileType;
 use lofty::prelude::{Accessor, AudioFile, ItemKey, TagExt, TaggedFileExt};
 use lofty::tag::Tag;
 use std::path::Path;
-use tunebox_model::{AudioFormat, FileInfo, NumberOf, TrackMeta};
+use tunebox_model::{AudioFormat, FileInfo, MediaKind, NumberOf, TrackMeta};
 
 /// Why a file's tags could not be read or written.
 #[derive(Debug, thiserror::Error)]
@@ -48,6 +50,8 @@ pub enum TagError {
 pub struct ReadTags {
     pub meta: TrackMeta,
     pub file: FileInfo,
+    /// An audiobook when the file says so (MP4's media kind) or is named `.m4b`.
+    pub kind: MediaKind,
 }
 
 /// Reads a file's metadata and audio properties.
@@ -65,7 +69,11 @@ pub fn read(path: &Path) -> Result<ReadTags, TagError> {
         channels: properties.channels(),
     };
     let meta = tagged.primary_tag().or_else(|| tagged.first_tag()).map(meta_from_tag).unwrap_or_default();
-    Ok(ReadTags { meta, file })
+    let kind = match media_kind::read(path, tagged.file_type()) {
+        Some(kind) => kind,
+        None => MediaKind::from_path(path),
+    };
+    Ok(ReadTags { meta, file, kind })
 }
 
 /// Maps lofty's file type to ours. MP4 files with a bit depth hold Apple Lossless; AAC has none.
@@ -113,9 +121,14 @@ fn meta_from_tag(tag: &Tag) -> TrackMeta {
 /// the computer stops half-way, the original file is untouched.
 pub fn write(path: &Path, meta: &TrackMeta) -> Result<(), TagError> {
     rewrite_atomically(path, |copy| {
+        // lofty's common tag has no media kind: saving it would drop an MP4's audiobook mark.
+        let kind = media_kind::read_atom(copy)?;
         let mut tag = load_primary_tag(copy)?;
         apply_meta(&mut tag, meta);
         tag.save_to_path(copy, WriteOptions::default())?;
+        if let Some(kind) = kind {
+            media_kind::write_atom(copy, kind)?;
+        }
         Ok(())
     })
 }

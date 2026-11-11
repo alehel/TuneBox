@@ -12,8 +12,12 @@ use tunebox_model::{Column, PlaylistId, SortOrder, TrackId};
 /// since its tracks are not in the library until imported.)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Source {
-    /// The whole music library.
+    /// The music: every track but the audiobooks.
     Music,
+    /// The audiobooks.
+    Audiobooks,
+    /// Every track, music and audiobooks: what the command line searches.
+    Library,
     Playlist(PlaylistId),
     /// The tracks TuneBox has synced to the player mounted at this path.
     Device(PathBuf),

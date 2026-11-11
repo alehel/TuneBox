@@ -10,7 +10,9 @@ use std::time::UNIX_EPOCH;
 use tunebox_audio::{LosslessFormat, PcmWriter};
 use tunebox_library::{Library, NewTrack};
 use tunebox_model::smart::{Limit, LimitUnit, NumberField, NumberOp, Rule, SelectedBy, TextField, TextOp};
-use tunebox_model::{AudioFormat, FileInfo, NumberOf, Rating, SmartRules, TagField, TrackId, TrackMeta, organize};
+use tunebox_model::{
+    AudioFormat, FileInfo, MediaKind, NumberOf, Rating, SmartRules, TagField, TrackId, TrackMeta, organize,
+};
 use tunebox_sync::{Device, PlaylistFile, SyncItem, SyncMode};
 
 struct Album {
@@ -196,7 +198,13 @@ pub fn build(dir: &Path) -> Result<(), String> {
             tunebox_tags::write_artwork(&path, &artwork).map_err(|e| e.to_string())?;
             let file = tunebox_tags::read(&path).map_err(|e| e.to_string())?.file;
             let added = now - TimeDelta::days(album.added_days_ago) + TimeDelta::minutes(track_index as i64);
-            ids.push(library.add_track(NewTrack { location: path, meta, file, date_added: added }));
+            ids.push(library.add_track(NewTrack {
+                location: path,
+                meta,
+                file,
+                date_added: added,
+                kind: MediaKind::Music,
+            }));
         }
     }
     ids.extend(add_unplayable(&mut library, dir, &media, now));
@@ -233,7 +241,13 @@ fn add_unplayable(library: &mut Library, dir: &Path, media: &Path, now: chrono::
     let mut ids = Vec::new();
     let missing = song("Riptide (Alternate Take)", "Saltwater Quartet", "Low Tide Sessions", 6, 6);
     let location = media.join(organize::relative_path(&missing, &missing.title, "flac"));
-    ids.push(library.add_track(NewTrack { location, meta: missing, file: file(301), date_added: now }));
+    ids.push(library.add_track(NewTrack {
+        location,
+        meta: missing,
+        file: file(301),
+        date_added: now,
+        kind: MediaKind::Music,
+    }));
 
     let share = dir.join("Lighthouse NAS");
     library.remember_network_place(share.clone());
@@ -242,7 +256,13 @@ fn add_unplayable(library: &mut Library, dir: &Path, media: &Path, now: chrono::
     {
         let meta = song(title, "Wharf Street Players", "Harbour Archive", number as u32 + 1, 3);
         let location = share.join("Music").join(organize::relative_path(&meta, title, "flac"));
-        ids.push(library.add_track(NewTrack { location, meta, file: file(seconds), date_added: now }));
+        ids.push(library.add_track(NewTrack {
+            location,
+            meta,
+            file: file(seconds),
+            date_added: now,
+            kind: MediaKind::Music,
+        }));
     }
     ids
 }

@@ -122,7 +122,7 @@ fn import_one(path: &Path, options: &ImportOptions, now: DateTime<Utc>) -> Resul
     } else {
         path.to_path_buf()
     };
-    Ok(NewTrack { location, meta: tags.meta, file: tags.file, date_added: now })
+    Ok(NewTrack { location, meta: tags.meta, file: tags.file, date_added: now, kind: tags.kind })
 }
 
 #[cfg(test)]
