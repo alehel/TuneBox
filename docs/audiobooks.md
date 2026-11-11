@@ -11,15 +11,17 @@ still has to be decided.
    the CD page header's row, after Import CD, Get Track Names and Get CD Cover; also in the
    File menu, or `tunebox-cli audiobook start`.
 2. Types the book's details: title, author, narrator, and optionally series, number in the
-   series, year, publisher, description, how many discs the book has, and a cover. When the
-   disc is on MusicBrainz, the details and the track names of *every* disc in the set are
-   filled in from the release.
-3. Groups the disc's tracks into chapters and leaves out tracks that are not part of the
-   story (see [Editing the book](#editing-the-book)), then clicks **Rip Disc**. Nothing is
-   ripped until then.
-4. When the disc is done, TuneBox ejects it and asks for the next one: "Insert disc 3 of 12."
-   The new disc's tracks appear, ready to group, and wait for **Rip Disc** again. This repeats
-   until the last disc, or until the listener says "That Was the Last Disc".
+   series, year, publisher, description and a cover. When the disc is on MusicBrainz, the
+   details and the track names of *every* disc in the set are filled in from the release.
+   TuneBox does not ask how many discs there are, nor how to group the tracks.
+3. The disc's tracks start as one chapter. The listener may split them into chapters and leave
+   out tracks that are not part of the story now or later (see
+   [Editing the book](#editing-the-book)), then clicks **Rip Disc**. Nothing is ripped until
+   then.
+4. When the disc is done, TuneBox ejects it and says which disc is next: "Disc 2 is ripped.
+   Insert disc 3." The new disc's tracks appear as one more chapter and wait for **Rip Disc**
+   again. TuneBox keeps asking for the next disc until the listener says **That Was the Last
+   Disc**.
 5. Reviews the whole book as one list: moves chapter boundaries (a chapter that ran from one
    disc into the next), removes tracks ("Please insert disc 2"), and trims the start or end
    of a track.
@@ -49,7 +51,7 @@ files first and builds the book from them at the end. Reasons:
   offset correction join sample-exactly.
 
 The cost is disk space while the book is in progress: a full CD of speech is roughly 300–400 MB
-as FLAC, so a 12-disc book needs a few GB until it is built. TuneBox checks free space before each
+as FLAC, so a book of a dozen discs needs a few GB until it is built. TuneBox checks free space before each
 disc and says how much is needed.
 
 ## The book project
@@ -79,7 +81,6 @@ not written through `files.rs`. The finished book is: it goes into the media fol
 | Trims | Per track: how many samples to cut from its start and from its end |
 | Chapters | The tracks where a chapter starts, as (disc, track), and each chapter's name |
 | Output | Single file or per chapter; format, bit rate, mono or stereo |
-| Expected discs | How many discs the book has, if known |
 
 Chapters are stored as **boundaries** in the book's track list, not as lists of tracks. Joining,
 splitting and moving a chapter are then edits of one set, a chapter can cross a disc without
@@ -96,11 +97,19 @@ applied when the book is built, so each one can be undone until then.
 
 ### Chapters
 
-Select tracks and **Join into One Chapter**, or choose a track and **Split Chapter Here**; name
-each chapter. Quick starts: one chapter per track, one per disc, or the chapters suggested by
-the MusicBrainz track names. After the last disc, the list shows the book across disc
-boundaries, so the last tracks of disc 1 and the first of disc 2 can be joined into the
-chapter they belong to.
+Each disc starts as one chapter. From there the listener splits and joins: **Split Chapter
+Here** starts a chapter at the selected track (at every selected track, when several are
+selected), and **Join into One Chapter** makes one chapter of the selected tracks' chapters.
+After the last disc, the list shows the book across disc boundaries, so the last tracks of
+disc 1 and the first of disc 2 can be joined into the chapter they belong to.
+
+Chapters are named "Chapter 1", "Chapter 2"… in order, and renumbered after every split and
+join, until the listener types a name; a typed name is kept.
+
+Two commands regroup the whole book at once, for books whose discs fit them: **One Chapter
+per Track**, and **Chapters from Track Names** (MusicBrainz names such as "Chapter 4 (1)",
+"Chapter 4 (2)" become one chapter). **One Chapter per Disc** goes back to the start. Like
+every edit, each can be undone.
 
 ### Removing tracks
 
@@ -137,8 +146,8 @@ the listener accepts or ignores it.
 **Likely announcements.** A track is marked "Looks like an announcement" when it is short
 (under 15 seconds) and is the first or last track of its disc, or when its MusicBrainz name
 says so ("Please insert disc 2", "End of disc 1"; English phrases only to begin with). The mark
-offers **Remove from Book**; **Remove Suggested Tracks** removes every marked track at once,
-each restorable as usual.
+offers **Remove from Book** (**A**); **Accept All Suggestions** (⇧**A**) removes every marked
+track and makes every proposed trim at once, each undoable as usual.
 
 **Quiet moments.** While a track is ripped, TuneBox measures its loudness every 10 ms and keeps
 the pauses: stretches of at least 0.2 s more than 30 dB quieter than the track's typical level
@@ -150,8 +159,10 @@ finding them costs no extra pass over the disc. They are used in two ways:
   word. Holding Alt (Option on a Mac) while dragging turns snapping off.
 - **Proposed trims.** When the end of a disc's last track (or the start of the next disc's
   first track) has a pause within its last (or first) 20 seconds followed (or preceded) only by
-  a short stretch of speech, the trim editor proposes a cut at that pause, labelled "Possible
-  announcement after this point". The listener plays it and accepts or moves it.
+  a short stretch of speech, the track is marked in the list ("Possible announcement in the
+  last 6.5 s") and the trim editor opens with a cut at that pause, labelled "Possible
+  announcement after this point". **E** plays the end, **A** accepts the cut from the list,
+  **T** opens the editor to move it.
 
 Both detectors are pure functions (track lengths, positions and names in; marks out; a loudness
 envelope in, pauses out), tested on their own with synthetic speech-and-silence signals. The
@@ -164,6 +175,60 @@ trims: every kept track contributes its sector count × 588 samples (which offse
 does not change), minus its trims. The same function names the files of a book built one file
 per chapter.
 
+## Shortcuts
+
+A book of 30 discs has 400 or more tracks, so every edit has a key and the editing is done
+without the mouse. The keys below work on the book page while no name is being edited;
+elsewhere the single letters do nothing. They come from the command table, like every
+shortcut, and are listed in the Audiobook menu, which appears while the book page is shown.
+**?** shows them all on one sheet.
+
+| Key | Does |
+|---|---|
+| ↑ ↓, ⇧↑ ⇧↓ | Previous, next track; extend the selection |
+| ⌥↑ ⌥↓ | Previous, next chapter start |
+| ← → | Fold, unfold the selected track's chapter |
+| ⌥← ⌥→ | Fold, unfold every chapter (folded, the book is a list of chapters) |
+| **S** | Split: start a chapter at the selected track, or at each selected track |
+| **J** | Join: the selected tracks' chapters become one; with one track selected, its chapter joins the one before |
+| Return | Rename the selected track's chapter. While renaming: Tab saves and moves to the next chapter's name, ⇧Tab to the one before, Esc cancels |
+| Delete | Remove the selected tracks from the book, or restore them if all are removed |
+| **T** | Trim the selected track |
+| **A** | Accept the suggestion on the selected tracks (remove the announcement, or make the proposed trim) |
+| ⇧**A** | Accept every suggestion in the book (asks first, with the count) |
+| Space | Play or pause, from the selected track |
+| **P** | Play across the selected track's start: the last 4 s before it and the first 4 s of it, to check a chapter boundary |
+| **E** | Play the last 8 s of the selected track, where announcements are |
+| ⌘Z, ⇧⌘Z | Undo, redo any edit of the book |
+| ⌘R | Rip Disc |
+| ⌘D | That Was the Last Disc |
+| ⇧⌘B | Build Audiobook… |
+| ⌥⌘1, ⌥⌘2, ⌥⌘3 | Regroup: one chapter per disc, one per track, from track names |
+
+In the trim editor:
+
+| Key | Does |
+|---|---|
+| Tab | Switch between the start cut and the end cut |
+| ← → | Move the cut 0.1 s; with ⇧, 1 s |
+| ⌥← ⌥→ | Move the cut to the previous, next pause |
+| **P** | Play across the cut (from it at the start, up to it at the end) |
+| **X** | Play what is cut away |
+| 0 | No cut |
+| Return, Esc | Trim, cancel |
+
+A fast pass over a large book: fold every chapter (⌥←), walk the disc chapters with ⌥↓,
+unfold one, press **E** on its last track and **P** on candidates for a chapter start, **S**
+to split, **Delete** for announcements, then Return and Tab through the chapter names.
+
+Undo covers every edit of the book in this session, from a history of the project's states
+(each is small: boundaries, removals, trims, names). It is not saved: after a restart the book
+is as it was last edited. TuneBox has no undo elsewhere yet; this history is the book's own.
+
+The command table needs two additions for these keys: an Option modifier (`Shortcut` has
+Command and Shift today) and the keys Return, Tab, Escape, Home, End, 0 and ?. A test checks
+that no two commands in the same place share a key.
+
 ## Inserting the next disc
 
 The engine already looks for discs every few seconds (`Session::scan_drives`). While a project
@@ -171,7 +236,7 @@ is waiting for a disc, a newly read disc is checked before it is ripped:
 
 | The disc is | TuneBox says |
 |---|---|
-| The next one expected (MusicBrainz medium position matches, or unknown) | Shows it as the next disc, ready to group and rip |
+| The next one (MusicBrainz medium position matches, or unknown) | Shows it as the next disc, one more chapter, ready to rip |
 | One already ripped (same disc id) | "This is disc 2, which is already imported. Insert disc 3." Ejects it |
 | Another disc of the same release (MusicBrainz says disc 5, disc 3 expected) | Asks: rip it as disc 5, or as disc 3 anyway |
 | An earlier disc with tracks that failed | Offers to rip only the missing tracks (or to remove them from the book) |
@@ -179,6 +244,22 @@ is waiting for a disc, a newly read disc is checked before it is ripped:
 
 The checks are a pure function of the project, the new disc's id and the lookup result, tested
 on their own.
+
+### After each disc
+
+When a disc is ripped and ejected, a dialog says so and names the next disc:
+
+> **Disc 2 is ripped.** Insert disc 3.
+> Its tracks appear as soon as it is in. You can edit the chapters meanwhile, or stop and come
+> back later: the book is saved.
+>
+> [That Was the Last Disc] [Edit While Waiting]
+
+Inserting disc 3 closes the dialog by itself. **Edit While Waiting** closes it and leaves
+"Insert disc 3" above the book's tracks. **That Was the Last Disc** ends the ripping; when
+MusicBrainz lists more discs for the release than were ripped, TuneBox asks first ("MusicBrainz
+lists 12 discs for this release; 11 are ripped. Finish anyway?"). It can also be chosen from
+the Audiobook menu at any time, and undone by inserting another disc of the book.
 
 ### Ejecting
 
@@ -249,25 +330,29 @@ leaves the project as it was before the job.
 
 ### Commands
 
-Added to `crates/engine/src/commands.rs`, so menus, shortcuts and the CLI agree: Import as
-Audiobook…, Rip Disc, Join into One Chapter, Split Chapter Here, Remove from Book, Restore to
-Book, Remove Suggested Tracks, Trim…, That Was the Last Disc, Build Audiobook, Discard Audiobook.
+Added to `crates/engine/src/commands.rs`, so menus, shortcuts and the CLI agree, with the keys
+listed under [Shortcuts](#shortcuts): Import as Audiobook…, Rip Disc, That Was the Last Disc,
+Split Chapter Here, Join into One Chapter, Rename Chapter, Remove from Book / Restore to Book,
+Trim…, Accept Suggestion, Accept All Suggestions, Play Across Start, Play End, Undo, Redo, One
+Chapter per Disc, One Chapter per Track, Chapters from Track Names, Build Audiobook…, Discard
+Audiobook. They live in a new **Audiobook** menu.
 
 ### CLI
 
 ```text
-tunebox-cli audiobook start --title "…" --author "…" [--narrator "…"] [--discs 12] [--lookup]
+tunebox-cli audiobook start --title "…" --author "…" [--narrator "…"] [--lookup]
 tunebox-cli audiobook rip                       # rips the disc in the drive as the next disc, ejects
 tunebox-cli audiobook done                      # that was the last disc
 tunebox-cli audiobook status
-tunebox-cli audiobook chapters [--per-track | --per-disc | --from-names]
+tunebox-cli audiobook chapters [--per-disc | --per-track | --from-names]   # regroup (per disc is the start)
 tunebox-cli audiobook join 1:14-2:3             # disc:track ranges
 tunebox-cli audiobook split 2:4
 tunebox-cli audiobook rename 7 "The Long Road"
 tunebox-cli audiobook remove 2:1                # leave a track out of the book
 tunebox-cli audiobook restore 2:1
 tunebox-cli audiobook trim 2:14 --end 6.5       # seconds cut off the end (--start for the start)
-tunebox-cli audiobook suggestions               # likely announcements and proposed trims
+tunebox-cli audiobook suggestions [--accept-all] # likely announcements and proposed trims
+tunebox-cli audiobook undo
 tunebox-cli audiobook pauses 2:14               # where the quiet moments are, for precise trims
 tunebox-cli audiobook build --single | --per-chapter [--format aac|flac] [--bitrate 64] [--mono]
 tunebox-cli audiobook discard
@@ -290,7 +375,7 @@ or focused:
 | Album, large and bold | Title |
 | Artist | Author |
 | Genre · Year · Compilation | Narrator · Series and number · Year |
-| Details: "9 songs, 34 minutes · Imports with the FLAC Encoder · Drive read offset" | "Disc 4 of 12 · 3 ripped · 14 hours 20 minutes so far · Builds one .m4b, AAC 64 kbit/s mono" |
+| Details: "9 songs, 34 minutes · Imports with the FLAC Encoder · Drive read offset" | "3 discs ripped · disc 4 ready · 4 hours 20 minutes so far · Builds one .m4b, AAC 64 kbit/s mono" |
 | Import CD · Get Track Names · Get CD Cover | **Rip Disc** · Build Audiobook… · Get Track Names · Get Cover |
 
 Rip Disc is the primary button while a disc is ready; once the last disc is ripped, Build
@@ -303,13 +388,13 @@ other details too long for the header are edited in Get Info for the book.
 - The check box means "in the book": unticking a track is **Remove from Book**. Removed tracks
   are greyed.
 - The tracks are grouped under chapter rows, each with the chapter's name (edited in place,
-  like a track name) and length; select rows to join, split at a row.
+  like a track name), its length and the discs it spans; chapters fold to their row.
 - A Disc column, since the list spans discs.
 - The last column shows a track's state: ripping (with progress), ripped, failed, a trim
   ("−6.5 s at the end"), or the "Looks like an announcement" mark with its one-click removal.
   Trim… opens the waveform editor described under [Trimming](#trimming).
 - While waiting for a disc, the tracks so far stay in view, under a line in large type:
-  "Insert disc 3 of 12".
+  "Insert disc 3".
 
 **Sharing with the CD header.** The pieces both headers need, the quiet field, the art (cover
 or disc), the details line and the button row, move out of `cd_header.rs` into a shared module,
@@ -389,13 +474,17 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 
 ## Tests to write
 
-- Model: joining, splitting and renaming chapters, across disc boundaries; removing and
+- Model: one chapter per disc to start with; splitting at one and at several tracks, joining,
+  across disc boundaries; automatic names renumbered, typed names kept; regrouping; undo and
+  redo; removing and
   restoring tracks, including the first track of a chapter and every track of one; trims,
   including ones that would leave nothing; likely announcements by length, position and name;
   pauses found in synthetic speech-and-silence envelopes, at different recording levels;
   snapping to the nearest pause; chapter start times from tables of contents,
   removals and trims; output names; next-disc checks for each row of the table above.
-- Rip: three virtual discs swapped in turn, each waiting for Rip Disc, ejected after each; a disc changed mid-rip; a
+- Rip: three virtual discs swapped in turn, each waiting for Rip Disc, ejected after each,
+  with "Insert disc N" naming the right disc; That Was the Last Disc, also with MusicBrainz
+  listing more discs; a disc changed mid-rip; a
   cancelled disc leaves no staged `*.part` files and the project as before.
 - Resume: a project saved after disc 2, reloaded, continues with disc 3; a damaged
   `Project.json` is moved aside with the staged audio kept.
@@ -407,11 +496,16 @@ A built book plays today as one long song. Listening comfortably needs more, pla
   become books; an older library file loads with its `.m4b` tracks as books; shuffle from
   Music never plays a book; a smart playlist with and without the Media Kind rule; CLI search
   finds books.
+- Shortcuts: no two commands on the book page, or in the trim editor, share a key.
 - Space: a full disk during staging or building fails with an error the listener can act on.
 
 ## Decided
 
 - Ripping waits for **Rip Disc**, so the listener can group the new disc's tracks first.
+- TuneBox does not ask how many discs there are. After each disc it names the next ("Insert
+  disc 3") until the listener says That Was the Last Disc.
+- TuneBox does not ask how to group: each disc starts as one chapter, edited from there.
+- Editing is keyboard first, with a key for every edit ([Shortcuts](#shortcuts)).
 - Default output: AAC at 64 kbit/s mono.
 - The staged FLAC is deleted once the book is in the library.
 - The narrator goes in the composer tag.
