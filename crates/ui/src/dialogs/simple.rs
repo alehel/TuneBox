@@ -138,7 +138,7 @@ pub fn about(ctx: &egui::Context) -> bool {
                 ui.add_space(8.0);
                 ui.label("Your music library, CD importing and player syncing,\nin a fast native app written in Rust.");
                 ui.add_space(8.0);
-                ui.label(RichText::new("Decoding by symphonia through craft-audio · tags by lofty\nCD access by cd-da-reader · sound by cpal · interface by egui").size(11.0).weak());
+                ui.label(RichText::new("Decoding by craft-audio and symphonia · tags by lofty\nCD access by cd-da-reader · sound by cpal · interface by egui").size(11.0).weak());
                 ui.label(RichText::new("MIT OR Apache-2.0").size(11.0).weak());
                 ui.add_space(10.0);
                 if ui.add(egui::Button::new("Close").min_size(egui::vec2(88.0, 28.0))).clicked() {

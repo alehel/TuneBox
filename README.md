@@ -129,7 +129,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-visualizer-sdk` | The visualizer plug-in ABI, and the SDK plug-ins are written with |
 | `tunebox-library` | The collection, the column browser, the versioned library file (atomic saves) |
 | `tunebox-tags` | Tags and artwork in every supported format (lofty), written atomically |
-| `tunebox-audio` | Streaming decode and lossless encoding through [craft-audio](https://github.com/storytold/craft-libs) (symphonia) |
+| `tunebox-audio` | Streaming decode and lossless encoding through [craft-audio](https://github.com/storytold/craft-libs) (with symphonia for MP3, FLAC and Vorbis) |
 | `tunebox-import` | Finding music and filing copies |
 | `tunebox-playback` | Play queue, player thread, sound output (cpal), spectrum analysis |
 | `tunebox-rip` | CD drives (cd-da-reader), disc ids, MusicBrainz, ripping |

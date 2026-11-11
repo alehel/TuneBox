@@ -64,9 +64,11 @@ impl PcmWriter {
         Ok(Self { encoder, part_path, final_path: path.to_path_buf() })
     }
 
-    /// Appends planar samples (one slice per channel, equal lengths).
+    /// Appends planar samples (one slice per channel, equal lengths). A block with a channel
+    /// missing or shorter than the others is refused, not padded or cut.
     pub fn write(&mut self, channels: &[Vec<f32>]) -> Result<(), AudioError> {
-        let frames = channels.first().map_or(0, Vec::len);
+        // The longest channel, so the encoder refuses the block if any other falls short.
+        let frames = channels.iter().map(Vec::len).max().unwrap_or(0);
         self.encoder.write(channels, frames)
     }
 
@@ -125,6 +127,18 @@ mod tests {
             }
             assert_eq!(frames, 44_100, "{format:?}");
         }
+    }
+
+    #[test]
+    fn uneven_blocks_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.flac");
+        let mut writer = PcmWriter::create(&path, LosslessFormat::Flac, 44_100, 2).unwrap();
+        let [left, right] = [vec![0.1; 100], vec![0.1; 99]];
+        assert!(writer.write(&[left.clone(), right.clone()]).is_err(), "short right channel");
+        assert!(writer.write(&[right, left.clone()]).is_err(), "short left channel");
+        assert!(writer.write(&[left]).is_err(), "a missing channel");
+        writer.abandon();
     }
 
     #[test]

@@ -29,7 +29,7 @@ not be sold on their own, and a modified font may not be called "Lato".
 
 Dependencies and their licences are checked by `cargo deny check` against `deny.toml`. The one
 copyleft dependency is symphonia (MPL-2.0), used unmodified inside craft-audio to decode MP3,
-FLAC, ALAC and Vorbis.
+FLAC and Vorbis.
 
 Any asset added later must be original or openly licensed and listed here in the same change
 (see [AGENTS.md](AGENTS.md) §5).
