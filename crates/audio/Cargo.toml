@@ -1,6 +1,6 @@
 [package]
 name = "tunebox-audio"
-description = "TuneBox codecs: streaming decode of every playable format and lossless encoding for CD rips, over craft-audio."
+description = "TuneBox codecs: streaming decode of every playable format, lossless encoding for CD rips, MP4 audio with chapters and pause finding for audiobooks, over craft-audio."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
