@@ -121,20 +121,17 @@ fn meta_from_tag(tag: &Tag) -> TrackMeta {
 /// the computer stops half-way, the original file is untouched.
 pub fn write(path: &Path, meta: &TrackMeta) -> Result<(), TagError> {
     rewrite_atomically(path, |copy| {
-        // lofty's common tag has no media kind: saving it would drop an MP4's audiobook mark.
-        let kind = media_kind::read_atom(copy)?;
         let mut tag = load_primary_tag(copy)?;
         apply_meta(&mut tag, meta);
         tag.save_to_path(copy, WriteOptions::default())?;
-        if let Some(kind) = kind {
-            media_kind::write_atom(copy, kind)?;
-        }
         Ok(())
     })
 }
 
 /// Runs `edit` on a copy of `path` and moves the copy over the original only when it succeeds.
-/// The copy is removed on failure, so nothing is left behind.
+/// The copy is removed on failure, so nothing is left behind. An MP4 file's media kind is kept
+/// unless the edit sets one: lofty's common tag has no place for it, so saving that tag would
+/// drop an audiobook's mark.
 pub(crate) fn rewrite_atomically(
     path: &Path,
     edit: impl FnOnce(&Path) -> Result<(), TagError>,
@@ -144,7 +141,16 @@ pub(crate) fn rewrite_atomically(
     let copy = path.with_file_name(format!(".tunebox-edit-{name}"));
     let result = std::fs::copy(path, &copy)
         .map_err(TagError::from)
-        .and_then(|_| edit(&copy))
+        .and_then(|_| {
+            let kind = media_kind::read_atom(&copy)?;
+            edit(&copy)?;
+            if let Some(kind) = kind
+                && media_kind::read_atom(&copy)?.is_none()
+            {
+                media_kind::write_atom(&copy, kind)?;
+            }
+            Ok(())
+        })
         .and_then(|()| Ok(std::fs::File::open(&copy)?.sync_all()?))
         .and_then(|()| Ok(std::fs::rename(&copy, path)?));
     if result.is_err() {

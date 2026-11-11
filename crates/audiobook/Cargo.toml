@@ -1,0 +1,25 @@
+[package]
+name = "tunebox-audiobook"
+description = "TuneBox audiobooks: building a chaptered .m4b, or a file per chapter, from a book's staged rip."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tunebox-model = { workspace = true }
+tunebox-library = { workspace = true }
+tunebox-tags = { workspace = true }
+tunebox-audio = { workspace = true }
+# Sideways (same layer): built files are named like imported ones, never overwriting.
+tunebox-import = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

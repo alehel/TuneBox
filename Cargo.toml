@@ -16,6 +16,7 @@ tunebox-model = { path = "crates/model", version = "0.1.0" }
 tunebox-library = { path = "crates/library", version = "0.1.0" }
 tunebox-tags = { path = "crates/tags", version = "0.1.0" }
 tunebox-audio = { path = "crates/audio", version = "0.1.0" }
+tunebox-audiobook = { path = "crates/audiobook", version = "0.1.0" }
 tunebox-import = { path = "crates/import", version = "0.1.0" }
 tunebox-playback = { path = "crates/playback", version = "0.1.0", default-features = false }
 tunebox-rip = { path = "crates/rip", version = "0.1.0", default-features = false }

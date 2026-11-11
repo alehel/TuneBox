@@ -17,6 +17,7 @@ const TABLE: &[(&str, Option<u8>)] = &[
     ("mtp", Some(1)),
     ("metabrainz", Some(1)),
     ("import", Some(2)),
+    ("audiobook", Some(2)),
     ("playback", Some(2)),
     ("rip", Some(2)),
     ("sync", Some(2)),
@@ -33,7 +34,7 @@ const TABLE: &[(&str, Option<u8>)] = &[
 ];
 
 /// Allowed same-layer edges.
-const SIDEWAYS: &[(&str, &str)] = &[("rip", "import"), ("ui", "platform"), ("ui", "visualizer")];
+const SIDEWAYS: &[(&str, &str)] = &[("rip", "import"), ("audiobook", "import"), ("ui", "platform"), ("ui", "visualizer")];
 
 /// External crates that make up a UI toolkit (a trailing `*` matches a prefix).
 const UI_CRATES: &[&str] = &["egui*", "eframe", "winit", "wgpu*", "rfd"];

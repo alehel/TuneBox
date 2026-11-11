@@ -114,6 +114,12 @@ mod tests {
         assert_eq!(read.meta.composer, "David Ashcombe");
         let titles: Vec<String> = read_mp4_chapters(&song).unwrap().into_iter().map(|(_, t)| t).collect();
         assert_eq!(titles, ["One", "Two"]);
+        // So does adding a cover.
+        let mut png = Vec::new();
+        image::RgbImage::new(2, 2).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        crate::write_artwork(&song, &crate::Artwork { mime: "image/png".into(), data: png }).unwrap();
+        assert_eq!(crate::read(&song).unwrap().kind, MediaKind::Audiobook);
+        assert!(crate::read_artwork(&song).unwrap().is_some());
 
         write_media_kind(&song, MediaKind::Music).unwrap();
         assert_eq!(crate::read(&song).unwrap().kind, MediaKind::Music);

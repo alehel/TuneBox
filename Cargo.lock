@@ -4382,6 +4382,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tunebox-audiobook"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "log",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tunebox-audio",
+ "tunebox-import",
+ "tunebox-library",
+ "tunebox-model",
+ "tunebox-tags",
+]
+
+[[package]]
 name = "tunebox-cli"
 version = "0.1.0"
 dependencies = [
@@ -4562,6 +4577,7 @@ dependencies = [
  "lofty",
  "tempfile",
  "thiserror 2.0.21",
+ "tunebox-audio",
  "tunebox-model",
 ]
 
