@@ -63,7 +63,7 @@ of shapes independent of its size.
 
 The window bookkeeping is pure and tested in `crates/ui/src/full_screen.rs`.
 
-![The Aurora look full screen, with the track-info card and controls](images/tunebox-visualizer-full-screen.png)
+![The Aurora look full screen, with the track-info card and controls](images/tunebox-visualizer-full-screen.webp)
 
 (Taken under Xvfb, which has no window manager to grant full screen, so the picture shows the
 fallback: the full-screen layout filling the window.)

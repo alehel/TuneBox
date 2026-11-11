@@ -14,6 +14,7 @@ mod covers;
 mod demo;
 mod layers;
 mod plugins;
+mod screenshots;
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -49,7 +50,7 @@ fn main() -> ExitCode {
         Task::Ci => ci(),
         Task::Layers => layers::check(),
         Task::Demo { dir } => demo::build(&dir.unwrap_or_else(demo::default_dir)),
-        Task::Screenshots { dir } => screenshots(dir.unwrap_or_else(demo::default_dir)),
+        Task::Screenshots { dir } => screenshots::regenerate(dir.unwrap_or_else(demo::default_dir)),
         Task::Plugins { install } => plugins::build(install),
     };
     match result {
@@ -87,34 +88,5 @@ fn ci() -> Result<(), String> {
             eprintln!("note: cargo-deny is not installed; dependency licences were not checked");
             Ok(())
         }
-    }
-}
-
-fn screenshots(demo_dir: PathBuf) -> Result<(), String> {
-    if !demo_dir.join("library").exists() {
-        demo::build(&demo_dir)?;
-    }
-    cargo(&["build", "--release", "--package", "tunebox"])?;
-    let out = PathBuf::from("docs/images");
-    let app = PathBuf::from("target/release/tunebox");
-    let args = ["--demo".into(), demo_dir.display().to_string(), "--screenshots".into(), out.display().to_string()];
-    let headless = cfg!(target_os = "linux")
-        && std::env::var_os("DISPLAY").is_none()
-        && std::env::var_os("WAYLAND_DISPLAY").is_none();
-    let status = if headless {
-        Command::new("xvfb-run")
-            .args(["-a", "-s", "-screen 0 1440x900x24", &app.display().to_string(), "--opengl"])
-            .args(&args)
-            .status()
-    } else {
-        Command::new(&app).args(&args).status()
-    };
-    match status {
-        Ok(s) if s.success() => {
-            eprintln!("screenshots saved in {}", out.display());
-            Ok(())
-        }
-        Ok(s) => Err(format!("the app exited with {s}")),
-        Err(e) => Err(format!("could not start the app: {e}")),
     }
 }

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/tunebox-library.png" alt="TuneBox showing the library with the column browser, a track playing in the status display and album artwork in the source list" width="100%">
+  <img src="docs/images/tunebox-library.webp" alt="TuneBox showing the library with the column browser, a track playing in the status display and album artwork in the source list" width="100%">
 </p>
 
 > The pictures show a demo library of made-up albums whose covers TuneBox draws itself
@@ -52,24 +52,24 @@
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/tunebox-albums.png" alt="The album grid"></td>
-<td width="50%"><img src="docs/images/tunebox-visualizer-pulse.png" alt="The Pulse visualizer with the track info card"></td>
+<td width="50%"><img src="docs/images/tunebox-albums.webp" alt="The album grid"></td>
+<td width="50%"><img src="docs/images/tunebox-visualizer-pulse.webp" alt="The Pulse visualizer with the track info card"></td>
 </tr>
 <tr>
 <td align="center"><sub>The album grid</sub></td>
 <td align="center"><sub>The Pulse visualizer with track info</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/tunebox-cd-import.png" alt="The CD import page"></td>
-<td width="50%"><img src="docs/images/tunebox-device-sync.png" alt="A player's sync page with its capacity bar"></td>
+<td width="50%"><img src="docs/images/tunebox-cd-import.webp" alt="The CD import page"></td>
+<td width="50%"><img src="docs/images/tunebox-device-sync.webp" alt="A player's sync page with its capacity bar"></td>
 </tr>
 <tr>
 <td align="center"><sub>Importing a CD</sub></td>
 <td align="center"><sub>Syncing a player</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/tunebox-smart-editor.png" alt="The smart playlist editor"></td>
-<td width="50%"><img src="docs/images/tunebox-preferences.png" alt="Preferences with read-only and writable library folders"></td>
+<td width="50%"><img src="docs/images/tunebox-smart-editor.webp" alt="The smart playlist editor"></td>
+<td width="50%"><img src="docs/images/tunebox-preferences.webp" alt="Preferences with read-only and writable library folders"></td>
 </tr>
 <tr>
 <td align="center"><sub>Smart playlist rules</sub></td>

@@ -95,15 +95,13 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
             cx.act(Action::Run(CommandId::ImportCd));
         }
         let looking = cx.session.is_busy(JobKind::LookupNames);
-        if ui.add_enabled(!looking, egui::Button::new("Get Track Names").min_size(vec2(150.0, 24.0))).clicked() {
+        if secondary_button(ui, "Get Track Names", !looking).clicked() {
             cx.act(Action::Run(CommandId::GetTrackNames));
         }
         let can_fetch = cx.session.is_enabled(CommandId::GetCdCover, Default::default());
-        let button = ui
-            .add_enabled(can_fetch, egui::Button::new("Get CD Cover").min_size(vec2(150.0, 24.0)))
-            .on_disabled_hover_text(
-                "Get Track Names first: the cover is found by the MusicBrainz release they come from.",
-            );
+        let button = secondary_button(ui, "Get CD Cover", can_fetch).on_disabled_hover_text(
+            "Get Track Names first: the cover is found by the MusicBrainz release they come from.",
+        );
         if button.clicked() {
             cx.act(Action::Run(CommandId::GetCdCover));
         }
@@ -205,6 +203,13 @@ fn field(ui: &mut Ui, label: &str, value: &mut String, width: f32) -> bool {
         ui.add(egui::TextEdit::singleline(value).desired_width(width)).changed()
     })
     .inner
+}
+
+/// A plain button as wide as Import CD above it. `add_sized` centres the label; a button
+/// added straight into the right-aligned column would push its label to the right edge,
+/// because egui aligns a button's text with the surrounding layout.
+fn secondary_button(ui: &mut Ui, label: &str, enabled: bool) -> egui::Response {
+    ui.add_enabled_ui(enabled, |ui| ui.add_sized(vec2(150.0, 24.0), egui::Button::new(label))).inner
 }
 
 /// Turns fixed widths (> 1) and shares (≤ 1) into pixel widths.
