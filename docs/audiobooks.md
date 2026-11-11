@@ -7,8 +7,9 @@ still has to be decided.
 
 ## What the listener does
 
-1. Inserts the first disc of the book and chooses **Import as Audiobook…** on the CD page (or
-   `tunebox-cli audiobook start`).
+1. Inserts the first disc of the book and chooses **Import as Audiobook…**: a fourth button in
+   the CD page header's row, after Import CD, Get Track Names and Get CD Cover; also in the
+   File menu, or `tunebox-cli audiobook start`.
 2. Types the book's details: title, author, narrator, and optionally series, number in the
    series, year, publisher, description, how many discs the book has, and a cover. When the
    disc is on MusicBrainz, the details and the track names of *every* disc in the set are
@@ -275,18 +276,49 @@ tunebox-cli audiobook discard
 ### The page
 
 A book in progress appears in the sidebar under **Audiobooks** (see below), named after the
-book, with "ripping" or "ready to build" beside it, also after a restart. Its page shows:
+book, with "ripping" or "ready to build" beside it, also after a restart.
 
-- **The book**: cover, title, author, narrator and the other details, editable in place.
-- **The discs**: a strip of discs, each done, being ripped (with progress), ready to rip,
-  waiting, or with failed tracks. While waiting: "Insert disc 3 of 12" in large type, then the
-  new disc's tracks and **Rip Disc**.
-- **The chapters**: the book's tracks grouped under chapter headings, with each chapter's name
-  and length; select rows to join, split at a row, rename a heading. Removed tracks are greyed
-  and struck through; trimmed tracks show their cuts and their new length; likely
-  announcements carry a mark with a one-click removal. Trim… opens the
-  waveform editor described under [Trimming](#trimming).
-- **The output**: single file or per chapter, the format options, the space needed, Build.
+Its page follows the CD page (`cd_header.rs`, `cd_view.rs`), so ripping a book looks and
+works like ripping an album: a header laid out as an album page, over a table of tracks.
+
+**The header**, with the CD header's layout and its fields that show a frame only while hovered
+or focused:
+
+| CD header | Book header |
+|---|---|
+| The disc, or its cover | The book's cover, or the disc |
+| Album, large and bold | Title |
+| Artist | Author |
+| Genre · Year · Compilation | Narrator · Series and number · Year |
+| Details: "9 songs, 34 minutes · Imports with the FLAC Encoder · Drive read offset" | "Disc 4 of 12 · 3 ripped · 14 hours 20 minutes so far · Builds one .m4b, AAC 64 kbit/s mono" |
+| Import CD · Get Track Names · Get CD Cover | **Rip Disc** · Build Audiobook… · Get Track Names · Get Cover |
+
+Rip Disc is the primary button while a disc is ready; once the last disc is ripped, Build
+Audiobook… takes its place. Build Audiobook… asks for the output (single file or per chapter,
+format), shows the space needed and starts the build. Publisher, description and the
+other details too long for the header are edited in Get Info for the book.
+
+**The table**, as the CD page's, with these changes:
+
+- The check box means "in the book": unticking a track is **Remove from Book**. Removed tracks
+  are greyed.
+- The tracks are grouped under chapter rows, each with the chapter's name (edited in place,
+  like a track name) and length; select rows to join, split at a row.
+- A Disc column, since the list spans discs.
+- The last column shows a track's state: ripping (with progress), ripped, failed, a trim
+  ("−6.5 s at the end"), or the "Looks like an announcement" mark with its one-click removal.
+  Trim… opens the waveform editor described under [Trimming](#trimming).
+- While waiting for a disc, the tracks so far stay in view, under a line in large type:
+  "Insert disc 3 of 12".
+
+**Sharing with the CD header.** The pieces both headers need, the quiet field, the art (cover
+or disc), the details line and the button row, move out of `cd_header.rs` into a shared module,
+so the book header lays out its own fields without copying them.
+
+**The CD page while a book is in progress.** When the disc in the drive has been taken as the
+book's next disc, the CD header's details line says so ("Disc 3 of “The Long Road”") and
+Import as Audiobook… becomes **Show Audiobook**. Import CD stays, for a listener who wants the
+disc as music after all.
 
 ## Audiobooks in the library
 
@@ -348,8 +380,9 @@ A built book plays today as one long song. Listening comfortably needs more, pla
    checks, chapters, removing and trimming, suggestions, the media kind and
    `Source::Audiobooks`, CLI, and output as FLAC files per chapter. Fully testable with the
    virtual drive. Does not wait for anything.
-2. **The page.** Audiobooks under Music in the sidebar, the book-in-progress page, the trim
-   editor, and screenshots in `cargo xtask screenshots`.
+2. **The page.** Audiobooks under Music in the sidebar, the shared header pieces moved out of
+   `cd_header.rs`, the book page, the trim editor, and new scenes in `cargo xtask screenshots`
+   (the book page while ripping and while waiting, the trim editor, the sidebar).
 3. **AAC.** When craft-audio has its encoder and craft-media writes chapters: the single `.m4b`
    and AAC files per chapter.
 4. **Listening**, above.
