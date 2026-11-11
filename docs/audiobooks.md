@@ -128,6 +128,34 @@ staged track:
 
 Trimming needs the track's audio, so it is offered once the track is ripped.
 
+### Suggestions
+
+TuneBox points out likely edits but never makes them on its own: a suggestion is shown, and
+the listener accepts or ignores it.
+
+**Likely announcements.** A track is marked "Looks like an announcement" when it is short
+(under 15 seconds) and is the first or last track of its disc, or when its MusicBrainz name
+says so ("Please insert disc 2", "End of disc 1"; English phrases only to begin with). The mark
+offers **Remove from Book**; **Remove Suggested Tracks** removes every marked track at once,
+each restorable as usual.
+
+**Quiet moments.** While a track is ripped, TuneBox measures its loudness every 10 ms and keeps
+the pauses: stretches of at least 0.2 s more than 30 dB quieter than the track's typical level
+(its median), so a quietly recorded book is judged against itself. Only the pauses are saved
+in the project, a few hundred per track. They are measured from the audio as it is written, so
+finding them costs no extra pass over the disc. They are used in two ways:
+
+- **Snapping.** A trim handle dragged near a pause snaps to its middle, so a cut never clips a
+  word. Holding Alt (Option on a Mac) while dragging turns snapping off.
+- **Proposed trims.** When the end of a disc's last track (or the start of the next disc's
+  first track) has a pause within its last (or first) 20 seconds followed (or preceded) only by
+  a short stretch of speech, the trim editor proposes a cut at that pause, labelled "Possible
+  announcement after this point". The listener plays it and accepts or moves it.
+
+Both detectors are pure functions (track lengths, positions and names in; marks out; a loudness
+envelope in, pauses out), tested on their own with synthetic speech-and-silence signals. The
+thresholds are starting values, to be tuned on real audiobook discs.
+
 ### Chapter times
 
 Chapter start times are a pure function of the tables of contents, the removed tracks and the
@@ -204,11 +232,11 @@ track number = chapter number of the total, no disc number (chapters run across 
 
 | Layer | Crate | New |
 |---|---|---|
-| L0 | `model` | `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, chapter start times, output file names. Pure, tested next to it |
+| L0 | `model` | `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, likely announcements, chapter start times, output file names. Pure, tested next to it |
 | L1 | `tags` | Audiobook tags: media kind, narrator, description, chapters read back for tests |
 | L1 | `audio` | The AAC writer (and mono mixdown) over craft-audio once it lands |
-| L2 | `rip` | Rip into a given staging folder without tagging or the library (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
-| L2 | `audiobook` (new) | Builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
+| L2 | `rip` | Rip into a given staging folder without tagging or the library, handing each track's samples to a loudness meter as they are written (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
+| L2 | `audiobook` (new) | Finding pauses in a loudness envelope; builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
 | L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, commands. Re-exports what the frontends need |
 | L7 | `ui` | The audiobook page and its sidebar item |
 | — | `tunebox-cli` | `audiobook` commands |
@@ -221,7 +249,7 @@ leaves the project as it was before the job.
 
 Added to `crates/engine/src/commands.rs`, so menus, shortcuts and the CLI agree: Import as
 Audiobook…, Rip Disc, Join into One Chapter, Split Chapter Here, Remove from Book, Restore to
-Book, Trim…, That Was the Last Disc, Build Audiobook, Discard Audiobook.
+Book, Remove Suggested Tracks, Trim…, That Was the Last Disc, Build Audiobook, Discard Audiobook.
 
 ### CLI
 
@@ -237,6 +265,8 @@ tunebox-cli audiobook rename 7 "The Long Road"
 tunebox-cli audiobook remove 2:1                # leave a track out of the book
 tunebox-cli audiobook restore 2:1
 tunebox-cli audiobook trim 2:14 --end 6.5       # seconds cut off the end (--start for the start)
+tunebox-cli audiobook suggestions               # likely announcements and proposed trims
+tunebox-cli audiobook pauses 2:14               # where the quiet moments are, for precise trims
 tunebox-cli audiobook build --single | --per-chapter [--format aac|flac] [--bitrate 64] [--mono]
 tunebox-cli audiobook discard
 ```
@@ -252,7 +282,8 @@ restart). Its page shows:
   new disc's tracks and **Rip Disc**.
 - **The chapters**: the book's tracks grouped under chapter headings, with each chapter's name
   and length; select rows to join, split at a row, rename a heading. Removed tracks are greyed
-  and struck through; trimmed tracks show their cuts and their new length. Trim… opens the
+  and struck through; trimmed tracks show their cuts and their new length; likely
+  announcements carry a mark with a one-click removal. Trim… opens the
   waveform editor described under [Trimming](#trimming).
 - **The output**: single file or per chapter, the format options, the space needed, Build.
 
@@ -270,7 +301,7 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 ## Phases
 
 1. **The loop, lossless.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
-   checks, chapters, removing and trimming, CLI, and output as FLAC files per chapter. Fully testable with the virtual drive.
+   checks, chapters, removing and trimming, suggestions, CLI, and output as FLAC files per chapter. Fully testable with the virtual drive.
    Does not wait for anything.
 2. **The page.** The audiobook page in the UI, the trim editor, and screenshots in
    `cargo xtask screenshots`.
@@ -282,7 +313,9 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 
 - Model: joining, splitting and renaming chapters, across disc boundaries; removing and
   restoring tracks, including the first track of a chapter and every track of one; trims,
-  including ones that would leave nothing; chapter start times from tables of contents,
+  including ones that would leave nothing; likely announcements by length, position and name;
+  pauses found in synthetic speech-and-silence envelopes, at different recording levels;
+  snapping to the nearest pause; chapter start times from tables of contents,
   removals and trims; output names; next-disc checks for each row of the table above.
 - Rip: three virtual discs swapped in turn, each waiting for Rip Disc, ejected after each; a disc changed mid-rip; a
   cancelled disc leaves no staged `*.part` files and the project as before.
@@ -302,9 +335,5 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 - The narrator goes in the composer tag.
 - After the last disc the whole book stays editable: chapters across discs, removed tracks,
   trims of a track's start and end.
-
-## Open questions
-
-1. Should TuneBox point out likely announcements, such as tracks under ten seconds at the start
-   or end of a disc, or the quiet moment nearest a trim handle? Helpful, but not needed for the
-   first version.
+- TuneBox suggests likely announcement tracks and trims, and snaps trim handles to quiet
+  moments ([Suggestions](#suggestions)). It never applies a suggestion by itself.
