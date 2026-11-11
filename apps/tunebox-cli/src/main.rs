@@ -12,6 +12,7 @@
     clippy::unreachable
 )]
 
+mod audiobook;
 mod details;
 mod find_artwork;
 mod plugins;
@@ -145,6 +146,12 @@ enum Command {
         search: Option<String>,
         #[arg(long)]
         replace_library_edits: bool,
+    },
+    /// Make an audiobook from several CDs: `audiobook start` with disc 1 in the drive, `rip` each
+    /// disc in turn, edit the chapters, `done` after the last disc, then `build`.
+    Audiobook {
+        #[command(subcommand)]
+        action: audiobook::AudiobookAction,
     },
     /// Set, remove or save album artwork.
     Artwork {
@@ -373,22 +380,23 @@ fn change(session: &mut Session, command: Command) -> Result<(), String> {
         }
         Command::InfoFields { pin, unpin } => details::info_fields(session, &pin, &unpin)?,
         Command::Artwork { action } => artwork(session, action)?,
+        Command::Audiobook { action } => audiobook::run(session, action)?,
         Command::Rename { search, pattern, to, apply: true, skip_conflicts } => {
             rename::apply(session, &search, &pattern, to, skip_conflicts)?
         }
         Command::Play { search, shuffle } => play(session, search.as_deref(), shuffle),
-        Command::CdInfo { virtual_disc, lookup, cover } => {
-            read_cd(session, virtual_disc, lookup, cover)?;
+        Command::CdInfo { virtual_disc: virtual_wanted, lookup, cover } => {
+            read_cd(session, virtual_disc(virtual_wanted), lookup, cover)?;
             print_cd(session);
         }
-        Command::CdImport { virtual_disc, lookup, cover } => {
-            read_cd(session, virtual_disc, lookup, cover)?;
+        Command::CdImport { virtual_disc: virtual_wanted, lookup, cover } => {
+            read_cd(session, virtual_disc(virtual_wanted), lookup, cover)?;
             print_cd(session);
             session.import_cd().map_err(|e| e.to_string())?;
             wait_for_jobs(session);
         }
-        Command::CdOffset { set, virtual_disc } => {
-            read_cd(session, virtual_disc, false, false)?;
+        Command::CdOffset { set, virtual_disc: virtual_wanted } => {
+            read_cd(session, virtual_disc(virtual_wanted), false, false)?;
             if let Some(samples) = set {
                 session.set_cd_read_offset(samples).map_err(|e| e.to_string())?;
             }
@@ -583,7 +591,7 @@ pub(crate) fn wait_for_jobs(session: &mut Session) {
     eprintln!();
 }
 
-fn print_notices(session: &mut Session) {
+pub(crate) fn print_notices(session: &mut Session) {
     for notice in session.take_notices() {
         match notice.level {
             NoticeLevel::Info => println!("{}", notice.text),
@@ -610,11 +618,25 @@ fn play(session: &mut Session, search: Option<&str>, shuffle: bool) {
     }
 }
 
-fn read_cd(session: &mut Session, virtual_disc: bool, lookup: bool, cover: bool) -> Result<(), String> {
-    if virtual_disc {
-        session.read_disc(Arc::new(VirtualDrive::new("Virtual Drive", vec![3, 4, 2, 5])));
-    } else {
-        session.scan_drives();
+/// The synthetic disc `--virtual-disc` reads.
+fn virtual_disc(wanted: bool) -> Option<VirtualDrive> {
+    wanted.then(|| VirtualDrive::new("Virtual Drive", vec![3, 4, 2, 5]))
+}
+
+/// Reads the disc in the drive, or `virtual_disc` instead.
+pub(crate) fn read_cd(
+    session: &mut Session,
+    virtual_disc: Option<VirtualDrive>,
+    lookup: bool,
+    cover: bool,
+) -> Result<(), String> {
+    match virtual_disc {
+        Some(disc) => {
+            session.read_disc(Arc::new(disc));
+        }
+        None => {
+            session.scan_drives();
+        }
     }
     wait_for_jobs(session);
     if session.cd().is_none() {

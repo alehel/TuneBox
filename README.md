@@ -133,6 +133,7 @@ what the window does. Details: [docs/architecture.md](docs/architecture.md).
 | `tunebox-import` | Finding music and filing copies |
 | `tunebox-playback` | Play queue, player thread, sound output (cpal), spectrum analysis |
 | `tunebox-rip` | CD drives (cd-da-reader), disc ids, MusicBrainz, ripping |
+| `tunebox-audiobook` | Building audiobooks ripped from several CDs |
 | `tunebox-mtp` | The MTP protocol (written from the public specification) over pure-Rust USB (nusb) |
 | `tunebox-sync` | Recognising players, planning and carrying out syncs, on folders or over MTP |
 | `tunebox-plugins` | Visualizer plug-ins: WebAssembly in a sandbox (wasmi), their drawings checked |

@@ -16,7 +16,7 @@ plug-ins in `plugins/`, tooling in `xtask/`. Rust only, no `unsafe`, no panics o
                  │                │                   │
    L6            └──────▶ tunebox-engine ◀────────────┘
                                   │
-   L2   import ◀── rip      playback       sync      plugins ──▶ wasmi
+   L2   import ◀── rip, audiobook    playback    sync    plugins ──▶ wasmi
           │         │          │             │
    L1   library    tags      audio ──▶ craft-audio     mtp ──▶ nusb (USB)     metabrainz ──▶ ureq
           │         │          │
@@ -33,7 +33,8 @@ plug-ins in `plugins/`, tooling in `xtask/`. Rust only, no `unsafe`, no panics o
 | `tunebox-import` | Finds audio files, reads tags, copies into `Artist/Album/NN Title.ext` |
 | `tunebox-playback` | The play queue (shuffle, repeat), and a player thread feeding a lock-free ring to a cpal callback |
 | `tunebox-metabrainz` | Every web request: the `WebClient` boundary (a fake in tests and the demo), the real client (ureq: user agent, one MusicBrainz request a second, timeouts, size limits), a per-session cache, MusicBrainz release search and Cover Art Archive covers |
-| `tunebox-rip` | CD drives (cd-da-reader, or a virtual drive), tables of contents, MusicBrainz disc ids and lookup (through `tunebox-metabrainz`), ripping |
+| `tunebox-rip` | CD drives (cd-da-reader, a virtual drive, or a virtual changer whose disc can be swapped), tables of contents, MusicBrainz disc ids and lookup (through `tunebox-metabrainz`), ripping, staging an audiobook's discs, ejecting |
+| `tunebox-audiobook` | Building an audiobook from its staged rip: one chaptered `.m4b` (AAC or Apple Lossless) or a file per chapter ([audiobooks.md](audiobooks.md)) |
 | `tunebox-mtp` | The MTP protocol from the public specification: containers, datasets, a blocking session over a `Transport`; USB through nusb (Linux, macOS); a simulated device for tests ([mtp.md](mtp.md)) |
 | `tunebox-sync` | Recognises players (mounted, or over MTP), plans a sync as a diff against the device manifest, executes it through a `Storage` (folder or MTP), writes M3U8 |
 | `tunebox-plugins` | Visualizer plug-ins: loads `.wasm` files into a wasmi sandbox (no imports, fuel per frame, memory cap), encodes frames, decodes and checks drawings. No egui |

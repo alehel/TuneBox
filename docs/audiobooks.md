@@ -1,11 +1,10 @@
 # Audiobooks from CDs: plan
 
-Status: **planned, not built.** Nothing waits on another project any more: craft-libs now has
-the AAC encoder, an Apple Lossless (ALAC) encoder and MP4 chapter lists (see
-[What craft-libs provides](#what-craft-libs-provides)), and TuneBox uses that commit since
-`aa75839` on main. The work can start with phase 1.
-This document says what the audiobook builder does, how it fits TuneBox's layers, and what
-still has to be decided.
+Status: **phase 1 built** (the engine and `tunebox-cli audiobook`); the app's page is phase 2.
+craft-libs provides the AAC encoder, the Apple Lossless (ALAC) encoder and MP4 chapter lists
+(see [What craft-libs provides](#what-craft-libs-provides)). This document says what the
+audiobook builder does, how it fits TuneBox's layers, and what is left; where phase 1 differs
+from the plan, [What phase 1 built](#what-phase-1-built) says so.
 
 ## What the listener does
 
@@ -274,18 +273,18 @@ from within the dialog, which then goes on asking for disc 3.
 
 ### Ejecting
 
-Eject today is `tunebox_platform::eject_disc()`, called by the UI. It always opens `/dev/cdrom`
-on Linux and does nothing on Windows. For the audiobook loop it should eject the drive that was
-ripped, on every system:
+Eject used to be `tunebox_platform::eject_disc()`, which always opened `/dev/cdrom` on Linux and
+did nothing on Windows. Now:
 
-- Add `CdDrive::eject(&self) -> Result<(), DriveError>`. `PhysicalDrive` sends the drive the
-  SCSI START STOP UNIT command with the eject bit, the same way cd-da-reader already sends its
-  read commands. That needs a small addition to cd-da-reader (TuneBox forbids `unsafe`, so it
-  cannot issue the ioctl itself). `VirtualDrive` records that it was ejected, for tests.
+- `CdDrive::eject(&self) -> Result<(), DriveError>`. `PhysicalDrive` runs the system's eject
+  tool for its own device (`eject <device>` on Linux, `drutil tray eject` on macOS); on Windows
+  it says it cannot yet. Sending the drive the SCSI START STOP UNIT command itself needs a small
+  addition to cd-da-reader (TuneBox forbids `unsafe`), which would also cover Windows.
+  `VirtualChanger` takes its disc out, for tests.
 - The rip job ejects the disc as its last step, so the CLI and the UI behave the same way. A
   drive that cannot eject (some laptop drives, or a failure) is not an error: the listener is
   asked to take the disc out.
-- The existing Eject command moves to the same call, which fixes the Linux and Windows cases.
+- The existing Eject command goes through the same call (`Session::eject_disc`).
 
 ## Building the book
 
@@ -332,7 +331,8 @@ header's details line, so the limit is visible while editing. One file per chapt
 limit. Chapter names longer than 255 bytes are refused where they are typed.
 
 Tags: title and album = book title, artist and album artist = author, **narrator in composer**
-(decided), genre "Audiobook", description in `desc`/`ldes`. Series in grouping or the sort
+(decided), genre "Audiobook", description in Comments (`©cmt`; `desc`/`ldes` would need lofty's
+MP4 tag directly, as the media kind does), publisher in Label. Series in grouping or the sort
 album is a convention seen in audiobook tools; *confirm* against real players. Track and disc numbers are left out of a single-file book.
 
 Encoding options:
@@ -383,23 +383,30 @@ Audiobook. They live in a new **Audiobook** menu.
 ### CLI
 
 ```text
-tunebox-cli audiobook start --title "…" --author "…" [--narrator "…"] [--lookup]
+tunebox-cli audiobook start --title "…" --author "…" [--narrator "…"] [--series …] [--lookup [--cover]]
 tunebox-cli audiobook rip                       # rips the disc in the drive as the next disc, ejects
-tunebox-cli audiobook done                      # that was the last disc
+tunebox-cli audiobook answer use|eject          # when a disc may not belong to the book
+tunebox-cli audiobook done [--anyway]           # that was the last disc
 tunebox-cli audiobook status
+tunebox-cli audiobook details --narrator "…"    # change the book's details
 tunebox-cli audiobook chapters [--per-disc | --per-track | --from-names]   # regroup (per disc is the start)
 tunebox-cli audiobook join 1:14-2:3             # disc:track ranges
 tunebox-cli audiobook split 2:4
-tunebox-cli audiobook rename 7 "The Long Road"
+tunebox-cli audiobook rename 7 "The Long Road"    # chapter 7, or the chapter holding a track: 2:1
 tunebox-cli audiobook remove 2:1                # leave a track out of the book
 tunebox-cli audiobook restore 2:1
 tunebox-cli audiobook trim 2:14 --end 6.5       # seconds cut off the end (--start for the start)
 tunebox-cli audiobook suggestions [--accept-all] # likely announcements and proposed trims
-tunebox-cli audiobook undo
 tunebox-cli audiobook pauses 2:14               # where the quiet moments are, for precise trims
-tunebox-cli audiobook build --single | --per-chapter [--format aac|flac] [--bitrate 64] [--mono]
+tunebox-cli audiobook output --per-chapter --format flac   # or --single, --format aac|alac, --bitrate, --mono|--stereo
+tunebox-cli audiobook build [same options as output]
 tunebox-cli audiobook discard
+tunebox-cli list --kind audiobook
 ```
+
+`--virtual-disc` on `start` and `rip` uses a synthetic disc, a different one for each disc of the
+book, for trying the loop without a drive. Undo is not offered on the command line: its history
+lives in a session, and each run is a session of its own.
 
 ### The page
 
@@ -504,7 +511,7 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 ## Phases
 
 0. **craft-libs.** Done on main (`aa75839`): craft-libs `9f10d43`, Opus playback.
-1. **The loop and the build.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
+1. **The loop and the build.** Built (see below). Model, project file, staged ripping, `CdDrive::eject`, next-disc
    checks, chapters, removing and trimming, suggestions, the media kind and
    `Source::Audiobooks`, CLI, and every output: the chaptered `.m4b` (AAC or Apple Lossless)
    and files per chapter. Fully testable with the virtual drive.
@@ -512,6 +519,34 @@ A built book plays today as one long song. Listening comfortably needs more, pla
    `cd_header.rs`, the book page, the trim editor, and new scenes in `cargo xtask screenshots`
    (the book page while ripping, the "Insert disc 3" dialog, the trim editor, the sidebar).
 3. **Listening**, above.
+
+## What phase 1 built
+
+| Layer | What |
+|---|---|
+| `model` | `audiobook`: the book, chapters as start points (split, join, rename, regroup), removals, trims, output chapters and file names, suggestions, next-disc checks, undo history. `MediaKind` on tracks; a Media Kind smart-playlist rule |
+| `library` | The media kind in the library file; an older file's `.m4b` tracks become audiobooks once |
+| `tags` | MP4's media kind (`stik`) read, written, and kept through every other tag edit |
+| `audio` | `Mp4AudioWriter` (AAC or Apple Lossless with chapters, gapless), `read_mp4_chapters`, `LoudnessMeter` and pause finding, `mono_mix` |
+| `rip` | `stage`, `CdDrive::eject`, `VirtualChanger`, every medium of a MusicBrainz release |
+| `audiobook` (new) | `build` and `check` |
+| `engine` | The book in the session, saved in `Audiobooks/<id>/`; edits with undo; the rip and build jobs; disc checks and questions; `Source::Audiobooks`, `Source::Library`; `set_media_kind`; eject through the drive |
+| `tunebox-cli` | `audiobook …`; `list --kind`; searches cover the whole library |
+
+Where it differs from the plan, or is not done yet:
+
+- **Free space** is not checked before a disc or a build. A full disk fails the rip or the build
+  with the system's message, and nothing half-written is kept.
+- **Commands and shortcuts** (the Audiobook menu, the single-letter keys) are not in
+  `commands.rs` yet: they come with the page in phase 2, with the Option modifier and the new
+  keys.
+- **Eject** uses the system's eject tool, not a command sent by cd-da-reader (see
+  [Ejecting](#ejecting)); Windows cannot eject yet.
+- **The description** goes in Comments, not `desc`/`ldes`.
+- **Undo** is not on the command line (see [CLI](#cli)).
+- **Tested** with virtual discs and fixtures only (`crates/engine/tests/audiobook.rs`, the
+  crates' unit tests); never with a real drive, real audiobook discs, or a player reading the
+  chapters.
 
 ## Tests to write
 
