@@ -1,6 +1,7 @@
 //! What the window is showing: the selected source, the search, the browser, sorting,
 //! selection, and the rows derived from them (cached until anything they depend on changes).
 
+use crate::full_screen::FullScreen;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use tunebox_engine::model::{Column, PlaylistId, SortOrder, TrackId};
@@ -117,6 +118,8 @@ pub struct ViewState {
     pub show_artwork: bool,
     /// The visualizer fills the middle of the window instead of the source.
     pub show_visualizer: bool,
+    /// The visualizer filling the screen, and how the window was before.
+    pub full_screen: FullScreen,
     /// Set to move keyboard focus to the search field on the next frame.
     pub focus_search: bool,
     key: Option<RowsKey>,
@@ -136,6 +139,7 @@ impl ViewState {
             selection: Selection::default(),
             show_artwork: true,
             show_visualizer: false,
+            full_screen: FullScreen::default(),
             focus_search: false,
             key: None,
             rows: Vec::new(),

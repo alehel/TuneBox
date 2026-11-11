@@ -8,6 +8,7 @@ use crate::dialogs::{
     ConfirmLocate, ConfirmRefresh, ConfirmRemove, Dialog, GetInfoDialog, PreferencesDialog, RenameFilesDialog,
     SetUpDrive, SmartPlaylistDialog,
 };
+use crate::full_screen::{self, Effect, WindowBefore};
 use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
 use crate::panels::{
@@ -315,6 +316,13 @@ impl TuneBoxApp {
         if !self.session.is_enabled(id, self.command_context()) {
             return;
         }
+        if self.view.full_screen.is_on() && !full_screen::keeps_full_screen(id) {
+            self.leave_full_screen();
+            // Either visualizer command, given in full screen, means "leave full screen".
+            if matches!(id, CommandId::Visualizer | CommandId::FullScreenVisualizer) {
+                return;
+            }
+        }
         match id {
             CommandId::NewPlaylist => self.new_playlist(&[]),
             CommandId::NewPlaylistFromSelection => self.new_playlist(&self.view.selected_tracks()),
@@ -387,6 +395,7 @@ impl TuneBoxApp {
                 self.view.show_visualizer = false;
             }
             CommandId::Visualizer => self.view.show_visualizer = !self.view.show_visualizer,
+            CommandId::FullScreenVisualizer => self.enter_full_screen(),
             CommandId::PlayPause => self.play_pause(),
             CommandId::NextTrack => self.session.next_track(),
             CommandId::PreviousTrack => self.session.previous_track(),
@@ -401,6 +410,43 @@ impl TuneBoxApp {
             CommandId::About => self.dialog = Some(Dialog::About),
             CommandId::SetUpDrive => self.dialog = Some(Dialog::SetUpDrive(SetUpDrive::new(&self.session))),
             CommandId::Quit => self.ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+        }
+    }
+
+    /// The visualizer takes the whole screen the window is on.
+    pub(crate) fn enter_full_screen(&mut self) {
+        let before = self.ctx.input(|i| WindowBefore::from_viewport(i.viewport(), self.view.show_visualizer));
+        let effects = self.view.full_screen.enter(before);
+        self.carry_out(effects);
+    }
+
+    /// Back to the window as it was, showing what it showed.
+    pub(crate) fn leave_full_screen(&mut self) {
+        let now = self.ctx.input(|i| i.time);
+        let effects = self.view.full_screen.leave(now);
+        self.carry_out(effects);
+    }
+
+    /// Follows the window into and out of full screen, every frame.
+    fn track_full_screen(&mut self) {
+        let (window_full_screen, now) = self.ctx.input(|i| (i.viewport().fullscreen, i.time));
+        let effects = self.view.full_screen.update(window_full_screen, now);
+        self.carry_out(effects);
+    }
+
+    fn carry_out(&mut self, effects: Vec<Effect>) {
+        for effect in effects {
+            let command = match effect {
+                Effect::ShowVisualizer(show) => {
+                    self.view.show_visualizer = show;
+                    continue;
+                }
+                Effect::SetFullScreen(on) => egui::ViewportCommand::Fullscreen(on),
+                Effect::MoveTo(position) => egui::ViewportCommand::OuterPosition(position),
+                Effect::Resize(size) => egui::ViewportCommand::InnerSize(size),
+                Effect::Maximize => egui::ViewportCommand::Maximized(true),
+            };
+            self.ctx.send_viewport_cmd(command);
         }
     }
 
@@ -546,6 +592,7 @@ impl TuneBoxApp {
 impl eframe::App for TuneBoxApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.housekeeping();
+        self.track_full_screen();
         self.view.refresh(&self.session);
         let mut actions = Vec::new();
         if self.dialog.is_none()
@@ -561,29 +608,13 @@ impl eframe::App for TuneBoxApp {
                 artwork: &mut self.artwork,
                 actions: &mut actions,
             };
-            egui::Panel::top("menu-bar")
-                .frame(Frame::new().fill(theme::BAR_TOP).inner_margin(egui::Margin::symmetric(6, 2)))
-                .show(ui, |ui| {
-                    menu_bar::show(ui, &mut cx, context);
-                });
-            egui::Panel::top("toolbar")
-                .exact_size(toolbar::HEIGHT)
-                .frame(Frame::NONE)
-                .show(ui, |ui| toolbar::show(ui, &mut cx));
-            egui::Panel::bottom("status-bar")
-                .exact_size(status_bar::HEIGHT)
-                .frame(Frame::NONE)
-                .show(ui, |ui| status_bar::show(ui, &mut cx));
-            egui::Panel::left("source-list")
-                .resizable(true)
-                .default_size(208.0)
-                .size_range(160.0..=340.0)
-                .frame(Frame::NONE)
-                .show(ui, |ui| {
-                    sidebar::show(ui, &mut cx);
-                });
             let visualizer = &mut self.visualizer;
-            egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| central(ui, &mut cx, visualizer));
+            if cx.view.full_screen.is_on() {
+                // Only the visualizer: no menus, toolbar, source list or status bar.
+                egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| visualizer.show(ui, &mut cx));
+            } else {
+                window(ui, &mut cx, context, visualizer);
+            }
         }
         if let Some(dialog) = &mut self.dialog
             && !dialog.show(&self.ctx, &self.session, &mut self.artwork, &mut actions)
@@ -614,6 +645,29 @@ impl eframe::App for TuneBoxApp {
             log::error!("could not save the library on exit: {e}");
         }
     }
+}
+
+/// The window as usual: menus, toolbar, status bar, source list and the selected source.
+fn window(ui: &mut egui::Ui, cx: &mut PanelContext, context: Context, visualizer: &mut VisualizerView) {
+    egui::Panel::top("menu-bar")
+        .frame(Frame::new().fill(theme::BAR_TOP).inner_margin(egui::Margin::symmetric(6, 2)))
+        .show(ui, |ui| {
+            menu_bar::show(ui, cx, context);
+        });
+    egui::Panel::top("toolbar").exact_size(toolbar::HEIGHT).frame(Frame::NONE).show(ui, |ui| toolbar::show(ui, cx));
+    egui::Panel::bottom("status-bar")
+        .exact_size(status_bar::HEIGHT)
+        .frame(Frame::NONE)
+        .show(ui, |ui| status_bar::show(ui, cx));
+    egui::Panel::left("source-list")
+        .resizable(true)
+        .default_size(208.0)
+        .size_range(160.0..=340.0)
+        .frame(Frame::NONE)
+        .show(ui, |ui| {
+            sidebar::show(ui, cx);
+        });
+    egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| central(ui, cx, visualizer));
 }
 
 /// The middle of the window: the visualizer, or whatever the selected source shows.

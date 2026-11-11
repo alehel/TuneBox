@@ -37,6 +37,7 @@ pub enum CommandId {
     AsList,
     AsAlbums,
     Visualizer,
+    FullScreenVisualizer,
     // Controls
     PlayPause,
     NextTrack,
@@ -250,6 +251,13 @@ pub const COMMANDS: &[CommandSpec] = &[
         Some(Shortcut::cmd(Key::Letter('t'))),
         Needs::Nothing,
     )),
+    spec(
+        CommandId::FullScreenVisualizer,
+        "Full Screen Visualizer",
+        Menu::View,
+        Some(Shortcut::cmd_shift(Key::Letter('f'))),
+        Needs::Nothing,
+    ),
     after_separator(spec(
         CommandId::ShowBrowser,
         "Column Browser",

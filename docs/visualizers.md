@@ -34,6 +34,31 @@ band mapping are in `tunebox_playback::analysis`.
 `tunebox_visualizer::paint` has helpers: `hue(h, s, v, alpha)` for colours, `quad` for
 gradient quads in a `Mesh`, `background` for a vertical gradient fill.
 
+## Full screen
+
+View ▸ Full Screen Visualizer (⇧⌘F, Ctrl+Shift+F elsewhere), the Full Screen control or a
+double-click on the visualizer makes it fill the screen the window is on, with nothing else
+showing. The pointer and the controls hide when the mouse has been still for 2.5 seconds and
+come back when it moves; the track-info card behaves as in the window. The shortcuts for
+play/pause, next, previous and volume work without leaving full screen; any other command
+leaves first, so its result can be seen.
+
+Escape, the same command, the Full Screen control or a double-click leaves, and the window
+goes back to the size and place it had (maximized if it was), showing what it showed before,
+the visualizer or not. If the system will not make the window full screen (no window manager,
+say), the visualizer fills the window without the toolbar and source list instead. Full
+screen is never saved: TuneBox always starts in a window.
+
+For a look, full screen only means a bigger `rect`: draw relative to it, and keep the number
+of shapes independent of its size.
+
+The window bookkeeping is pure and tested in `crates/ui/src/full_screen.rs`.
+
+![The Aurora look full screen, with the track-info card and controls](images/tunebox-visualizer-full-screen.png)
+
+(Taken under Xvfb, which has no window manager to grant full screen, so the picture shows the
+fallback: the full-screen layout filling the window.)
+
 ## Adding a built-in look
 
 1. Create `crates/visualizer/src/looks/<name>.rs` with a type implementing `Visualizer`.
