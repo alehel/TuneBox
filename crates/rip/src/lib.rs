@@ -8,7 +8,10 @@
 //!    MusicBrainz release they came from, whose cover the engine can fetch.
 //! 3. [`rip`] reads the chosen tracks, corrected for the drive's read offset ([`shifted_read`]),
 //!    encodes them losslessly into the media folder, tags them and returns them as `NewTrack`s
-//!    for the library.
+//!    for the library. For an audiobook, [`stage`] instead rips a disc into the book's staging
+//!    folder, untagged, measuring each track's pauses.
+//!
+//! [`VirtualChanger`] is a virtual drive whose disc can be swapped, for the audiobook loop.
 
 #![deny(
     clippy::unwrap_used,
@@ -19,6 +22,7 @@
     clippy::unreachable
 )]
 
+mod changer;
 mod discid;
 mod drive;
 mod info;
@@ -26,9 +30,11 @@ mod info;
 pub mod musicbrainz;
 mod offset;
 mod rip;
+mod stage;
 mod toc;
 mod virtual_drive;
 
+pub use changer::VirtualChanger;
 pub use discid::{disc_id, freedb_id};
 #[cfg(feature = "drives")]
 pub use drive::PhysicalDrive;
@@ -36,5 +42,6 @@ pub use drive::{CdDrive, DriveError, DriveIdentity};
 pub use info::DiscInfo;
 pub use offset::{MAX_READ_OFFSET, SAMPLES_PER_SECTOR, ShiftedRead, check_read_offset, shifted_read};
 pub use rip::{RipProgress, RipReport, RipRequest, rip};
+pub use stage::{StageProgress, StageReport, StageRequest, StagedTrack, stage, staged_path};
 pub use toc::{DiscToc, FRAMES_PER_SECOND, SECTOR_BYTES, TocTrack};
 pub use virtual_drive::VirtualDrive;

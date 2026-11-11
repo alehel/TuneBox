@@ -1,6 +1,7 @@
 //! What is known about a disc's contents: names typed in, looked up, or placeholders.
 
 use crate::toc::DiscToc;
+use tunebox_model::audiobook::ReleaseMedium;
 use tunebox_model::{NumberOf, TrackMeta};
 
 /// Album and track names for a disc.
@@ -20,6 +21,9 @@ pub struct DiscInfo {
     pub release_id: Option<String>,
     /// That release's release group (the album across its editions).
     pub release_group_id: Option<String>,
+    /// Every medium of that release, with its disc ids and track names: what an audiobook
+    /// knows of its other discs before they are inserted.
+    pub release_media: Vec<ReleaseMedium>,
 }
 
 impl DiscInfo {

@@ -113,7 +113,8 @@ fn rip_track(
     }
     let mut writer = PcmWriter::create(&path, request.format, 44_100, 2).map_err(|e| e.to_string())?;
     progress(0.0);
-    let written = write_track(drive, request, number, &mut writer, cancel, progress);
+    let mut sink = |block: &[Vec<f32>]| writer.write(block).map_err(|e| e.to_string());
+    let written = read_track(drive, &request.toc, number, request.read_offset, cancel, progress, &mut sink);
     match written {
         Err(e) => {
             writer.abandon();
@@ -127,23 +128,27 @@ fn rip_track(
     }
 }
 
-/// Writes track `number`, offset-corrected, to `writer`: silence where the shift reaches into
-/// the lead-in, the drive's read trimmed to the track, then silence where it reaches the lead-out.
-fn write_track(
+/// Where read audio goes: planar stereo blocks, refused with a message.
+pub(crate) type AudioSink<'a> = dyn FnMut(&[Vec<f32>]) -> Result<(), String> + 'a;
+
+/// Reads track `number`, offset-corrected, into `sink` as planar stereo blocks: silence where
+/// the shift reaches into the lead-in, the drive's read trimmed to the track, then silence where
+/// it reaches the lead-out. Stops early, without an error, when `cancel` is set.
+pub(crate) fn read_track(
     drive: &dyn CdDrive,
-    request: &RipRequest,
+    toc: &DiscToc,
     number: u8,
-    writer: &mut PcmWriter,
+    read_offset: i32,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(f32),
+    sink: &mut AudioSink<'_>,
 ) -> Result<(), String> {
-    let toc = &request.toc;
     let no_track = || DriveError::NoSuchTrack(number).to_string();
     let start = toc.track(number).ok_or_else(no_track)?.start_lba;
     let end = toc.end_lba(number).ok_or_else(no_track)?;
-    let plan = shifted_read(start..end, 0..toc.audio_leadout(), request.read_offset);
+    let plan = shifted_read(start..end, 0..toc.audio_leadout(), read_offset);
     let total = plan.total().max(1) as f32;
-    write_silence(writer, plan.silence_before)?;
+    write_silence(sink, plan.silence_before)?;
     if plan.sectors > 0 {
         // Byte positions within the read of the samples to keep.
         let keep = plan.skip * 4..(plan.skip + plan.keep) * 4;
@@ -158,8 +163,8 @@ fn write_track(
                 let wanted = chunk.get(from as usize..to as usize).unwrap_or_default();
                 if wanted.is_empty() {
                     // Nothing of the track in this chunk yet (the surplus before it).
-                } else if let Err(e) = writer.write(&cd_audio_to_planar(wanted)) {
-                    write_error = Some(e.to_string());
+                } else if let Err(e) = sink(&cd_audio_to_planar(wanted)) {
+                    write_error = Some(e);
                     return false;
                 }
                 let done = plan.silence_before + position.saturating_sub(keep.start).min(plan.keep * 4) / 4;
@@ -174,18 +179,18 @@ fn write_track(
             return Ok(());
         }
     }
-    write_silence(writer, plan.silence_after)?;
+    write_silence(sink, plan.silence_after)?;
     progress(1.0);
     Ok(())
 }
 
 /// Writes `samples` stereo samples of silence, a second at a time.
-fn write_silence(writer: &mut PcmWriter, samples: u64) -> Result<(), String> {
+fn write_silence(sink: &mut AudioSink<'_>, samples: u64) -> Result<(), String> {
     let mut left = samples;
     while left > 0 {
         let count = left.min(44_100);
         let block = vec![0.0; count as usize];
-        writer.write(&[block.clone(), block]).map_err(|e| e.to_string())?;
+        sink(&[block.clone(), block])?;
         left -= count;
     }
     Ok(())

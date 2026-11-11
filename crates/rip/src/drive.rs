@@ -14,6 +14,8 @@ pub enum DriveError {
     NotAudio,
     #[error("the disc in the drive was changed")]
     DiscChanged,
+    #[error("the drive could not open its tray: {0}")]
+    Eject(String),
     #[error("the disc has no track {0}")]
     NoSuchTrack(u8),
     #[error("sectors {0} to {1} are not part of the disc's audio")]
@@ -71,6 +73,10 @@ pub trait CdDrive: Send + Sync {
         count: u32,
         sink: &mut dyn FnMut(&[u8], f32) -> bool,
     ) -> Result<(), DriveError>;
+
+    /// Opens the tray, or pushes the disc out. A drive that cannot is not broken: the listener
+    /// takes the disc out by hand.
+    fn eject(&self) -> Result<(), DriveError>;
 }
 
 /// Refuses a sector range outside the disc's audio, which drives cannot read.
@@ -90,6 +96,7 @@ mod physical {
     use super::{CdDrive, DriveError, DriveIdentity, check_range};
     use crate::toc::{DiscToc, TocTrack};
     use cd_da_reader::{CdReader, ReadOptions};
+    use std::process::Command;
 
     /// Sectors asked of the drive at a time: two seconds of audio.
     const SECTORS_PER_READ: u32 = 150;
@@ -179,6 +186,23 @@ mod physical {
                 }
             }
             Ok(())
+        }
+
+        /// The system's own eject tool, which knows the drive: cd-da-reader cannot open a tray
+        /// yet, and TuneBox has no `unsafe` code to send the drive the command itself.
+        fn eject(&self) -> Result<(), DriveError> {
+            let status = if cfg!(target_os = "macos") {
+                Command::new("drutil").args(["tray", "eject"]).status()
+            } else if cfg!(windows) {
+                return Err(DriveError::Eject("TuneBox cannot open the tray on Windows yet".into()));
+            } else {
+                Command::new("eject").arg(&self.path).status()
+            };
+            match status {
+                Ok(status) if status.success() => Ok(()),
+                Ok(status) => Err(DriveError::Eject(format!("the eject tool stopped with {status}"))),
+                Err(e) => Err(DriveError::Eject(format!("the eject tool could not be run: {e}"))),
+            }
         }
     }
 }

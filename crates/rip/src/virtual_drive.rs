@@ -121,6 +121,11 @@ impl CdDrive for VirtualDrive {
         }
         Ok(())
     }
+
+    /// A fixed disc stays in: see [`crate::VirtualChanger`] for one that comes out.
+    fn eject(&self) -> Result<(), DriveError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

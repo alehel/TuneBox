@@ -8,6 +8,7 @@ use crate::info::DiscInfo;
 use serde::Deserialize;
 use tunebox_metabrainz::{WebClient, WebError};
 use tunebox_model::NumberOf;
+use tunebox_model::audiobook::ReleaseMedium;
 
 /// Disc replies are small; anything bigger is not one.
 const REPLY_LIMIT: u64 = 5_000_000;
@@ -80,6 +81,16 @@ fn release_info(release: &Release, disc_id: &str) -> Option<DiscInfo> {
             .as_ref()
             .map(|g| g.id.clone())
             .filter(|id| tunebox_metabrainz::is_mbid(id)),
+        release_media: release
+            .media
+            .iter()
+            .zip(1u32..)
+            .map(|(medium, index)| ReleaseMedium {
+                position: medium.position.unwrap_or(index),
+                disc_ids: medium.discs.iter().map(|d| d.id.clone()).collect(),
+                track_titles: medium.tracks.iter().map(|t| t.title.clone()).collect(),
+            })
+            .collect(),
     })
 }
 
@@ -200,6 +211,10 @@ mod tests {
             info.tracks,
             [("Low Tide".into(), String::new()), ("Breakwater".into(), "The Lanterns feat. Mara".into())]
         );
+        // Every medium is kept, for an audiobook's other discs.
+        assert_eq!(info.release_media.len(), 2);
+        assert_eq!(info.release_media[0].disc_ids, ["other"]);
+        assert_eq!(info.release_media[1].track_titles, ["Low Tide", "Breakwater"]);
     }
 
     #[test]
