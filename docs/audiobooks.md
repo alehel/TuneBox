@@ -232,12 +232,13 @@ track number = chapter number of the total, no disc number (chapters run across 
 
 | Layer | Crate | New |
 |---|---|---|
-| L0 | `model` | `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, likely announcements, chapter start times, output file names. Pure, tested next to it |
-| L1 | `tags` | Audiobook tags: media kind, narrator, description, chapters read back for tests |
+| L0 | `model` | `MediaKind` on tracks, and a Media Kind smart playlist rule. `audiobook`: book details, the track list, chapter boundaries (join, split, rename, per track, per disc, from names), removed tracks, trims and their limits, likely announcements, chapter start times, output file names. Pure, tested next to it |
+| L1 | `library` | The media kind in the library file, and books recognised by `.m4b` when loading an older file |
+| L1 | `tags` | Audiobook tags: media kind (read on import, written on build and from Get Info), narrator, description, chapters read back for tests |
 | L1 | `audio` | The AAC writer (and mono mixdown) over craft-audio once it lands |
 | L2 | `rip` | Rip into a given staging folder without tagging or the library, handing each track's samples to a loudness meter as they are written (today's `rip` both writes and tags into the media folder; the reading part is shared). `CdDrive::eject`. The MusicBrainz parser keeps every medium of the release, not only the inserted one, for the names of discs not yet ripped. A virtual drive that can swap discs, for tests |
 | L2 | `audiobook` (new) | Finding pauses in a loudness envelope; builds the book from the staged files: chapter streams, encoding, the `.m4b` with chapters, files per chapter |
-| L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, commands. Re-exports what the frontends need |
+| L6 | `engine` | `audiobook.rs`: the project in the session, loading and saving it, the next-disc checks, the rip and build jobs, playing a stretch of a staged track for trimming, `Source::Audiobooks`, commands. Re-exports what the frontends need |
 | L7 | `ui` | The audiobook page and its sidebar item |
 | — | `tunebox-cli` | `audiobook` commands |
 
@@ -273,8 +274,8 @@ tunebox-cli audiobook discard
 
 ### The page
 
-An "Audiobook" item appears in the sidebar under the CD while a project exists (also after a
-restart). Its page shows:
+A book in progress appears in the sidebar under **Audiobooks** (see below), named after the
+book, with "ripping" or "ready to build" beside it, also after a restart. Its page shows:
 
 - **The book**: cover, title, author, narrator and the other details, editable in place.
 - **The discs**: a strip of discs, each done, being ripped (with progress), ready to rip,
@@ -287,12 +288,55 @@ restart). Its page shows:
   waveform editor described under [Trimming](#trimming).
 - **The output**: single file or per chapter, the format options, the space needed, Build.
 
+## Audiobooks in the library
+
+Built books do not go into Music. The sidebar's LIBRARY heading gets a second category under
+Music:
+
+```text
+LIBRARY
+  ♪ Music
+  ▤ Audiobooks
+      The Long Road (ripping)      a book in progress, while there is one
+```
+
+**Audiobooks** is shown once the library holds a book or a book is in progress. It lists the
+books, in the list or the album grid like Music. A single-file book is one row; a book built
+one file per chapter is grouped by book (album) in the grid. In this view the Composer column
+is headed **Narrator** and Artist is headed **Author**.
+
+### Media kind
+
+Each track gets a media kind, **Music** or **Audiobook** (`MediaKind` in `model`, a field of
+`Track`):
+
+- A book TuneBox builds is an Audiobook.
+- An imported file is an Audiobook when its extension is `.m4b` or its MP4 media kind (`stik`)
+  says so; everything else is Music.
+- Get Info can change it, for books imported as MP3s or FLAC (several songs at once, as other
+  fields). It is written to MP4 files (`stik`). Other formats have no standard tag for it, so
+  there it lives in the library only: removing the file from the library and adding it again
+  makes it Music.
+- The library file gets the field with Music as its default. Its version stays 1 (older
+  builds ignore unknown fields), and on loading a library without it, tracks whose file ends
+  in `.m4b` become Audiobooks.
+
+What changes for Music:
+
+- `Source::Music` shows only Music, and a new `Source::Audiobooks` only books.
+- Shuffle, and Up Next after a song, never step into an audiobook from Music.
+- Smart playlists get a **Media Kind** rule ("is Music" / "is Audiobook"). Existing smart
+  playlists keep matching what they match today, books included, since their rules do not
+  mention a kind; the listener can add the rule.
+- Commands that find songs by search (the CLI's `list`, `edit`, `play` and the like) search the
+  whole library, Music and Audiobooks, so nothing becomes unreachable. `tunebox-cli list
+  --kind audiobook` narrows to books.
+- Syncing a player carries books as it carries music today.
+
 ## Not in this plan: listening
 
 A built book plays today as one long song. Listening comfortably needs more, planned separately:
 
-- A media kind in the library (Music, Audiobook), an Audiobooks source in the sidebar, books
-  left out of shuffle and smart playlists of music.
 - Remember the playback position of each book.
 - Chapters in playback: read them from `.m4b` files (craft-media's demuxer), show them, skip
   between them.
@@ -301,10 +345,11 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 ## Phases
 
 1. **The loop, lossless.** Model, project file, staged ripping, `CdDrive::eject`, next-disc
-   checks, chapters, removing and trimming, suggestions, CLI, and output as FLAC files per chapter. Fully testable with the virtual drive.
-   Does not wait for anything.
-2. **The page.** The audiobook page in the UI, the trim editor, and screenshots in
-   `cargo xtask screenshots`.
+   checks, chapters, removing and trimming, suggestions, the media kind and
+   `Source::Audiobooks`, CLI, and output as FLAC files per chapter. Fully testable with the
+   virtual drive. Does not wait for anything.
+2. **The page.** Audiobooks under Music in the sidebar, the book-in-progress page, the trim
+   editor, and screenshots in `cargo xtask screenshots`.
 3. **AAC.** When craft-audio has its encoder and craft-media writes chapters: the single `.m4b`
    and AAC files per chapter.
 4. **Listening**, above.
@@ -325,6 +370,10 @@ A built book plays today as one long song. Listening comfortably needs more, pla
   kept, trimmed disc audio joined (FLAC per chapter now; AAC within a tolerance later); a
   build with an unripped kept track is refused; the `.m4b` chapters read back at the computed
   times, before and after tags are written.
+- Library: Music without books and Audiobooks with only books; `.m4b` and `stik` imports
+  become books; an older library file loads with its `.m4b` tracks as books; shuffle from
+  Music never plays a book; a smart playlist with and without the Media Kind rule; CLI search
+  finds books.
 - Space: a full disk during staging or building fails with an error the listener can act on.
 
 ## Decided
@@ -335,5 +384,6 @@ A built book plays today as one long song. Listening comfortably needs more, pla
 - The narrator goes in the composer tag.
 - After the last disc the whole book stays editable: chapters across discs, removed tracks,
   trims of a track's start and end.
+- Books get their own **Audiobooks** category under Music in the sidebar, and leave Music.
 - TuneBox suggests likely announcement tracks and trims, and snaps trim handles to quiet
   moments ([Suggestions](#suggestions)). It never applies a suggestion by itself.
