@@ -223,6 +223,11 @@ fn musicbrainz_tells_which_disc_comes_next() {
     assert!(matches!(refused, EngineError::MoreDiscsListed { listed: 3, ripped: 2 }), "{refused}");
     session.finish_audiobook_ripping(true).unwrap();
     assert!(session.audiobook().unwrap().ripping_done);
+    assert_eq!(session.audiobook_waiting_for(), None);
+    // A disc found afterwards: Rip Another Disc, and the book asks for disc 3 again.
+    session.resume_audiobook_ripping().unwrap();
+    assert_eq!(session.audiobook_waiting_for(), Some(3));
+    session.finish_audiobook_ripping(true).unwrap();
     session.regroup_audiobook(Grouping::PerTrack).unwrap();
     assert_eq!(session.audiobook().unwrap().chapters().len(), 3);
     session.discard_audiobook().unwrap();

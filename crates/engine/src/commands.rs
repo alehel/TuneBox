@@ -58,6 +58,7 @@ pub enum CommandId {
     ImportAsAudiobook,
     RipDisc,
     FinishRipping,
+    RipAnotherDisc,
     BuildAudiobook,
     SplitChapter,
     JoinChapters,
@@ -381,6 +382,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(CommandId::Repeat, "Repeat", Menu::Controls, None, Needs::Nothing),
     book(CommandId::RipDisc, "Rip Disc", Some(Shortcut::cmd(Key::Letter('r'))), Needs::BookPage),
     book(CommandId::FinishRipping, "That Was the Last Disc", Some(Shortcut::cmd(Key::Letter('d'))), Needs::BookPage),
+    book(CommandId::RipAnotherDisc, "Rip Another Disc", None, Needs::BookPage),
     book(CommandId::BuildAudiobook, "Build Audiobook…", Some(Shortcut::cmd_shift(Key::Letter('b'))), Needs::BookPage),
     after_separator(book(
         CommandId::SplitChapter,
@@ -518,6 +520,9 @@ impl Session {
             CommandId::RipDisc => !self.can_rip_audiobook_disc(),
             CommandId::FinishRipping => {
                 self.audiobook().is_none_or(|b| b.ripping_done) || self.jobs.is_running(JobKind::RipBookDisc)
+            }
+            CommandId::RipAnotherDisc => {
+                self.audiobook().is_none_or(|b| !b.ripping_done) || self.jobs.is_running(JobKind::BuildBook)
             }
             CommandId::BuildAudiobook => {
                 self.audiobook().is_none_or(|b| !b.ripping_done) || self.jobs.is_running(JobKind::BuildBook)

@@ -12,6 +12,7 @@ use std::process::{Command, ExitCode};
 
 mod covers;
 mod demo;
+mod demo_book;
 mod layers;
 mod plugins;
 mod screenshots;

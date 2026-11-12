@@ -487,6 +487,7 @@ impl TuneBoxApp {
             CommandId::ImportAsAudiobook
             | CommandId::RipDisc
             | CommandId::FinishRipping
+            | CommandId::RipAnotherDisc
             | CommandId::BuildAudiobook
             | CommandId::SplitChapter
             | CommandId::JoinChapters

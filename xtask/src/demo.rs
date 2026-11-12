@@ -1,5 +1,6 @@
 //! `cargo xtask demo`: a demo library of made-up albums (quiet tones with original procedural
-//! covers), playlists and play history, plus a virtual player already synced. The app opens it
+//! covers), playlists and play history, audiobooks (`demo_book`), plus a virtual player already
+//! synced. The app opens it
 //! with `--demo`, and the README screenshots are taken from it.
 
 use crate::covers::{Style, cover};
@@ -208,10 +209,12 @@ pub fn build(dir: &Path) -> Result<(), String> {
         }
     }
     ids.extend(add_unplayable(&mut library, dir, &media, now));
+    crate::demo_book::add_finished_books(&mut library, &media, now)?;
     add_history(&mut library, &ids, now)?;
     add_playlists(&mut library, &ids)?;
     tunebox_library::store::save(&library, &library_dir.join("TuneBox Library.json")).map_err(|e| e.to_string())?;
     sync_player(&library, &dir.join("player"))?;
+    crate::demo_book::build_book_in_progress(&library_dir)?;
     eprintln!("demo: {} tracks in {}", library.len(), dir.display());
     Ok(())
 }

@@ -1,6 +1,10 @@
 //! A drive with a made-up disc in it: each track a quiet tone. It makes the whole CD import
 //! path testable without hardware, and gives demos and screenshots a disc to show.
 //!
+//! A spoken disc ([`VirtualDrive::spoken`]) sounds more like an audiobook: sentences with pauses
+//! between them, and on the disc's last track an announcement after a longer pause, so pause
+//! finding and the audiobook's suggestions have something to find.
+//!
 //! The disc's *true* audio is fixed ([`VirtualDrive::true_audio`]). Like a real drive, the
 //! virtual one can have a read offset: with `read_offset` +667, asking for sample *n* returns
 //! true sample *n* − 667, and the lead-in and lead-out read as silence. Ripping with the
@@ -27,16 +31,24 @@ pub struct VirtualDrive {
     pub read_offset: i32,
     /// Silent sectors before track 1.
     pub pregap: u32,
+    /// Speech-like sound instead of a steady tone.
+    pub spoken: bool,
 }
 
 impl VirtualDrive {
     pub fn new(name: impl Into<String>, track_seconds: Vec<u32>) -> Self {
-        Self { name: name.into(), track_seconds, read_offset: 0, pregap: PREGAP }
+        Self { name: name.into(), track_seconds, read_offset: 0, pregap: PREGAP, spoken: false }
     }
 
     /// The same drive, reading `samples` early (positive) or late (negative) like a real one.
     pub fn with_read_offset(mut self, samples: i32) -> Self {
         self.read_offset = samples;
+        self
+    }
+
+    /// The same disc, spoken: sentences and pauses, ending with an announcement.
+    pub fn spoken(mut self) -> Self {
+        self.spoken = true;
         self
     }
 
@@ -70,6 +82,12 @@ impl VirtualDrive {
                 .find(|t| i64::from(t.start_lba) * per_sector <= sample)
                 .filter(|_| sample < i64::from(toc.leadout_lba) * per_sector);
             let value = match track {
+                Some(track) if self.spoken => {
+                    let start = i64::from(track.start_lba) * per_sector;
+                    let length = toc.sectors(track.number).map_or(0, |s| i64::from(s) * per_sector);
+                    let last = toc.tracks.last().map(|t| t.number) == Some(track.number);
+                    voice(sample - start, length, last, track.number)
+                }
                 Some(track) => {
                     // A different pitch for every track: an A-minor arpeggio.
                     let hz = [220.0, 261.63, 329.63, 440.0][usize::from(track.number) % 4];
@@ -83,6 +101,32 @@ impl VirtualDrive {
         }
         bytes
     }
+}
+
+/// Speech-like sound at `sample` of a track `length` samples long: a sentence in each 5-second
+/// stretch (2.8–4.4 s, so the pauses between run 0.6–2.2 s), syllables within it, a voice with
+/// a few harmonics. On a disc's `last` track, the final seconds are an announcement after a
+/// long pause.
+fn voice(sample: i64, length: i64, last: bool, track: u8) -> i16 {
+    let rate = 44_100.0;
+    let t = sample as f64 / rate;
+    let end = length as f64 / rate;
+    let speaking = if last && end > 12.0 && t > end - 7.4 {
+        // "End of disc one. Please insert disc two.": a 1.6 s pause, 4.6 s of speech, then quiet.
+        t > end - 5.8 && t < end - 1.2
+    } else {
+        let cell = (t / 5.0).floor();
+        let hash = ((cell * 12.9898 + f64::from(track) * 78.233).sin() * 43_758.545).fract().abs();
+        t - cell * 5.0 < 2.8 + 1.6 * hash
+    };
+    if !speaking {
+        return 0;
+    }
+    let tau = std::f64::consts::TAU;
+    let syllables = (t * 3.3 * tau).sin().abs().powf(0.6);
+    let pitch = 140.0 + 25.0 * (t * 0.7 * tau).sin();
+    let tone = (t * pitch * tau).sin() + 0.5 * (t * pitch * 2.0 * tau).sin() + 0.25 * (t * pitch * 3.0 * tau).sin();
+    (tone * syllables * 4500.0) as i16
 }
 
 impl CdDrive for VirtualDrive {

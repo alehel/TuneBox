@@ -164,6 +164,19 @@ mod tests {
     }
 
     #[test]
+    fn a_spoken_disc_has_pauses_and_ends_with_an_announcement() {
+        let dir = tempfile::tempdir().unwrap();
+        let drive = VirtualDrive::new("Virtual", vec![15, 20]).spoken();
+        let report = stage(&drive, &request(&drive, dir.path(), vec![1, 2]), &AtomicBool::new(false), &mut |_| {});
+        let seconds = |r: &Range<u64>| (r.start as f64 / 44_100.0, r.end as f64 / 44_100.0);
+        let first: Vec<_> = report.staged[0].pauses.iter().map(seconds).collect();
+        assert!(first.len() >= 2, "pauses between sentences: {first:?}");
+        // The last track: a long pause before the announcement, 7.4 s from the end.
+        let last: Vec<_> = report.staged[1].pauses.iter().map(seconds).collect();
+        assert!(last.iter().any(|(a, b)| (a - 12.6).abs() < 0.1 && (b - 14.2).abs() < 0.1), "{last:?}");
+    }
+
+    #[test]
     fn cancelling_leaves_no_partial_file() {
         let dir = tempfile::tempdir().unwrap();
         let drive = VirtualDrive::new("Virtual", vec![4]);

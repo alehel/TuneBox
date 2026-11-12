@@ -39,6 +39,13 @@ impl StartAudiobook {
         Self { details, series_number: String::new(), year }
     }
 
+    /// The dialog filled in with `details` (for the screenshots, which show a book's).
+    pub fn with_details(details: BookDetails) -> Self {
+        let series_number = details.series_number.map(|n| n.to_string()).unwrap_or_default();
+        let year = details.year.map(|y| y.to_string()).unwrap_or_default();
+        Self { details, series_number, year }
+    }
+
     pub fn show(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
         let (details, number, year) = (&mut self.details, &mut self.series_number, &mut self.year);
         let result = window(ctx, "Import as Audiobook", 460.0, "Start Audiobook", |ui| {

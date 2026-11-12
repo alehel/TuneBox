@@ -30,6 +30,7 @@ impl TuneBoxApp {
                 }
                 other => other,
             },
+            CommandId::RipAnotherDisc => self.session.resume_audiobook_ripping(),
             CommandId::BuildAudiobook => match self.session.check_audiobook() {
                 Ok(()) => {
                     self.dialog = Some(Dialog::BuildAudiobook(Box::new(BuildAudiobook::new(&self.session))));

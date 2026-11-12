@@ -3,8 +3,8 @@
 
 use crate::app::TuneBoxApp;
 use crate::dialogs::{
-    ConfirmLocate, ConfirmRefresh, Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab, RenameFilesDialog,
-    SmartPlaylistDialog,
+    BuildAudiobook, ConfirmLocate, ConfirmRefresh, Dialog, GetInfoDialog, PreferencesDialog, PreferencesTab,
+    RenameFilesDialog, SmartPlaylistDialog, StartAudiobook, TrimDialog,
 };
 use crate::state::{SourceItem, ViewMode};
 use egui::ColorImage;
@@ -22,7 +22,7 @@ struct Scene {
     setup: fn(&mut TuneBoxApp),
 }
 
-const SCENES: [Scene; 26] = [
+const SCENES: [Scene; 34] = [
     Scene { name: "tunebox-library", setup: library },
     Scene { name: "tunebox-albums", setup: albums },
     Scene { name: "tunebox-unplayable", setup: unplayable },
@@ -40,6 +40,15 @@ const SCENES: [Scene; 26] = [
     Scene { name: "tunebox-rename-files-conflicts", setup: rename_files_conflicts },
     Scene { name: "tunebox-cd-import", setup: cd },
     Scene { name: "tunebox-cd-cover", setup: cd_cover },
+    Scene { name: "tunebox-audiobook-start", setup: audiobook_start },
+    // The book is waiting for disc 3 (as `cargo xtask demo` leaves it): asked for first.
+    Scene { name: "tunebox-audiobook-insert-disc", setup: audiobook_insert_disc },
+    Scene { name: "tunebox-audiobook-page", setup: audiobook_page },
+    Scene { name: "tunebox-audiobook-chapters", setup: audiobook_chapters },
+    Scene { name: "tunebox-audiobook-trim", setup: audiobook_trim },
+    Scene { name: "tunebox-audiobook-build", setup: audiobook_build },
+    Scene { name: "tunebox-audiobook-shortcuts", setup: audiobook_shortcuts },
+    Scene { name: "tunebox-audiobooks", setup: audiobooks },
     Scene { name: "tunebox-device-sync", setup: device },
     Scene { name: "tunebox-preferences", setup: preferences },
     Scene { name: "tunebox-preferences-importing", setup: preferences_importing },
@@ -205,6 +214,75 @@ fn cd_cover(app: &mut TuneBoxApp) {
     if app.session.fetch_disc_cover().is_ok() {
         finish_jobs(app);
     }
+}
+
+/// Import as Audiobook…, filled in as for the demo's book.
+fn audiobook_start(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Cd);
+    let details = app.session.audiobook().map(|b| b.details.clone()).unwrap_or_default();
+    app.dialog = Some(Dialog::StartAudiobook(Box::new(StartAudiobook::with_details(details))));
+}
+
+/// Between discs: the page asks for disc 3. A run before may have finished the ripping, so it
+/// is taken back first (Rip Another Disc).
+fn audiobook_insert_disc(app: &mut TuneBoxApp) {
+    if app.session.audiobook().is_some_and(|b| b.ripping_done) {
+        let _ = app.session.resume_audiobook_ripping();
+    }
+    app.view.select_source(SourceItem::Book);
+}
+
+/// The ripping is over (MusicBrainz lists a third disc, but these two are the demo's book).
+/// The page shows the chapter that runs on from disc 1 into disc 2, with its trimmed track, its
+/// removed announcement and a suggestion.
+fn audiobook_page(app: &mut TuneBoxApp) {
+    let _ = app.session.finish_audiobook_ripping(true);
+    app.view.select_source(SourceItem::Book);
+    let t = tunebox_engine::model::audiobook::TrackRef::new;
+    for start in [t(1, 1), t(1, 2), t(1, 5), t(1, 8)] {
+        app.view.book.set_folded(start, true);
+    }
+    app.view.book.select_only(t(2, 2));
+}
+
+/// Folded to its chapters, with one being renamed.
+fn audiobook_chapters(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Book);
+    let chapters = app.session.audiobook().map(|b| b.chapters()).unwrap_or_default();
+    app.view.book.fold_all(&chapters, true);
+    if let Some(chapter) = chapters.get(5) {
+        app.view.book.select_chapter(chapter);
+        app.view.book.renaming =
+            Some(crate::book_state::Renaming { start: chapter.start, text: "The Lighthouse".into() });
+    }
+}
+
+/// The trim editor on disc 2's last track, which ends with an announcement.
+fn audiobook_trim(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Book);
+    let chapters = app.session.audiobook().map(|b| b.chapters()).unwrap_or_default();
+    app.view.book.fold_all(&chapters, false);
+    let track = tunebox_engine::model::audiobook::TrackRef::new(2, 12);
+    app.view.book.select_only(track);
+    if let Some(dialog) = TrimDialog::new(&app.session, track) {
+        app.dialog = Some(Dialog::Trim(Box::new(dialog)));
+    }
+}
+
+fn audiobook_build(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Book);
+    app.dialog = Some(Dialog::BuildAudiobook(Box::new(BuildAudiobook::new(&app.session))));
+}
+
+fn audiobook_shortcuts(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Book);
+    app.dialog = Some(Dialog::BookShortcuts);
+}
+
+/// The audiobooks in the library, under Music.
+fn audiobooks(app: &mut TuneBoxApp) {
+    app.view.select_source(SourceItem::Audiobooks);
+    app.view.view_mode = ViewMode::List;
 }
 
 /// Find Album Artwork… on "Paper Boats", with the editions the demo's pretend MusicBrainz

@@ -208,6 +208,18 @@ impl Session {
         Ok(())
     }
 
+    /// Rip Another Disc: takes back That Was the Last Disc, for a disc found afterwards. The book
+    /// waits for its next disc again.
+    pub fn resume_audiobook_ripping(&mut self) -> Result<(), EngineError> {
+        if self.jobs.is_running(JobKind::BuildBook) {
+            return Err(EngineError::Audiobook("The book is being built. Wait for it, or stop it first.".into()));
+        }
+        let state = self.audiobook.as_mut().ok_or(EngineError::NoAudiobook)?;
+        state.book.ripping_done = false;
+        self.save_audiobook(false);
+        Ok(())
+    }
+
     /// Adds the disc in the drive to the book, as its next disc and one more chapter.
     fn add_disc_to_audiobook(&mut self) {
         let (Some(cd), Some(state)) = (self.cd.as_ref(), self.audiobook.as_mut()) else { return };
