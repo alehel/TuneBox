@@ -33,6 +33,10 @@ built](#what-phase-2-built) say so.
 
 The book is added to the library. Only then is the staged rip deleted.
 
+<img src="images/tunebox-audiobook-start.webp" alt="Import as Audiobook: the book's title, author, narrator, series and description">
+
+<img src="images/tunebox-audiobook-page.webp" alt="The book page: two discs ripped, the tracks grouped into chapters, a chapter running from disc 1 into disc 2, an announcement removed and two suggestions">
+
 ### Why ripping and building are separate
 
 The user's sketch builds the output as the discs go in. This plan rips every disc to lossless
@@ -100,6 +104,8 @@ while TuneBox asks for the next one, nothing is edited (see [After each disc](#a
 Nothing touches the staged audio: the edits are applied when the book is built, so each one
 can be undone until then.
 
+<img src="images/tunebox-audiobook-chapters.webp" alt="Chapters folded to one row each, one being renamed">
+
 ### Chapters
 
 Each disc starts as one chapter. From there the listener splits and joins: **Split Chapter
@@ -142,6 +148,8 @@ staged track:
   instead.
 
 Trimming needs the track's audio, so it is offered once the track is ripped.
+
+<img src="images/tunebox-audiobook-trim.webp" alt="The trim editor: the start and end of a track, the end cut at the pause before a possible announcement">
 
 ### Suggestions
 
@@ -187,6 +195,8 @@ without the mouse. The keys below work on the book page while no name is being e
 elsewhere the single letters do nothing. They come from the command table, like every
 shortcut, and are listed in the Audiobook menu, which appears while the book page is shown.
 **?** shows them all on one sheet.
+
+<img src="images/tunebox-audiobook-shortcuts.webp" alt="The sheet of the book page's shortcuts">
 
 | Key | Does |
 |---|---|
@@ -254,6 +264,8 @@ on their own.
 
 When a disc is ripped and ejected, a dialog says so and names the next disc:
 
+<img src="images/tunebox-audiobook-insert-disc.webp" alt="Disc 2 is ripped. Insert disc 3, with That Was the Last Disc and Not Now">
+
 > Disc 2 is ripped and ejected.
 > **Insert disc 3**
 > Its tracks appear as soon as it is in.
@@ -297,6 +309,8 @@ completion.
 
 Chapter start times come from [Chapter times](#chapter-times). The build refuses to start
 while a kept track has not been ripped, naming the disc and tracks.
+
+<img src="images/tunebox-audiobook-build.webp" alt="Build Audiobook: one .m4b with chapters or a file per chapter, AAC at 64 kbit/s mono">
 
 ### What craft-libs provides
 
@@ -461,6 +475,8 @@ disc as music after all.
 
 Built books do not go into Music. The sidebar's LIBRARY heading gets a second category under
 Music:
+
+<img src="images/tunebox-audiobooks.webp" alt="The Audiobooks list: three built books, with author and narrator columns, and a book in progress in the sidebar">
 
 ```text
 LIBRARY

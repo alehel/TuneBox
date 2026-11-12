@@ -392,6 +392,11 @@ impl Book {
         self.tracks().filter(|(r, _)| self.is_kept(*r)).map(|(r, t)| self.trimmed_length(r, t)).sum()
     }
 
+    /// How long `track` is once trimmed, in samples; 0 for a track not in the book's discs.
+    pub fn trimmed_samples(&self, track: TrackRef) -> u64 {
+        self.track(track).map_or(0, |data| self.trimmed_length(track, data))
+    }
+
     /// The length of `track` once trimmed.
     pub(crate) fn trimmed_length(&self, track: TrackRef, data: &BookTrack) -> u64 {
         let trim = self.edits.trims.get(&track).copied().unwrap_or_default();

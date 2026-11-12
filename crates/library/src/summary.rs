@@ -22,10 +22,15 @@ impl Summary {
 
     /// The status bar text, e.g. "12 songs, 42 minutes, 310.2 MB". Empty for no tracks.
     pub fn label(&self) -> String {
+        self.label_counting("song", "songs")
+    }
+
+    /// The status bar text counting the tracks as `one` or `many`: "3 books, 1.1 days, 240 KB".
+    pub fn label_counting(&self, one: &str, many: &str) -> String {
         if self.count == 0 {
             return String::new();
         }
-        let noun = if self.count == 1 { "song" } else { "songs" };
+        let noun = if self.count == 1 { one } else { many };
         format!(
             "{} {noun}, {}, {}",
             group_thousands(self.count),
@@ -56,6 +61,15 @@ mod tests {
         assert_eq!(group_thousands(7), "7");
         assert_eq!(group_thousands(1204), "1,204");
         assert_eq!(group_thousands(1_000_000), "1,000,000");
+    }
+
+    #[test]
+    fn counts_in_the_noun_given() {
+        let summary = Summary { count: 3, duration: std::time::Duration::from_secs(7200), bytes: 2048 };
+        assert!(summary.label().starts_with("3 songs, "), "{}", summary.label());
+        assert!(summary.label_counting("book", "books").starts_with("3 books, "));
+        let one = Summary { count: 1, ..summary };
+        assert!(one.label_counting("book", "books").starts_with("1 book, "));
     }
 
     #[test]

@@ -53,7 +53,11 @@ pub fn quiet_field(ui: &mut Ui, rect: Rect, value: &mut String, hint: &str, font
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .align(Align2::LEFT_CENTER);
-    let response = ui.put(rect, edit);
+    // Left-aligned rather than `put`: egui keeps a text field at least 24 points wide, and
+    // `put` centres a widget wider than its rect, which would slide a short value (a series
+    // number) left over whatever is painted before it.
+    let layout = egui::Layout::left_to_right(egui::Align::Center);
+    let response = ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(layout), |ui| ui.add(edit)).inner;
     if response.hovered() || response.has_focus() {
         let stroke = if response.has_focus() { theme::ACCENT } else { theme::BORDER };
         // Drawn a little outside the field, so the text stays in line with the rest of the

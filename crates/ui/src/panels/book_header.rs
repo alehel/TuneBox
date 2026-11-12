@@ -147,9 +147,9 @@ fn meta_row(ui: &mut Ui, details: &mut BookDetails, at: egui::Pos2) -> bool {
     dot(ui, pos2(x + 7.0, at.y + 11.0));
     x += 14.0;
     changed |= field(ui, &mut x, &mut details.series, "Series");
-    // Painted once the fields are drawn, so the number's field does not cover it.
-    let comma_at = x;
-    x += ui.painter().layout_no_wrap(", ".to_owned(), font.clone(), theme::TEXT_MUTED).size().x;
+    // Into the room the field leaves for its cursor, so the comma sits against the name.
+    x -= 2.0;
+    words(ui, &mut x, ", ");
     let mut number = details.series_number.map(|n| n.to_string()).unwrap_or_default();
     if field(ui, &mut x, &mut number, "No.") {
         details.series_number = number.trim().parse().ok();
@@ -162,8 +162,6 @@ fn meta_row(ui: &mut Ui, details: &mut BookDetails, at: egui::Pos2) -> bool {
         details.year = year.trim().parse().ok();
         changed = true;
     }
-    let mut comma_x = comma_at;
-    words(ui, &mut comma_x, ",");
     changed
 }
 

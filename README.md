@@ -35,6 +35,10 @@
   time and runs in a sandbox ([docs/visualizer-plugins.md](docs/visualizer-plugins.md)).
 - **CDs.** See the disc, fetch its track names from MusicBrainz (only when you ask), edit them
   and import to FLAC, WAV or AIFF.
+- **Audiobooks from CDs.** Rip a book disc by disc, then group its tracks into chapters,
+  leave out the "please insert disc 2" announcements and trim their seconds off, with a key
+  for every edit, and build one chaptered `.m4b` or a file per chapter. Built books are listed
+  under Audiobooks, apart from your music. See [docs/audiobooks.md](docs/audiobooks.md).
 - **Players.** Any player that mounts as a drive (Rockbox, FiiO, Sony, Shanling…), and on Linux
   and macOS players that connect over MTP (Android-based players and phones, recent Walkmans;
   so far tested only against a simulated device): pick the whole library or chosen playlists,
@@ -66,6 +70,14 @@
 <tr>
 <td align="center"><sub>Importing a CD</sub></td>
 <td align="center"><sub>Syncing a player</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/tunebox-audiobook-page.webp" alt="An audiobook ripped from two CDs, its tracks grouped into chapters"></td>
+<td width="50%"><img src="docs/images/tunebox-audiobook-trim.webp" alt="Trimming an announcement off the end of a track"></td>
+</tr>
+<tr>
+<td align="center"><sub>An audiobook from CDs, in chapters</sub></td>
+<td align="center"><sub>Trimming off an announcement</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/tunebox-smart-editor.webp" alt="The smart playlist editor"></td>

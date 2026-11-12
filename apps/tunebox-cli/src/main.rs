@@ -328,7 +328,8 @@ fn show(view: LibraryView<'_>, command: Command) -> Result<(), String> {
             if let Some(kind) = kind {
                 ids.retain(|id| view.library().track(*id).is_some_and(|t| t.kind == kind));
             }
-            print_tracks(view, &ids);
+            let (one, many) = if kind == Some(MediaKind::Audiobook) { ("book", "books") } else { ("song", "songs") };
+            print_tracks(view, &ids, one, many);
         }
         Command::Playlists => {
             for playlist in view.library().playlists() {
@@ -564,7 +565,8 @@ fn print_unplayable(view: LibraryView<'_>) {
     }
 }
 
-fn print_tracks(view: LibraryView<'_>, ids: &[TrackId]) {
+/// Prints the tracks, then their count (as `one` or `many`), length and size.
+fn print_tracks(view: LibraryView<'_>, ids: &[TrackId], one: &str, many: &str) {
     let columns = [Column::Name, Column::Time, Column::Artist, Column::Album, Column::Rating, Column::Plays];
     for id in ids {
         let Some(track) = view.track(*id) else { continue };
@@ -574,7 +576,7 @@ fn print_tracks(view: LibraryView<'_>, ids: &[TrackId]) {
             cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]
         );
     }
-    println!("{}", view.summary(ids).label());
+    println!("{}", view.summary(ids).label_counting(one, many));
 }
 
 /// Ticks the session until its background work is done, printing progress.
