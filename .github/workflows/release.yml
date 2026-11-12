@@ -1,0 +1,132 @@
+# Builds the downloads for a release when a tag is pushed:
+#
+#   TuneBox-<tag>-windows-x64-portable.zip   tunebox.exe and tunebox-cli.exe; unzip and run
+#   TuneBox-<tag>-macos-arm64.zip            TuneBox.app and tunebox-cli for Apple silicon
+#   TuneBox-<tag>-macos-universal.zip        the same, for Apple silicon and Intel in one
+#
+# The archives are kept as workflow artifacts and attached to a draft GitHub release for the
+# tag, which is published by hand once it has been checked.
+name: Release
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  windows:
+    name: Windows portable
+    runs-on: windows-latest
+    env:
+      # Link the C runtime into the programs, so they run on a PC without the Visual C++
+      # redistributable installed: a portable build must not need an installer of its own.
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --locked --package tunebox --package tunebox-cli
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "TuneBox-$env:TAG-windows-x64-portable"
+          New-Item -ItemType Directory -Path "dist/$name" | Out-Null
+          Copy-Item -Path @(
+            'target/release/tunebox.exe',
+            'target/release/tunebox-cli.exe',
+            'README.md', 'ATTRIBUTION.md', 'LICENSE-MIT', 'LICENSE-APACHE'
+          ) -Destination "dist/$name"
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-portable
+          path: dist/*.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS arm64 and universal
+    runs-on: macos-latest
+    env:
+      # The oldest macOS that runs on Apple silicon; packaging/macos/Info.plist says the same.
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add the Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build for Apple silicon
+        run: cargo build --release --locked --package tunebox --package tunebox-cli --target aarch64-apple-darwin
+
+      - name: Build for Intel
+        run: cargo build --release --locked --package tunebox --package tunebox-cli --target x86_64-apple-darwin
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          version=$(cargo metadata --no-deps --format-version 1 --locked \
+            | jq -r '.packages[] | select(.name == "tunebox") | .version')
+
+          # Joins the two builds of each program into one that runs on either kind of Mac.
+          mkdir -p target/universal
+          for program in tunebox tunebox-cli; do
+            lipo -create \
+              "target/aarch64-apple-darwin/release/$program" \
+              "target/x86_64-apple-darwin/release/$program" \
+              -output "target/universal/$program"
+          done
+
+          # package <architecture> <folder holding the two programs>
+          package() {
+            local name="TuneBox-$TAG-macos-$1"
+            local app="dist/$name/TuneBox.app"
+            mkdir -p "$app/Contents/MacOS"
+            cp packaging/macos/Info.plist "$app/Contents/Info.plist"
+            /usr/libexec/PlistBuddy \
+              -c "Set :CFBundleShortVersionString $version" \
+              -c "Set :CFBundleVersion $version" \
+              "$app/Contents/Info.plist"
+            cp "$2/tunebox" "$app/Contents/MacOS/tunebox"
+            cp "$2/tunebox-cli" README.md ATTRIBUTION.md LICENSE-MIT LICENSE-APACHE "dist/$name/"
+            # Ad-hoc signatures: Apple silicon refuses to run unsigned code, and the bundle's
+            # signature must cover its Info.plist. This is not a Developer ID signature.
+            codesign --force --sign - "dist/$name/tunebox-cli"
+            codesign --force --sign - "$app"
+            codesign --verify --strict "$app"
+            # ditto, unlike zip, keeps what a signed bundle needs to stay valid.
+            ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
+          }
+          package arm64 target/aarch64-apple-darwin/release
+          package universal target/universal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$TAG" --draft --verify-tag --generate-notes --title "TuneBox $TAG" dist/*.zip
