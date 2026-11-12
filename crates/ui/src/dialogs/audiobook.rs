@@ -2,7 +2,8 @@
 //! a disc that may not belong, building, the confirmations, and the sheet of shortcuts.
 //!
 //! Between discs the book page shows "Insert disc N" as a modal dialog with That Was the Last
-//! Disc: no editing until the disc is in. Not Now leaves the page (it does not edit), so the
+//! Disc: no editing until the disc is in. A disc that may not belong is asked about on the book
+//! page too. Not Now leaves the page (it does not edit), so the
 //! rest of TuneBox stays usable while a disc is looked for.
 
 use crate::actions::Action;
@@ -11,7 +12,7 @@ use crate::panels::widgets;
 use crate::state::SourceItem;
 use crate::theme;
 use egui::{RichText, Ui, vec2};
-use tunebox_engine::commands::{COMMANDS, CommandId, Scope};
+use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::audiobook::layout::{chapter_file_path, single_file_path};
 use tunebox_engine::model::audiobook::{
     BookDetails, MAX_CHAPTERS_PER_FILE, OutputFormat, OutputLayout, OutputSettings, seconds,
@@ -235,11 +236,13 @@ impl BuildAudiobook {
                         .unwrap_or_default()
                 }
             };
+            let folder = media.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             ui.label(format!(
-                "About {}, into {}",
+                "About {}, into {folder}/{}",
                 size_estimate(output, seconds(book.kept_samples())),
-                media.join(place).display()
-            ));
+                place.display()
+            ))
+            .on_hover_text(media.join(&place).display().to_string());
             ui.label(layout::muted("The ripped discs are deleted once the book is in your library."));
             if let Some(problem) = &problem {
                 ui.add_space(6.0);
@@ -317,49 +320,100 @@ pub fn confirm_discard(ctx: &egui::Context, actions: &mut Vec<Action>) -> bool {
     }
 }
 
-/// The book page's keys, on one sheet (?).
+/// The book page's keys, on one sheet (?): grouped as the listener works.
 pub fn shortcuts_sheet(ctx: &egui::Context) -> bool {
     let mac = cfg!(target_os = "macos");
+    let (option, shift) = if mac { ("⌥", "⇧") } else { ("Alt+", "Shift+") };
+    let key = |id: CommandId| -> (String, String) {
+        let spec = tunebox_engine::commands::spec_of(id);
+        let keys = spec.and_then(|s| s.shortcut).map(|s| s.label(mac)).unwrap_or_default();
+        (keys, spec.map(|s| s.label.to_owned()).unwrap_or_default())
+    };
+    let fixed = |keys: String, what: &str| (keys, what.to_owned());
+    let left: Vec<(&str, Vec<(String, String)>)> = vec![
+        (
+            "Moving",
+            vec![
+                fixed("↑ ↓".into(), "Previous, next track"),
+                fixed(format!("{shift}↑ {shift}↓"), "Extend the selection"),
+                key(CommandId::PreviousChapter),
+                key(CommandId::NextChapter),
+                key(CommandId::FoldChapter),
+                key(CommandId::UnfoldChapter),
+                key(CommandId::FoldAllChapters),
+                key(CommandId::UnfoldAllChapters),
+            ],
+        ),
+        (
+            "Listening",
+            vec![
+                fixed("Space".into(), "Play or pause the selected track"),
+                key(CommandId::PlayAcrossStart),
+                key(CommandId::PlayEnd),
+            ],
+        ),
+        (
+            "Trim editor",
+            vec![
+                fixed("Tab".into(), "Start cut, end cut"),
+                fixed("← →".into(), &format!("Move the cut 0.1 s ({shift} 1 s)")),
+                fixed(format!("{option}← {option}→"), "Previous, next pause"),
+                fixed("P  X".into(), "Play across the cut, what is cut"),
+                fixed("0".into(), "No cut"),
+            ],
+        ),
+    ];
+    let right: Vec<(&str, Vec<(String, String)>)> = vec![
+        (
+            "Chapters",
+            vec![
+                key(CommandId::SplitChapter),
+                key(CommandId::JoinChapters),
+                key(CommandId::RenameChapter),
+                fixed(format!("Tab {shift}Tab"), "Next, previous name while renaming"),
+                key(CommandId::GroupPerDisc),
+                key(CommandId::GroupPerTrack),
+                key(CommandId::GroupFromNames),
+            ],
+        ),
+        (
+            "Tracks",
+            vec![
+                key(CommandId::RemoveFromBook),
+                key(CommandId::TrimTrack),
+                key(CommandId::AcceptSuggestion),
+                key(CommandId::AcceptAllSuggestions),
+            ],
+        ),
+        (
+            "The book",
+            vec![
+                key(CommandId::RipDisc),
+                key(CommandId::FinishRipping),
+                key(CommandId::BuildAudiobook),
+                key(CommandId::UndoBookEdit),
+                key(CommandId::RedoBookEdit),
+            ],
+        ),
+    ];
     let mut open = true;
     modal(ctx, "book-shortcuts", |ui| {
-        ui.set_width(640.0);
+        ui.set_width(720.0);
         title_heading(ui, "Audiobook Shortcuts");
-        ui.label(layout::muted("On the book's page, while no name is being typed."));
-        ui.add_space(8.0);
+        ui.label(layout::muted("On the book's page, while no name is being typed. ? shows this sheet."));
+        ui.add_space(6.0);
         ui.columns(2, |columns| {
-            let fixed = [
-                ("↑ ↓", "previous, next track"),
-                ("⇧↑ ⇧↓", "extend the selection"),
-                ("Space", "play or pause from the selected track"),
-                ("Tab ⇧Tab", "next, previous name while renaming"),
-                ("Esc", "stop renaming"),
-            ];
-            if let Some(column) = columns.get_mut(0) {
-                for (keys, what) in fixed {
-                    key_row(column, keys, what);
-                }
-                column.add_space(8.0);
-                column.label(RichText::new("Trim editor").strong());
-                for (keys, what) in [
-                    ("Tab", "start cut, end cut"),
-                    ("← →", "move the cut 0.1 s; with ⇧, 1 s"),
-                    ("⌥← ⌥→", "previous, next pause"),
-                    ("P", "play across the cut"),
-                    ("X", "play what is cut"),
-                    ("0", "no cut"),
-                ] {
-                    key_row(column, keys, what);
-                }
-            }
-            if let Some(column) = columns.get_mut(1) {
-                for spec in COMMANDS.iter().filter(|c| c.scope == Scope::BookPage) {
-                    if let Some(shortcut) = spec.shortcut {
-                        key_row(column, &shortcut.label(mac), spec.label);
+            for (column, groups) in columns.iter_mut().zip([left, right]) {
+                for (heading, rows) in groups {
+                    column.add_space(4.0);
+                    column.label(RichText::new(heading).strong());
+                    for (keys, what) in rows {
+                        key_row(column, &keys, &what);
                     }
                 }
             }
         });
-        ui.add_space(12.0);
+        ui.add_space(10.0);
         buttons(ui, |ui| {
             if widgets::primary_button(ui, "Done", true, vec2(88.0, 28.0)).clicked() {
                 open = false;
@@ -371,7 +425,7 @@ pub fn shortcuts_sheet(ctx: &egui::Context) -> bool {
 
 fn key_row(ui: &mut Ui, keys: &str, what: &str) {
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(96.0, 20.0), egui::Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(vec2(104.0, 17.0), egui::Sense::hover());
         ui.painter().text(
             rect.right_center(),
             egui::Align2::RIGHT_CENTER,

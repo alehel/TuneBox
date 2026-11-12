@@ -110,7 +110,8 @@ impl Session {
                 }
             }
             Ok(None) if !self.jobs.is_running(JobKind::Rip) && !self.jobs.is_running(JobKind::RipBookDisc) => {
-                self.cd = None
+                self.cd = None;
+                self.forget_audiobook_question();
             }
             Ok(None) => {}
             Err(message) => self.notices.push(Notice::error(format!("Could not read the disc: {message}"))),
@@ -120,6 +121,7 @@ impl Session {
     /// Ejects the disc and forgets it. A drive that does not open is told to the listener, who
     /// takes the disc out by hand.
     pub fn eject_disc(&mut self) {
+        self.forget_audiobook_question();
         if let Some(cd) = self.cd.take()
             && let Err(e) = cd.drive.eject()
         {

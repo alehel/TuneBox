@@ -129,7 +129,14 @@ pub(crate) fn window(
             egui::vec2(ui.available_width(), 28.0),
             egui::Layout::right_to_left(egui::Align::Center),
             |ui| {
-                if crate::panels::widgets::primary_button(ui, ok_label, true, egui::vec2(88.0, 28.0)).clicked() {
+                // As wide as its label needs, and no narrower than Cancel.
+                let label_width = ui
+                    .painter()
+                    .layout_no_wrap(ok_label.to_owned(), egui::FontId::proportional(13.0), egui::Color32::WHITE)
+                    .size()
+                    .x;
+                let width = (label_width + 28.0).max(88.0);
+                if crate::panels::widgets::primary_button(ui, ok_label, true, egui::vec2(width, 28.0)).clicked() {
                     result = Some(true);
                 }
                 if ui.add(egui::Button::new("Cancel").min_size(egui::vec2(88.0, 28.0))).clicked() {

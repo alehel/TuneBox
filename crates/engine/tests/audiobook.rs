@@ -210,6 +210,11 @@ fn musicbrainz_tells_which_disc_comes_next() {
     assert_eq!(session.audiobook().unwrap().check_disc(&ids[2]), DiscCheck::OtherDisc { says: 3, expected: 2 });
     session.answer_audiobook_question(false).unwrap();
     assert!(!changer.has_disc());
+    // Asked again, and the disc taken out by hand: the question goes with it.
+    insert(&mut session, &changer, discs[2].clone());
+    assert!(session.audiobook_question().is_some());
+    session.eject_disc();
+    assert_eq!(session.audiobook_question(), None);
     assert_eq!(session.audiobook().unwrap().discs.len(), 1);
 
     // Disc 2 is taken without a question, with its own names.

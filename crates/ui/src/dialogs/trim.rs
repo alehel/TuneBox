@@ -97,10 +97,11 @@ impl TrimDialog {
             ui.add_space(10.0);
             let left = self.length.saturating_sub(self.start + self.end);
             ui.label(format!("New length {} (was {}).", clock(left), clock(self.length)));
-            ui.label(layout::muted(
-                "Tab: start or end cut · ← → 0.1 s (⇧ 1 s) · ⌥← ⌥→ previous, next pause · P play across the cut · X play \
-                 what is cut · 0 no cut",
-            ));
+            let (option, shift) = if cfg!(target_os = "macos") { ("⌥", "⇧") } else { ("Alt+", "Shift+") };
+            ui.label(layout::muted(&format!(
+                "Tab: start or end cut · ← → 0.1 s ({shift}→ 1 s) · {option}← {option}→ previous, next pause · P play \
+                 across the cut · X play what is cut · 0 no cut"
+            )));
             if let Some(error) = &self.error {
                 ui.colored_label(theme::WARNING, error);
             }
@@ -150,7 +151,7 @@ impl TrimDialog {
             Cut::End => (self.length - window, "End · last 20 seconds"),
         };
         let focused = self.focus == cut;
-        let heading = if focused { format!("{heading}   ◂ the keys move this cut") } else { heading.to_owned() };
+        let heading = if focused { format!("{heading}   (the keys move this cut)") } else { heading.to_owned() };
         ui.label(egui::RichText::new(heading).strong());
         let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 104.0), Sense::click_and_drag());
         let span = window.max(1) as f32;
@@ -173,7 +174,8 @@ impl TrimDialog {
             Cut::Start => self.start,
             Cut::End => self.length - self.end,
         };
-        let cut_x = x_of(position);
+        // Kept inside the frame, so a cut of nothing still shows its handle.
+        let cut_x = x_of(position).clamp(rect.left() + 1.0, rect.right() - 1.0);
         for (i, peak) in wave.iter().enumerate() {
             let x = rect.left() + (i as f32 + 0.5) / wave.len().max(1) as f32 * rect.width();
             let height = (peak / loudest * rect.height() * 0.42).max(0.5);

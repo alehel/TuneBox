@@ -11,6 +11,7 @@
 
 use super::book::{Book, BookError, TrackRef, Trim};
 use super::layout::MAX_CHAPTER_NAME_BYTES;
+use super::suggest::looks_like_announcement;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,7 +56,8 @@ pub enum Grouping {
     /// One chapter per track.
     PerTrack,
     /// Consecutive tracks whose names differ only by a part number ("Chapter 4 (1)",
-    /// "Chapter 4 (2)") make one chapter, named without the part.
+    /// "Chapter 4 (2)") make one chapter, named without the part. Announcements and removed
+    /// tracks between them ("End of Disc One", "Disc Two") stay in the chapter they interrupt.
     FromNames,
 }
 
@@ -207,6 +209,10 @@ impl Book {
                 let mut named = BTreeMap::new();
                 let mut previous: Option<String> = None;
                 for (track, data) in self.tracks() {
+                    let interruption = !self.is_kept(track) || looks_like_announcement(&data.title);
+                    if interruption && previous.is_some() {
+                        continue;
+                    }
                     let base = base_name(&data.title);
                     let key = base.to_lowercase();
                     if previous.as_ref() != Some(&key) {
@@ -387,6 +393,22 @@ mod tests {
         book.regroup(Grouping::PerDisc);
         assert_eq!(book.chapters().len(), 2);
         assert_eq!(names(&book), ["Opening Credits", "Chapter 2"], "a typed name stays with its start");
+    }
+
+    #[test]
+    fn regrouping_from_names_carries_a_chapter_over_announcements() {
+        let mut book = book(&[&[1, 2, 3], &[4, 5]]);
+        let titles = [["Chapter 1 (1)", "Chapter 1 (2)", "End of Disc One"], ["Disc Two", "Chapter 1 (3)", ""]];
+        for (disc, names) in book.discs.iter_mut().zip(titles) {
+            for (track, title) in disc.tracks.iter_mut().zip(names) {
+                track.title = title.into();
+            }
+        }
+        book.discs[1].tracks[1].title = "Chapter 1 (3)".into();
+        book.discs[1].tracks.truncate(2);
+        book.regroup(Grouping::FromNames);
+        assert_eq!(book.chapters().len(), 1, "one chapter across the discs: {:?}", names(&book));
+        assert_eq!(book.chapters()[0].tracks.len(), 5);
     }
 
     #[test]

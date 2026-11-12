@@ -28,9 +28,16 @@ pub fn state_word(session: &Session) -> String {
     } else if book.ripping_done {
         "ready to build".to_owned()
     } else {
-        let pending = book.unripped_kept().first().map_or(book.discs.len() as u16, |t| t.disc);
-        format!("disc {pending} ready")
+        format!("disc {} ready", disc_to_rip(session, book))
     }
+}
+
+/// The disc Rip Disc rips: the one waited for, or one with tracks not ripped yet.
+fn disc_to_rip(session: &Session, book: &Book) -> u16 {
+    session
+        .audiobook_waiting_for()
+        .or_else(|| book.unripped_kept().first().map(|t| t.disc))
+        .unwrap_or(book.discs.len() as u16)
 }
 
 /// The disc being ripped: the one in the drive.
@@ -100,8 +107,7 @@ fn primary_button(ui: &mut Ui, cx: &mut PanelContext, book: &Book, rect: Rect) {
     } else if cx.session.is_busy(JobKind::RipBookDisc) {
         (format!("Ripping Disc {}…", ripping_disc(cx.session, book)), CommandId::RipDisc)
     } else {
-        let pending = book.unripped_kept().first().map_or(book.discs.len() as u16, |t| t.disc);
-        (format!("Rip Disc {pending}"), CommandId::RipDisc)
+        (format!("Rip Disc {}", disc_to_rip(cx.session, book)), CommandId::RipDisc)
     };
     let enabled = cx.session.is_enabled(command, book_context());
     let sense = if enabled { Sense::click() } else { Sense::hover() };
@@ -128,12 +134,23 @@ fn meta_row(ui: &mut Ui, details: &mut BookDetails, at: egui::Pos2) -> bool {
         *x = rect.right();
         changed
     };
+    let words = |ui: &Ui, x: &mut f32, text: &str| {
+        let galley = ui.painter().layout_no_wrap(text.to_owned(), font.clone(), theme::TEXT_MUTED);
+        let width = galley.size().x;
+        ui.painter().galley(pos2(*x, at.y + 11.0 - galley.size().y / 2.0), galley, theme::TEXT_MUTED);
+        *x += width;
+    };
+    if !details.narrator.trim().is_empty() {
+        words(ui, &mut x, "Narrated by ");
+    }
     changed |= field(ui, &mut x, &mut details.narrator, "Narrator");
     dot(ui, pos2(x + 7.0, at.y + 11.0));
     x += 14.0;
     changed |= field(ui, &mut x, &mut details.series, "Series");
+    // Painted once the fields are drawn, so the number's field does not cover it.
+    let comma_at = x;
+    x += ui.painter().layout_no_wrap(", ".to_owned(), font.clone(), theme::TEXT_MUTED).size().x;
     let mut number = details.series_number.map(|n| n.to_string()).unwrap_or_default();
-    x += 6.0;
     if field(ui, &mut x, &mut number, "No.") {
         details.series_number = number.trim().parse().ok();
         changed = true;
@@ -145,6 +162,8 @@ fn meta_row(ui: &mut Ui, details: &mut BookDetails, at: egui::Pos2) -> bool {
         details.year = year.trim().parse().ok();
         changed = true;
     }
+    let mut comma_x = comma_at;
+    words(ui, &mut comma_x, ",");
     changed
 }
 

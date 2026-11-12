@@ -25,7 +25,10 @@ struct Layout {
 pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
     let rect = ui.max_rect();
     ui.painter().rect_filled(rect, 0.0, theme::LIST_BG);
-    let columns = cx.session.preferences().visible_columns.clone();
+    let mut columns = cx.session.preferences().visible_columns.clone();
+    if cx.view.source == crate::state::SourceItem::Audiobooks {
+        columns = book_columns(columns);
+    }
     let layout =
         layout(&columns, rect.left() + CHECK_WIDTH + PLAYING_WIDTH, rect.width() - CHECK_WIDTH - PLAYING_WIDTH);
 
@@ -91,6 +94,15 @@ fn layout(columns: &[Column], left: f32, width: f32) -> Vec<Layout> {
             placed
         })
         .collect()
+}
+
+/// Among audiobooks the album is the book's title again; the narrator (in Composer) says more.
+fn book_columns(columns: Vec<tunebox_engine::model::Column>) -> Vec<tunebox_engine::model::Column> {
+    use tunebox_engine::model::Column;
+    if columns.contains(&Column::Composer) {
+        return columns;
+    }
+    columns.into_iter().map(|c| if c == Column::Album { Column::Composer } else { c }).collect()
 }
 
 /// A column's heading. Among audiobooks the artist is the author, and the composer the narrator

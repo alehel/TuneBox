@@ -229,6 +229,8 @@ fn audiobook_insert_disc(app: &mut TuneBoxApp) {
     if app.session.audiobook().is_some_and(|b| b.ripping_done) {
         let _ = app.session.resume_audiobook_ripping();
     }
+    // The demo's music CD out of the way: the book asks only about discs it might want.
+    app.session.eject_disc();
     app.view.select_source(SourceItem::Book);
 }
 

@@ -228,6 +228,13 @@ impl Session {
         self.save_audiobook(false);
     }
 
+    /// The disc a question was about is gone: so is the question.
+    pub(crate) fn forget_audiobook_question(&mut self) {
+        if let Some(state) = self.audiobook.as_mut() {
+            state.question = None;
+        }
+    }
+
     fn ask(&mut self, question: DiscQuestion) {
         if let Some(state) = self.audiobook.as_mut() {
             state.question = Some(question);

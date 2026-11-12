@@ -13,12 +13,14 @@ use tunebox_engine::commands::CommandId;
 use tunebox_engine::model::TrackId;
 
 const ITEM_HEIGHT: f32 = 26.0;
+/// A row with a line of state beneath its name.
+const SUB_ITEM_HEIGHT: f32 = 38.0;
 
 /// Something a source-list row can do or show besides being selected.
 enum RowExtra {
     None,
     Eject,
-    /// Indented under the row above, with a word on its state at the right.
+    /// Indented under the row above, with a line on its state beneath its name.
     Sub(String),
 }
 
@@ -106,7 +108,8 @@ fn item(
     label: &str,
     extra: RowExtra,
 ) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ITEM_HEIGHT), Sense::click());
+    let height = if matches!(extra, RowExtra::Sub(_)) { SUB_ITEM_HEIGHT } else { ITEM_HEIGHT };
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
     let pill = rect.shrink2(vec2(7.0, 1.5));
     let selected = cx.view.source == source;
     let dropping = response.dnd_hover_payload::<Vec<TrackId>>().is_some();
@@ -123,15 +126,14 @@ fn item(
     let indent = if matches!(extra, RowExtra::Sub(_)) { 16.0 } else { 0.0 };
     let icon = Rect::from_center_size(pos2(pill.left() + 17.0 + indent, rect.center().y), vec2(13.0, 13.0));
     glyphs::paint(painter, icon, glyph, icon_color);
-    let mut text_width = pill.width() - 56.0 - indent;
+    let text_width = pill.width() - 44.0 - indent;
+    let mut text_at = pos2(pill.left() + 34.0 + indent, rect.center().y);
     if let RowExtra::Sub(note) = &extra {
         let muted = if selected { Color32::from_white_alpha(200) } else { theme::TEXT_MUTED };
-        let at = pos2(pill.right() - 8.0, rect.center().y);
-        let galley = painter.layout_no_wrap(note.clone(), egui::FontId::proportional(theme::SMALL), muted);
-        text_width = (text_width - galley.size().x - 4.0).max(30.0);
-        painter.galley(at - vec2(galley.size().x, galley.size().y / 2.0), galley, muted);
+        text_at.y -= 7.0;
+        let note_at = pos2(text_at.x, rect.center().y + 8.0);
+        theme::text_in_row(painter, note_at, note, theme::SMALL, muted, text_width);
     }
-    let text_at = pos2(pill.left() + 34.0 + indent, rect.center().y);
     theme::text_in_row(painter, text_at, label, theme::BODY, text_color, text_width);
 
     if let RowExtra::Eject = extra {

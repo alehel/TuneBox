@@ -169,7 +169,11 @@ impl TuneBoxApp {
         if self.dialog.is_some() {
             return;
         }
-        if let Some(question) = self.session.audiobook_question() {
+        // On the book's page only: a music CD put in while a book waits is no business of the
+        // other pages. The source list says there is a disc to check.
+        if self.view.source == SourceItem::Book
+            && let Some(question) = self.session.audiobook_question()
+        {
             self.dialog = Some(Dialog::DiscQuestion(DiscQuestionDialog { question: question.clone() }));
             return;
         }
