@@ -1,5 +1,6 @@
 //! Dialogs. One is open at a time; each edits a draft and turns it into actions on OK.
 
+mod audiobook;
 mod extra_fields;
 mod find_artwork;
 mod get_info;
@@ -8,7 +9,9 @@ mod preferences;
 mod rename_files;
 mod simple;
 mod smart_playlist;
+mod trim;
 
+pub use audiobook::{BuildAudiobook, ConfirmFinish, DiscQuestionDialog, InsertDisc, StartAudiobook};
 pub use find_artwork::FindArtworkDialog;
 pub use get_info::GetInfoDialog;
 pub use preferences::{PreferencesDialog, Tab as PreferencesTab};
@@ -16,6 +19,7 @@ pub use rename_files::RenameFilesDialog;
 pub(crate) use simple::player_choice;
 pub use simple::{ConfirmLocate, ConfirmRefresh, ConfirmRemove, RenamePlaylist, SetUpDrive};
 pub use smart_playlist::SmartPlaylistDialog;
+pub use trim::TrimDialog;
 
 use crate::actions::Action;
 use crate::artwork::ArtworkCache;
@@ -35,6 +39,14 @@ pub enum Dialog {
     ConfirmLocate(ConfirmLocate),
     SetUpDrive(SetUpDrive),
     About,
+    StartAudiobook(Box<StartAudiobook>),
+    InsertDisc(InsertDisc),
+    DiscQuestion(DiscQuestionDialog),
+    BuildAudiobook(Box<BuildAudiobook>),
+    ConfirmFinish(ConfirmFinish),
+    ConfirmDiscard,
+    BookShortcuts,
+    Trim(Box<TrimDialog>),
 }
 
 impl Dialog {
@@ -62,6 +74,14 @@ impl Dialog {
             Dialog::ConfirmLocate(dialog) => dialog.show(ctx, actions),
             Dialog::SetUpDrive(dialog) => dialog.show(ctx, session, actions),
             Dialog::About => simple::about(ctx),
+            Dialog::StartAudiobook(dialog) => dialog.show(ctx, actions),
+            Dialog::InsertDisc(dialog) => dialog.show(ctx, session, actions),
+            Dialog::DiscQuestion(dialog) => dialog.show(ctx, session, actions),
+            Dialog::BuildAudiobook(dialog) => dialog.show(ctx, session, actions),
+            Dialog::ConfirmFinish(dialog) => dialog.show(ctx, actions),
+            Dialog::ConfirmDiscard => audiobook::confirm_discard(ctx, actions),
+            Dialog::BookShortcuts => audiobook::shortcuts_sheet(ctx),
+            Dialog::Trim(dialog) => dialog.show(ctx, actions),
         }
     }
 }

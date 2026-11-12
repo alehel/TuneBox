@@ -93,6 +93,17 @@ fn layout(columns: &[Column], left: f32, width: f32) -> Vec<Layout> {
         .collect()
 }
 
+/// A column's heading. Among audiobooks the artist is the author, and the composer the narrator
+/// (where audiobooks keep it).
+fn heading(column: tunebox_engine::model::Column, source: &crate::state::SourceItem) -> &'static str {
+    use tunebox_engine::model::Column;
+    match (column, source) {
+        (Column::Artist, crate::state::SourceItem::Audiobooks) => "Author",
+        (Column::Composer, crate::state::SourceItem::Audiobooks) => "Narrator",
+        (column, _) => column.title(),
+    }
+}
+
 fn header_row(ui: &mut Ui, rect: Rect, layout: &[Layout], cx: &mut PanelContext) {
     let painter = ui.painter();
     theme::vertical_gradient(painter, rect, theme::HEADER_TOP, theme::HEADER_BOTTOM);
@@ -115,7 +126,8 @@ fn header_row(ui: &mut Ui, rect: Rect, layout: &[Layout], cx: &mut PanelContext)
         let color = if sorted.is_some() { theme::ACCENT } else { theme::TEXT_MUTED };
         let title_left = pos2(cell_rect.left() + 8.0, cell_rect.center().y);
         let room = if sorted.is_some() { 28.0 } else { 12.0 };
-        theme::text_in_row(painter, title_left, cell.column.title(), theme::SMALL + 0.5, color, cell.width - room);
+        let title = heading(cell.column, &cx.view.source);
+        theme::text_in_row(painter, title_left, title, theme::SMALL + 0.5, color, cell.width - room);
         if let Some(order) = sorted {
             sort_arrow(painter, pos2(cell_rect.right() - 11.0, cell_rect.center().y), order);
         }

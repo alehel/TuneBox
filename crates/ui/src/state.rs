@@ -11,19 +11,25 @@ use tunebox_engine::{BrowseFilter, Browser, Session, Source, Summary, TrackQuery
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SourceItem {
     Music,
+    /// The audiobooks in the library.
+    Audiobooks,
+    /// The audiobook being ripped and edited.
+    Book,
     Playlist(PlaylistId),
     Device(PathBuf),
     Cd,
 }
 
 impl SourceItem {
-    /// The engine source behind this entry. The CD has none: its tracks are not in the library.
+    /// The engine source behind this entry. The CD and the book in progress have none: their
+    /// tracks are not in the library.
     pub fn source(&self) -> Option<Source> {
         match self {
             SourceItem::Music => Some(Source::Music),
+            SourceItem::Audiobooks => Some(Source::Audiobooks),
             SourceItem::Playlist(id) => Some(Source::Playlist(*id)),
             SourceItem::Device(root) => Some(Source::Device(root.clone())),
-            SourceItem::Cd => None,
+            SourceItem::Cd | SourceItem::Book => None,
         }
     }
 }
@@ -122,7 +128,11 @@ pub struct ViewState {
     pub full_screen: FullScreen,
     /// Set to move keyboard focus to the search field on the next frame.
     pub focus_search: bool,
+    /// The audiobook page: its selection, folded chapters, a name being typed.
+    pub book: crate::book_state::BookView,
     key: Option<RowsKey>,
+    /// Whether the library holds audiobooks, at the session revision it was counted.
+    audiobooks: std::cell::Cell<Option<(u64, bool)>>,
     rows: Vec<TrackId>,
     browser: Browser,
     summary: Summary,
@@ -141,7 +151,9 @@ impl ViewState {
             show_visualizer: false,
             full_screen: FullScreen::default(),
             focus_search: false,
+            book: crate::book_state::BookView::default(),
             key: None,
+            audiobooks: std::cell::Cell::new(None),
             rows: Vec::new(),
             browser: Browser::default(),
             summary: Summary::default(),
@@ -171,6 +183,19 @@ impl ViewState {
         self.browser = session.browser(&key.query);
         self.summary = session.summary(&self.rows);
         self.key = Some(key);
+    }
+
+    /// Whether the library holds audiobooks (counted again only when the library changed).
+    pub fn has_audiobooks(&self, session: &Session) -> bool {
+        let revision = session.revision();
+        if let Some((counted, has)) = self.audiobooks.get()
+            && counted == revision
+        {
+            return has;
+        }
+        let has = session.library().tracks().any(|t| t.kind == tunebox_engine::model::MediaKind::Audiobook);
+        self.audiobooks.set(Some((revision, has)));
+        has
     }
 
     pub fn rows(&self) -> &[TrackId] {

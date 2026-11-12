@@ -74,6 +74,22 @@ impl PlaybackState {
         self.playing_path = None;
         self.next_sent = None;
     }
+
+    /// Plays `path` from `from`, outside the queue: an audiobook's staged track, heard while
+    /// editing. Its events are ignored, as for any file the queue did not load.
+    pub(crate) fn play_file_from(&mut self, path: PathBuf, from: Duration, then: Option<PathBuf>) {
+        self.stop();
+        self.player.load(path, true);
+        self.player.seek(from);
+        // Straight on into the next file, from its start, as gapless playback does.
+        self.player.set_next(then);
+    }
+
+    /// Where the player is, and in which file.
+    pub(crate) fn position(&self) -> (Option<PathBuf>, Duration, PlayState) {
+        let status = self.player.status();
+        (status.path, status.position, status.state)
+    }
 }
 
 fn shuffle_seed() -> u64 {

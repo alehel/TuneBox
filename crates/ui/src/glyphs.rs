@@ -19,6 +19,8 @@ pub enum Glyph {
     Plus,
     Artwork,
     Note,
+    /// An open book: audiobooks.
+    Book,
     Disc,
     Player,
     Playlist,
@@ -78,6 +80,16 @@ pub fn paint(painter: &Painter, rect: Rect, glyph: Glyph, color: Color32) {
             triangle(painter, [r.at(0.5, 0.74), r.at(0.66, 0.54), r.at(0.8, 0.74)], color);
         }
         Glyph::Note => note(painter, &r, color),
+        Glyph::Book => {
+            // Two pages, rising to the spine.
+            for (outer, inner) in [(0.06, 0.47), (0.94, 0.53)] {
+                painter.add(Shape::convex_polygon(
+                    vec![r.at(outer, 0.2), r.at(inner, 0.28), r.at(inner, 0.9), r.at(outer, 0.8)],
+                    color,
+                    Stroke::NONE,
+                ));
+            }
+        }
         Glyph::Disc => {
             // A ring and a hub, so the disc reads in any colour (white on a selection too).
             painter.circle_stroke(r.at(0.5, 0.5), r.size * 0.32, Stroke::new(r.size * 0.2, color));

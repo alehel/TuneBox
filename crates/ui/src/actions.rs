@@ -7,6 +7,7 @@ use crate::state::SourceItem;
 use std::path::PathBuf;
 use std::time::Duration;
 use tunebox_engine::commands::CommandId;
+use tunebox_engine::model::audiobook::{BookDetails, OutputSettings, TrackRef, Trim};
 use tunebox_engine::model::{Column, PlaylistId, Rating, SmartRules, TrackId, TrackMeta};
 use tunebox_engine::{DiscInfo, JobId, LibraryOnlyEdits, Notice, Preferences, SyncSettings};
 
@@ -81,4 +82,29 @@ pub enum Action {
         name: String,
         rules: SmartRules,
     },
+    /// Start an audiobook from the disc in the drive, with these details.
+    StartAudiobook(Box<BookDetails>),
+    SetBookDetails(Box<BookDetails>),
+    /// Name the chapter starting at this track (empty: back to "Chapter N").
+    RenameChapter(TrackRef, String),
+    /// Leave these tracks out of the book (`true`), or put them back.
+    SetBookTracksRemoved(Vec<TrackRef>, bool),
+    TrimBookTrack(TrackRef, Trim),
+    AcceptBookSuggestions(Vec<TrackRef>),
+    /// Play samples `from..to` of a ripped track of the book.
+    PreviewBook {
+        track: TrackRef,
+        from: u64,
+        to: u64,
+    },
+    StopBookPreview,
+    /// Build the book with these settings.
+    BuildAudiobook(OutputSettings),
+    /// The disc that may not belong: use it (`true`) or eject it.
+    AnswerDiscQuestion(bool),
+    /// That was the last disc; `anyway` when MusicBrainz lists more and the listener confirmed.
+    FinishRipping {
+        anyway: bool,
+    },
+    DiscardAudiobook,
 }

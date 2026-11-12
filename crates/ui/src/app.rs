@@ -12,7 +12,8 @@ use crate::full_screen::{self, Effect, WindowBefore};
 use crate::library_watch::LibraryWatch;
 use crate::panels::toasts::Toasts;
 use crate::panels::{
-    PanelContext, album_grid, browser, cd_view, device_view, menu_bar, sidebar, status_bar, toolbar, track_list,
+    PanelContext, album_grid, book_view, browser, cd_view, device_view, menu_bar, sidebar, status_bar, toolbar,
+    track_list,
 };
 use crate::screenshots::ScreenshotRunner;
 use crate::state::{SourceItem, ViewMode, ViewState};
@@ -73,6 +74,10 @@ pub struct TuneBoxApp {
     last_device_scan: Option<Instant>,
     #[cfg(feature = "drives")]
     last_disc_scan: Option<Instant>,
+    /// A disc of the audiobook was being ripped last frame.
+    book_ripping: bool,
+    /// …and has just finished: the book page comes up to ask for the next disc.
+    pub(crate) book_rip_just_ended: bool,
 }
 
 impl TuneBoxApp {
@@ -103,6 +108,8 @@ impl TuneBoxApp {
             last_device_scan: None,
             #[cfg(feature = "drives")]
             last_disc_scan: None,
+            book_ripping: false,
+            book_rip_just_ended: false,
         }
     }
 
@@ -116,6 +123,11 @@ impl TuneBoxApp {
             self.toasts.push(notice);
         }
         self.session.tick();
+        let ripping = self.session.is_busy(tunebox_engine::JobKind::RipBookDisc);
+        if self.book_ripping && !ripping {
+            self.book_rip_just_ended = true;
+        }
+        self.book_ripping = ripping;
         for notice in self.session.take_notices() {
             self.toasts.push(notice);
         }
@@ -152,7 +164,8 @@ impl TuneBoxApp {
             SourceItem::Cd => self.session.cd().is_none(),
             SourceItem::Device(root) => self.session.device(root).is_none(),
             SourceItem::Playlist(id) => self.session.library().playlist(*id).is_none(),
-            SourceItem::Music => false,
+            SourceItem::Book => self.session.audiobook().is_none(),
+            SourceItem::Music | SourceItem::Audiobooks => false,
         };
         if gone {
             self.view.select_source(SourceItem::Music);
@@ -228,13 +241,19 @@ impl TuneBoxApp {
                 .count(),
             device_selected: matches!(&self.view.source, SourceItem::Device(root) if self.session.device(root).is_some_and(|d| d.device.is_some())),
             cd_selected: self.view.source == SourceItem::Cd,
+            book_page: self.view.source == SourceItem::Book,
+            book_selection: self.view.book.selected().len(),
         }
     }
 
-    fn report(&mut self, result: Result<impl Sized, EngineError>) {
+    pub(crate) fn report(&mut self, result: Result<impl Sized, EngineError>) {
         if let Err(e) = result {
             self.toasts.push(Notice::error(e.to_string()));
         }
+    }
+
+    pub(crate) fn notify(&mut self, notice: Notice) {
+        self.toasts.push(notice);
     }
 
     // ----- applying actions -----
@@ -339,6 +358,18 @@ impl TuneBoxApp {
                 self.report(result);
             }
             Action::SaveSmartPlaylist { id, name, rules } => self.save_smart_playlist(id, &name, rules),
+            book @ (Action::StartAudiobook(_)
+            | Action::SetBookDetails(_)
+            | Action::RenameChapter(..)
+            | Action::SetBookTracksRemoved(..)
+            | Action::TrimBookTrack(..)
+            | Action::AcceptBookSuggestions(_)
+            | Action::PreviewBook { .. }
+            | Action::StopBookPreview
+            | Action::BuildAudiobook(_)
+            | Action::AnswerDiscQuestion(_)
+            | Action::FinishRipping { .. }
+            | Action::DiscardAudiobook) => self.apply_book(book),
         }
     }
 
@@ -401,6 +432,7 @@ impl TuneBoxApp {
                     self.show_in_folder(id);
                 }
             }
+            CommandId::SelectAll if self.view.source == SourceItem::Book => self.select_all_book(),
             CommandId::SelectAll => {
                 let rows = self.view.rows().to_vec();
                 self.view.selection.select_all(&rows);
@@ -437,6 +469,7 @@ impl TuneBoxApp {
             CommandId::FullScreenVisualizer => self.enter_full_screen(),
             CommandId::ReloadVisualizerPlugins => self.session.reload_visualizer_plugins(true),
             CommandId::ShowVisualizerPluginsFolder => self.show_visualizer_plugins_folder(),
+            CommandId::PlayPause if self.view.source == SourceItem::Book => self.play_pause_book(),
             CommandId::PlayPause => self.play_pause(),
             CommandId::NextTrack => self.session.next_track(),
             CommandId::PreviousTrack => self.session.previous_track(),
@@ -451,6 +484,32 @@ impl TuneBoxApp {
             CommandId::About => self.dialog = Some(Dialog::About),
             CommandId::SetUpDrive => self.dialog = Some(Dialog::SetUpDrive(SetUpDrive::new(&self.session))),
             CommandId::Quit => self.ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            CommandId::ImportAsAudiobook
+            | CommandId::RipDisc
+            | CommandId::FinishRipping
+            | CommandId::BuildAudiobook
+            | CommandId::SplitChapter
+            | CommandId::JoinChapters
+            | CommandId::RenameChapter
+            | CommandId::RemoveFromBook
+            | CommandId::TrimTrack
+            | CommandId::AcceptSuggestion
+            | CommandId::AcceptAllSuggestions
+            | CommandId::PlayAcrossStart
+            | CommandId::PlayEnd
+            | CommandId::UndoBookEdit
+            | CommandId::RedoBookEdit
+            | CommandId::PreviousChapter
+            | CommandId::NextChapter
+            | CommandId::FoldChapter
+            | CommandId::UnfoldChapter
+            | CommandId::FoldAllChapters
+            | CommandId::UnfoldAllChapters
+            | CommandId::GroupPerDisc
+            | CommandId::GroupPerTrack
+            | CommandId::GroupFromNames
+            | CommandId::AudiobookShortcuts
+            | CommandId::DiscardAudiobook => self.run_book(id),
         }
     }
 
@@ -625,11 +684,11 @@ impl TuneBoxApp {
                     self.toasts.push(Notice::info("Smart playlists choose their own songs. Edit its rules instead."));
                 }
             }
-            SourceItem::Music => {
+            SourceItem::Music | SourceItem::Audiobooks => {
                 let tracks = self.view.selected_tracks();
                 self.dialog = Some(Dialog::ConfirmRemove(ConfirmRemove { tracks, delete_files: false }));
             }
-            SourceItem::Device(_) | SourceItem::Cd => {}
+            SourceItem::Device(_) | SourceItem::Cd | SourceItem::Book => {}
         }
     }
 }
@@ -639,9 +698,11 @@ impl eframe::App for TuneBoxApp {
         self.housekeeping();
         self.track_full_screen();
         self.view.refresh(&self.session);
+        self.follow_book();
         let mut actions = Vec::new();
+        let book_page = self.view.source == SourceItem::Book;
         if self.dialog.is_none()
-            && let Some(id) = shortcuts::pressed(&self.ctx)
+            && let Some(id) = shortcuts::pressed(&self.ctx, book_page)
         {
             actions.push(Action::Run(id));
         }
@@ -724,8 +785,9 @@ fn central(ui: &mut egui::Ui, cx: &mut PanelContext, visualizer: &mut Visualizer
     let rect = ui.max_rect();
     match cx.view.source.clone() {
         SourceItem::Cd => cd_view::show(ui, cx),
+        SourceItem::Book => book_view::show(ui, cx),
         SourceItem::Device(root) => device_view::show(ui, cx, &root),
-        SourceItem::Music | SourceItem::Playlist(_) => {
+        SourceItem::Music | SourceItem::Audiobooks | SourceItem::Playlist(_) => {
             let show_browser = cx.session.preferences().show_browser && cx.view.view_mode == ViewMode::List;
             let browser_height = if show_browser { browser::HEIGHT } else { 0.0 };
             if show_browser {

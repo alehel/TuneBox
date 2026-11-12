@@ -48,7 +48,7 @@ mod visualizer_plugins;
 mod watch;
 
 pub use album_artwork::{ArtworkSearch, CoverCandidate, SearchState, Thumbnail};
-pub use audiobook::DiscQuestion;
+pub use audiobook::{DiscQuestion, Preview};
 pub use cd::CdState;
 pub use devices::{DeviceEntry, find_mtp_players};
 pub use disc_cover::DiscCover;

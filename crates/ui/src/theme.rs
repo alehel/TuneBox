@@ -33,6 +33,7 @@ pub const SELECTION_BOTTOM: Color32 = Color32::from_rgb(0x2D, 0x6F, 0xD6);
 pub const ICON_LIBRARY: Color32 = Color32::from_rgb(0x2F, 0x7C, 0xE8);
 pub const ICON_DEVICE: Color32 = Color32::from_rgb(0x4A, 0x52, 0x5C);
 pub const ICON_DISC: Color32 = Color32::from_rgb(0x2A, 0x9D, 0x8F);
+pub const ICON_BOOK: Color32 = Color32::from_rgb(0xC0, 0x71, 0x2F);
 pub const ICON_SMART: Color32 = Color32::from_rgb(0x8E, 0x5C, 0xD9);
 pub const ICON_PLAYLIST: Color32 = Color32::from_rgb(0x5B, 0x67, 0x76);
 

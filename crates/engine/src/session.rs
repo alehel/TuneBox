@@ -99,6 +99,8 @@ pub struct Session {
     pub(crate) cd: Option<CdState>,
     /// The audiobook being ripped and edited, if any.
     pub(crate) audiobook: Option<crate::audiobook::AudiobookState>,
+    /// A stretch of the book's staged audio being played.
+    pub(crate) preview: Option<crate::audiobook::PreviewRun>,
     pub(crate) notices: Vec<Notice>,
     /// When the library first changed since it was last saved.
     unsaved_since: Option<Instant>,
@@ -162,6 +164,7 @@ impl Session {
             unsaved_devices: Vec::new(),
             cd: None,
             audiobook: None,
+            preview: None,
             notices,
             unsaved_since: None,
             revision: 0,
@@ -262,6 +265,7 @@ impl Session {
         self.act_on_folder_changes();
         self.follow_file_checks();
         self.follow_player();
+        self.follow_audiobook_preview();
         if self.unsaved_since.is_some_and(|since| since.elapsed() >= AUTOSAVE_DELAY)
             && let Err(e) = self.save()
         {

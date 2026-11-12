@@ -8,7 +8,7 @@ use tunebox_engine::commands::{COMMANDS, CommandId, Context, Menu};
 
 pub fn show(ui: &mut egui::Ui, cx: &mut PanelContext, context: Context) {
     egui::MenuBar::new().ui(ui, |ui| {
-        for menu in Menu::ALL {
+        for menu in Menu::ALL.into_iter().filter(|m| m.is_shown(context)) {
             ui.menu_button(menu.title(), |ui| {
                 ui.set_min_width(220.0);
                 for spec in COMMANDS.iter().filter(|c| c.menu == menu) {

@@ -245,3 +245,53 @@ fn building_into_a_read_only_media_folder_is_refused() {
     session.set_preferences(prefs);
     assert!(matches!(session.build_audiobook(), Err(EngineError::Protected(_))));
 }
+
+#[test]
+fn a_stretch_of_a_ripped_track_plays_and_stops_by_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = open(dir.path());
+    let changer = Arc::new(VirtualChanger::new("Changer"));
+    insert(&mut session, &changer, VirtualDrive::new("Disc 1", vec![3, 2]));
+    session.start_audiobook(details()).unwrap();
+    assert!(session.preview_audiobook(t(1, 1), 0, 44_100).is_err(), "not ripped yet");
+    assert!(session.can_rip_audiobook_disc());
+    rip(&mut session);
+    assert!(!session.can_rip_audiobook_disc(), "ripped and ejected");
+
+    // The waveform of the first second: the virtual disc's tone, quiet but there.
+    let peaks = session.audiobook_waveform(t(1, 1), 0, 44_100, 20).unwrap();
+    assert_eq!(peaks.len(), 20);
+    assert!(peaks.iter().all(|p| *p > 0.01 && *p < 0.5), "{peaks:?}");
+
+    // A quarter of a second from the end of track 1 plays, then stops by itself.
+    session.preview_audiobook(t(1, 1), 3 * 44_100 - 11_025, 3 * 44_100).unwrap();
+    let preview = session.audiobook_preview().unwrap();
+    assert_eq!(preview.track, t(1, 1));
+    assert_eq!(preview.to, Duration::from_secs(3));
+    tick_until(&mut session, |s| s.audiobook_preview().is_none());
+    assert!(session.now_playing().is_none());
+}
+
+#[test]
+fn play_across_start_plays_the_join_and_play_end_the_end() {
+    let dir = tempfile::tempdir().unwrap();
+    // Faster than real time, so the test does not wait out the seconds.
+    let mut session = Session::open(paths_in(dir.path()), Player::with_output(NullOutput { speed: 20.0 })).unwrap();
+    let changer = Arc::new(VirtualChanger::new("Changer"));
+    insert(&mut session, &changer, VirtualDrive::new("Disc 1", vec![6, 5]));
+    session.start_audiobook(details()).unwrap();
+    rip(&mut session);
+
+    session.preview_audiobook_across(t(1, 2)).unwrap();
+    let preview = session.audiobook_preview().unwrap();
+    assert_eq!((preview.track, preview.from), (t(1, 2), Duration::from_secs(2)), "the last 4 s of 1:1");
+    tick_until(&mut session, |s| s.audiobook_preview().is_none());
+
+    session.preview_audiobook_end(t(1, 2)).unwrap();
+    assert_eq!(session.audiobook_preview().unwrap().to, Duration::from_secs(5));
+    session.stop_audiobook_preview();
+    assert!(session.audiobook_preview().is_none());
+    // The book's first track has nothing before it: its start plays.
+    session.preview_audiobook_across(t(1, 1)).unwrap();
+    assert_eq!(session.audiobook_preview().unwrap().from, Duration::ZERO);
+}

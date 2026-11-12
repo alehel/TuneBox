@@ -2,6 +2,9 @@
 //! queues [`Action`]s; none of them changes the session itself.
 
 pub mod album_grid;
+pub mod album_header;
+pub mod book_header;
+pub mod book_view;
 pub mod browser;
 pub mod cd_header;
 pub mod cd_view;

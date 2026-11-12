@@ -88,6 +88,14 @@ impl Session {
         Ok(())
     }
 
+    /// Whether Rip Disc can run: the disc in the drive is in the book with tracks not ripped, and
+    /// nothing else is ripping.
+    pub fn can_rip_audiobook_disc(&self) -> bool {
+        let (Some(book), Some(cd)) = (self.audiobook(), self.cd.as_ref()) else { return false };
+        let rippable = matches!(book.check_disc(&cd.disc_id), DiscCheck::InBook { missing, .. } if !missing.is_empty());
+        rippable && !self.jobs.is_running(JobKind::RipBookDisc) && !self.jobs.is_running(JobKind::Rip)
+    }
+
     /// Rips the disc in the drive into the book: every track of it not ripped yet. Ejects it
     /// when done.
     pub fn rip_audiobook_disc(&mut self) -> Result<JobId, EngineError> {

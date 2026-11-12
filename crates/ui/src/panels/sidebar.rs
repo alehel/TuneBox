@@ -1,4 +1,5 @@
-//! The source list: Library, Devices and Playlists, and the artwork pane below them.
+//! The source list: Library (Music, Audiobooks and the book in progress), Devices and
+//! Playlists, and the artwork pane below them.
 
 use crate::actions::Action;
 use crate::artwork;
@@ -13,10 +14,12 @@ use tunebox_engine::model::TrackId;
 
 const ITEM_HEIGHT: f32 = 26.0;
 
-/// Something a source-list row can do besides being selected.
+/// Something a source-list row can do or show besides being selected.
 enum RowExtra {
     None,
     Eject,
+    /// Indented under the row above, with a word on its state at the right.
+    Sub(String),
 }
 
 pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
@@ -46,6 +49,15 @@ pub fn show(ui: &mut Ui, cx: &mut PanelContext) {
 fn sources(ui: &mut Ui, cx: &mut PanelContext) {
     heading(ui, "LIBRARY");
     item(ui, cx, SourceItem::Music, (Glyph::Note, theme::ICON_LIBRARY), "Music", RowExtra::None);
+    let book = cx.session.audiobook().map(|b| b.details.title.clone());
+    if book.is_some() || cx.view.has_audiobooks(cx.session) {
+        item(ui, cx, SourceItem::Audiobooks, (Glyph::Book, theme::ICON_BOOK), "Audiobooks", RowExtra::None);
+    }
+    if let Some(title) = book {
+        let state = crate::panels::book_header::state_word(cx.session);
+        let title = if title.trim().is_empty() { "Untitled Audiobook".to_owned() } else { title };
+        item(ui, cx, SourceItem::Book, (Glyph::Disc, theme::ICON_BOOK), &title, RowExtra::Sub(state));
+    }
 
     let devices: Vec<(SourceItem, String)> =
         cx.session.devices().iter().map(|d| (SourceItem::Device(d.volume.root.clone()), d.name().to_owned())).collect();
@@ -108,10 +120,19 @@ fn item(
         painter.rect_filled(pill, 6.0, theme::SIDEBAR_HOVER);
     }
     let (text_color, icon_color) = if selected { (Color32::WHITE, Color32::WHITE) } else { (theme::TEXT, icon_color) };
-    let icon = Rect::from_center_size(pos2(pill.left() + 17.0, rect.center().y), vec2(15.0, 15.0));
+    let indent = if matches!(extra, RowExtra::Sub(_)) { 16.0 } else { 0.0 };
+    let icon = Rect::from_center_size(pos2(pill.left() + 17.0 + indent, rect.center().y), vec2(13.0, 13.0));
     glyphs::paint(painter, icon, glyph, icon_color);
-    let text_width = pill.width() - 56.0;
-    theme::text_in_row(painter, pos2(pill.left() + 34.0, rect.center().y), label, theme::BODY, text_color, text_width);
+    let mut text_width = pill.width() - 56.0 - indent;
+    if let RowExtra::Sub(note) = &extra {
+        let muted = if selected { Color32::from_white_alpha(200) } else { theme::TEXT_MUTED };
+        let at = pos2(pill.right() - 8.0, rect.center().y);
+        let galley = painter.layout_no_wrap(note.clone(), egui::FontId::proportional(theme::SMALL), muted);
+        text_width = (text_width - galley.size().x - 4.0).max(30.0);
+        painter.galley(at - vec2(galley.size().x, galley.size().y / 2.0), galley, muted);
+    }
+    let text_at = pos2(pill.left() + 34.0 + indent, rect.center().y);
+    theme::text_in_row(painter, text_at, label, theme::BODY, text_color, text_width);
 
     if let RowExtra::Eject = extra {
         let eject = Rect::from_center_size(pos2(pill.right() - 14.0, rect.center().y), vec2(11.0, 11.0));

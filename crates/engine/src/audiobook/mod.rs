@@ -14,9 +14,12 @@
 
 mod building;
 mod discs;
+mod preview;
 mod project;
 
 pub use discs::DiscQuestion;
+pub use preview::Preview;
+pub(crate) use preview::PreviewRun;
 
 use crate::EngineError;
 use crate::cd::CdState;
@@ -84,6 +87,16 @@ impl Session {
     /// The question about the disc in the drive, if it needs the listener's word.
     pub fn audiobook_question(&self) -> Option<&DiscQuestion> {
         self.audiobook.as_ref()?.question.as_ref()
+    }
+
+    /// Whether an edit of the book can be undone.
+    pub fn can_undo_audiobook(&self) -> bool {
+        self.audiobook.as_ref().is_some_and(|a| a.history.can_undo())
+    }
+
+    /// Whether an undone edit can be redone.
+    pub fn can_redo_audiobook(&self) -> bool {
+        self.audiobook.as_ref().is_some_and(|a| a.history.can_redo())
     }
 
     /// The suggested edits (likely announcements, proposed cuts).

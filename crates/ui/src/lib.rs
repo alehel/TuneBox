@@ -2,7 +2,8 @@
 //!
 //! The window is a source list on the left (library, devices, playlists), a toolbar with the
 //! transport controls and status display on top, and the selected source in the middle: the
-//! track list (with the column browser) or album grid, the CD page or a player's page.
+//! track list (with the column browser) or album grid, the CD page, the page of the audiobook
+//! being ripped, or a player's page.
 //!
 //! Everything shown is read from the engine's [`Session`](tunebox_engine::Session); everything
 //! the listener does becomes an [`actions::Action`], applied after the frame is drawn.
@@ -19,6 +20,8 @@
 mod actions;
 mod app;
 mod artwork;
+mod book_commands;
+mod book_state;
 mod demo;
 mod demo_web;
 mod dialogs;
