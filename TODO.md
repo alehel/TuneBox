@@ -88,9 +88,10 @@ The biggest risk: these parts are built but have never run where it counts.
 - [ ] Test and copy: read each track twice and re-read on a mismatch.
 - [ ] Audiobooks from several CDs: chapters across discs, eject and ask for the next disc,
       one chaptered `.m4b` or a file per chapter ([docs/audiobooks.md](docs/audiobooks.md)).
-      Phase 1 is built: the engine and `tunebox-cli audiobook`, tested with virtual discs in
-      `crates/engine/tests/audiobook.rs`. Left: the app's page and shortcuts (phase 2), a free
-      space check, trying real discs and players.
+      Built: the engine, `tunebox-cli audiobook` and the app's page with its shortcuts, tested
+      with virtual discs (`crates/engine/tests/audiobook.rs`) and seen in screenshots. Left: a
+      free space check, trying real discs, a real mouse and keyboard on the page, and players
+      reading the chapters; then listening (resume, chapters in playback).
 - [ ] Play a CD directly.
 - [x] Cover art from the Cover Art Archive: Get CD Cover (or an opt-in setting) on the CD page,
       Find Album Artwork… for library albums, `tunebox-cli artwork find/fetch` and

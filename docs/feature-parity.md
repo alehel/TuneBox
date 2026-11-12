@@ -68,7 +68,7 @@ radio and sharing are out of scope.
 | Edit names before importing | Shipped | |
 | Import CD (choose tracks) | Shipped | FLAC, WAV or AIFF; tagged; atomic per track |
 | Lossy encoders (AAC, MP3) | Partial | craft-audio's AAC encoder is used for audiobooks; AAC and Apple Lossless as CD import formats are planned; MP3 waits for an encoder |
-| Audiobooks from several CDs | Partial | Engine and `tunebox-cli audiobook`: discs ripped in turn and ejected, chapters across discs, removed tracks, trims, suggestions, one chaptered `.m4b` (AAC or Apple Lossless) or a file per chapter; an Audiobooks source. The app's book page is not built yet ([plan](audiobooks.md)) |
+| Audiobooks from several CDs | Partial | Engine and `tunebox-cli audiobook`: discs ripped in turn and ejected, chapters across discs, removed tracks, trims, suggestions, one chaptered `.m4b` (AAC or Apple Lossless) or a file per chapter; Audiobooks under Music; the book's page with keyboard editing and a trim editor ([plan](audiobooks.md)). Not yet tried with real discs |
 | Error correction / secure ripping | Partial | cd-da-reader retries failed reads; drive read offset correction (a manual setting per drive, [how](accuraterip.md#what-tunebox-does-offset-correction-exists)); AccurateRip needs the database owner's approval ([investigation](accuraterip.md)) |
 | Play a CD directly | Planned | |
 | Cover art from the Cover Art Archive | Shipped | Get CD Cover (or the off-by-default switch in Preferences ▸ Importing) once the names came from MusicBrainz: shown on the CD page before importing, put into every imported song (also songs imported before it arrived). 1200 px front cover; the release group's when the release has none. `tunebox-cli cd-info/cd-import --lookup --cover` |

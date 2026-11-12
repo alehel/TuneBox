@@ -1,10 +1,11 @@
 # Audiobooks from CDs: plan
 
-Status: **phase 1 built** (the engine and `tunebox-cli audiobook`); the app's page is phase 2.
+Status: **phases 1 and 2 built**: the engine, `tunebox-cli audiobook`, and the app's page.
 craft-libs provides the AAC encoder, the Apple Lossless (ALAC) encoder and MP4 chapter lists
 (see [What craft-libs provides](#what-craft-libs-provides)). This document says what the
-audiobook builder does, how it fits TuneBox's layers, and what is left; where phase 1 differs
-from the plan, [What phase 1 built](#what-phase-1-built) says so.
+audiobook builder does, how it fits TuneBox's layers, and what is left; where the build differs
+from the plan, [What phase 1 built](#what-phase-1-built) and [What phase 2
+built](#what-phase-2-built) say so.
 
 ## What the listener does
 
@@ -257,12 +258,14 @@ When a disc is ripped and ejected, a dialog says so and names the next disc:
 > **Insert disc 3**
 > Its tracks appear as soon as it is in.
 >
-> [That Was the Last Disc]
+> [Not Now] [That Was the Last Disc]
 
-The dialog has two ways out and no others: inserting disc 3, which closes it by itself and
+The book goes on in two ways only: inserting disc 3, which closes the dialog by itself and
 shows the new disc's tracks ready to rip, or **That Was the Last Disc**, which ends the
 ripping. It cannot be dismissed to edit in between: editing happens while a disc rips, and
-after the last one. When MusicBrainz lists more discs for the release than were ripped, That
+after the last one. **Not Now** leaves the book's page without editing anything, so TuneBox
+stays usable while the disc is looked for; coming back to the page asks again. A disc found
+after That Was the Last Disc is ripped with **Rip Another Disc** (Audiobook menu). When MusicBrainz lists more discs for the release than were ripped, That
 Was the Last Disc asks first ("MusicBrainz lists 12 discs for this release; 11 are ripped.
 Finish anyway?").
 
@@ -515,9 +518,9 @@ A built book plays today as one long song. Listening comfortably needs more, pla
    checks, chapters, removing and trimming, suggestions, the media kind and
    `Source::Audiobooks`, CLI, and every output: the chaptered `.m4b` (AAC or Apple Lossless)
    and files per chapter. Fully testable with the virtual drive.
-2. **The page.** Audiobooks under Music in the sidebar, the shared header pieces moved out of
-   `cd_header.rs`, the book page, the trim editor, and new scenes in `cargo xtask screenshots`
-   (the book page while ripping, the "Insert disc 3" dialog, the trim editor, the sidebar).
+2. **The page.** Built (see below). Audiobooks under Music in the sidebar, the shared header
+   pieces moved out of `cd_header.rs`, the book page, the trim editor, and new scenes in
+   `cargo xtask screenshots`.
 3. **Listening**, above.
 
 ## What phase 1 built
@@ -537,9 +540,7 @@ Where it differs from the plan, or is not done yet:
 
 - **Free space** is not checked before a disc or a build. A full disk fails the rip or the build
   with the system's message, and nothing half-written is kept.
-- **Commands and shortcuts** (the Audiobook menu, the single-letter keys) are not in
-  `commands.rs` yet: they come with the page in phase 2, with the Option modifier and the new
-  keys.
+- **Commands and shortcuts** came with the page in phase 2 (below).
 - **Eject** uses the system's eject tool, not a command sent by cd-da-reader (see
   [Ejecting](#ejecting)); Windows cannot eject yet.
 - **The description** goes in Comments, not `desc`/`ldes`.
@@ -547,6 +548,33 @@ Where it differs from the plan, or is not done yet:
 - **Tested** with virtual discs and fixtures only (`crates/engine/tests/audiobook.rs`, the
   crates' unit tests); never with a real drive, real audiobook discs, or a player reading the
   chapters.
+
+## What phase 2 built
+
+| Where | What |
+|---|---|
+| `engine/commands.rs` | An Option modifier, Return and ?; a scope, so the Audiobook menu's single-letter keys work on the book page only and come first there (Delete removes a track from the book); the Audiobook menu, shown with the page |
+| `engine/audiobook/preview.rs` | Hearing staged audio outside the play queue: a stretch, a track's end, and across a track's start (the track before, then gaplessly on into this one); a waveform for the trim editor |
+| `ui/book_state.rs` | Selection, folding, chapter jumps and renaming on the page, as tested logic |
+| `ui/panels/album_header.rs` | The header parts the CD page and the book page share |
+| `ui/panels/book_header.rs`, `book_view.rs` | The page: header, chapter rows over the tracks, each track's state, right-click menu, key strip |
+| `ui/dialogs/audiobook.rs`, `trim.rs` | Import as Audiobook…, Insert disc N, the disc question, Build Audiobook…, the confirmations, the shortcut sheet, the trim editor |
+| `ui/panels/sidebar.rs`, `track_list.rs` | Audiobooks under Music with the book in progress beneath; Author and Narrator headings among audiobooks |
+| `xtask/demo_book.rs`, `ui/screenshots.rs` | A demo book made through the engine from spoken virtual discs, and screenshot scenes of it |
+
+Where it differs from the plan:
+
+- **Not Now** in the Insert disc dialog (see [After each disc](#after-each-disc)), and **Rip
+  Another Disc**, which takes back That Was the Last Disc.
+- **Get Track Names and Get Cover** are not on the book page: the book takes its names and cover
+  from the disc it was started from (and MusicBrainz's names for the other discs).
+- **The keys** are as in [Shortcuts](#shortcuts), but ↑ ↓ and the renaming keys (Tab, Esc) are
+  the page's own rather than the command table's, since they move within it; the trim editor's
+  keys are the editor's. The shortcut sheet lists them all.
+- **Return** is written "Return" in macOS menus: no bundled font draws "↩".
+- **Not tried by hand** on a desktop: the page was checked in screenshots taken under a virtual
+  display, and its logic in tests. Dragging the trim handles, the right-click menu and the keys
+  have not been tried with a real mouse and keyboard.
 
 ## Tests to write
 
