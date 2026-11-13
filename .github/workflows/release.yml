@@ -1,4 +1,4 @@
-# Builds the downloads for a release when a tag is pushed:
+# Builds the downloads for a release when a version tag (v0.2.0) is pushed:
 #
 #   TuneBox-<tag>-windows-x64-portable.zip   tunebox.exe and tunebox-cli.exe; unzip and run
 #   TuneBox-<tag>-macos-arm64.zip            TuneBox.app and tunebox-cli for Apple silicon
@@ -10,7 +10,7 @@ name: Release
 
 on:
   push:
-    tags: ['*']
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -20,8 +20,27 @@ env:
   TAG: ${{ github.ref_name }}
 
 jobs:
+  # The tag names the downloads and the programs report the version in Cargo.toml: a release
+  # where the two disagree is stopped here, before anything is built. `cargo release` (see
+  # release.toml) sets both at once.
+  version:
+    name: Tag matches version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the tag with the version in Cargo.toml
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 --locked \
+            | jq -r '.packages[] | select(.name == "tunebox") | .version')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match the version in Cargo.toml ($version); expected v$version. Delete the tag, then release with: cargo release <version> --workspace --execute"
+            exit 1
+          fi
+
   windows:
     name: Windows portable
+    needs: version
     runs-on: windows-latest
     env:
       # Link the C runtime into the programs, so they run on a PC without the Visual C++
@@ -53,6 +72,7 @@ jobs:
 
   macos:
     name: macOS arm64 and universal
+    needs: version
     runs-on: macos-latest
     env:
       # The oldest macOS that runs on Apple silicon; packaging/macos/Info.plist says the same.

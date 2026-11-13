@@ -1,0 +1,21 @@
+# Settings for cargo-release (https://github.com/crate-ci/cargo-release), which makes a release
+# in one step so the tag and the version in Cargo.toml cannot drift apart:
+#
+#   cargo release 0.2.0 --workspace             # shows what would change
+#   cargo release 0.2.0 --workspace --execute   # bumps the version, commits, tags v0.2.0 and pushes
+#
+# Pushing the tag starts .github/workflows/release.yml, which refuses a tag that does not match
+# the version.
+
+# Every crate carries the workspace's one version, and a release is one commit and one tag.
+shared-version = true
+consolidate-commits = true
+tag-name = "v{{version}}"
+tag-message = "TuneBox {{version}}"
+pre-release-commit-message = "Release {{version}}"
+
+# TuneBox is not published to crates.io.
+publish = false
+
+# Releases are cut from main.
+allow-branch = ["main"]
